@@ -74,11 +74,15 @@ printf 'power on\nquit\n'      | nc 192.168.0.1 29999   # wait ~6 s
 printf 'brake release\nquit\n' | nc 192.168.0.1 29999   # ~15 s to RUNNING
 ```
 
-## 6 · Motion test (arm moves ~3°, returns to start)
+## 6 · Motion test
 
 ```bash
-source /opt/ros/jazzy/setup.bash && python3 ~/ur10/motion_test.py    # 0.05 rad, asserts return < 0.005 rad
-source /opt/ros/jazzy/setup.bash && python3 ~/ur10/nudge_wrist3.py   # 0.10 rad variant
+# VISIBLE test — wrist_1 tilts the whole wrist block ~8.6°; use this to see it move
+source /opt/ros/jazzy/setup.bash && python3 ~/ur10/motion_test_visible.py
+
+# minimal tests — wrist_3 = flange rotation, near-INVISIBLE without a tool mounted
+source /opt/ros/jazzy/setup.bash && python3 ~/ur10/motion_test.py    # 0.05 rad
+source /opt/ros/jazzy/setup.bash && python3 ~/ur10/nudge_wrist3.py   # 0.10 rad
 ```
 
 Speed slider must be nonzero first:

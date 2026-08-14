@@ -213,7 +213,7 @@
     <div class="stat good"><div class="k">Driver</div><div class="v">ur10-driver.service</div><div class="d">systemd user unit, auto-restart</div></div>
     <div class="stat good"><div class="k">Controllers</div><div class="v">8 active</div><div class="d">incl. scaled_joint_trajectory</div></div>
     <div class="stat good"><div class="k">External control</div><div class="v">program running</div><div class="d">reverse ports 50001/3/4 ESTAB</div></div>
-    <div class="stat good"><div class="k">Motion test</div><div class="v">PASSED</div><div class="d">wrist_3 +2.86°, return Δ 0.0005 rad</div></div>
+    <div class="stat good"><div class="k">Motion test</div><div class="v">PASSED</div><div class="d">wrist_1 sweep 8.58° verified by encoders, return Δ 0.00016 rad</div></div>
   </div>
   <div class="note">The teach pendant's network page may say <strong>“not connected”</strong> — on a direct cable this is cosmetic: its check wants a route to the internet, which doesn't exist here by design. Judge the link by the health checklist, never by that page. Setting the pendant's gateway field to <code>192.168.0.2</code> usually silences it.</div>
 </section>
@@ -296,6 +296,11 @@
       <div class="when">Aug 14 · 12:20</div>
       <div class="what">Reconnect handled, motion verified</div>
       <div class="how">After re-cabling, the on-robot control script was dead (the expected failure mode). One call — <code>resend_robot_program</code> — re-armed it. Motion test: wrist_3 +2.86° and back, <code>error_code=0</code>, return within 0.0005 rad. <strong>PASSED.</strong></div>
+    </li>
+    <li class="rough">
+      <div class="when">Aug 14 · 12:45</div>
+      <div class="what">“It's not moving” — visibility, not function</div>
+      <div class="how">The wrist_3 test rotates the bare flange &lt;3° — physically real but nearly invisible. Re-run on <strong>wrist_1</strong> (tilts the whole wrist block): encoders logged an <strong>8.58° sweep</strong> across 1,293 samples with every other joint within 0.01°, return Δ 0.00016 rad. New demo-grade check: <code>motion_test_visible.py</code>.</div>
     </li>
   </ol>
 </section>
@@ -394,7 +399,10 @@
 
   <div class="cmdgroup">
     <h3><span class="tag">§6</span>Motion test</h3>
-    <pre><span class="p">$</span> source /opt/ros/jazzy/setup.bash && python3 ~/ur10/motion_test.py   <span class="c"># ±0.05 rad, self-verifying</span>
+    <pre><span class="c"># VISIBLE test — wrist_1 tilts the whole wrist block ~8.6°</span>
+<span class="p">$</span> source /opt/ros/jazzy/setup.bash && python3 ~/ur10/motion_test_visible.py
+<span class="c"># minimal test — wrist_3 = flange rotation, near-invisible without a tool</span>
+<span class="p">$</span> source /opt/ros/jazzy/setup.bash && python3 ~/ur10/motion_test.py   <span class="c"># ±0.05 rad, self-verifying</span>
 <span class="c"># speed slider must be nonzero:</span>
 <span class="p">$</span> ros2 service call /io_and_status_controller/set_speed_slider \
     ur_msgs/srv/SetSpeedSliderFraction "{speed_slider_fraction: 0.3}"</pre>
@@ -427,7 +435,8 @@
       <tr><td><code>ur-bringup.sh</code></td><td>Driver launch used by the systemd unit</td></tr>
       <tr><td><code>ur-detect.sh</code></td><td>Reachability probe + CB3/e-Series autodetect → <code>ur_type.txt</code></td></tr>
       <tr><td><code>install-ur-driver.sh</code></td><td>Pinned apt install (defeats the Isaac 99.x override)</td></tr>
-      <tr><td><code>motion_test.py</code></td><td>Self-verifying minimal motion test (±0.05 rad)</td></tr>
+      <tr><td><code>motion_test_visible.py</code></td><td>Demo-grade motion test — wrist_1 ±8.6°, encoder-verified</td></tr>
+      <tr><td><code>motion_test.py</code></td><td>Self-verifying minimal motion test (±0.05 rad, subtle)</td></tr>
       <tr><td><code>nudge_wrist3.py</code></td><td>First-light motion script (±0.10 rad)</td></tr>
       <tr><td><code>ur10_calibration.yaml</code></td><td>This arm's factory kinematics (checksum-verified)</td></tr>
       <tr><td><code>report.html</code></td><td>This page</td></tr>
