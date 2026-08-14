@@ -127,7 +127,23 @@ FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 tools/hil_motion_test.py
 Verified 2026-08-14: relay round-trip PASS; Isaac twin tracks the real arm
 < 2 mrad on all six joints.
 
-## 8 · One-time / rare
+## 8 · Live RViz view (watch the arm mirror physical motion)
+
+Official UR view config (copied from `ur_description`) into `rviz/live_view.rviz`.
+Runs on the workstation display as its own unit — read-only, safe alongside anything.
+
+```bash
+systemd-run --user --unit=ur10-rviz -E DISPLAY=:0 \
+  bash -c 'source /opt/ros/jazzy/setup.bash && exec rviz2 -d $HOME/ur10/rviz/live_view.rviz'
+
+systemctl --user stop ur10-rviz          # close it
+```
+
+To move the arm by hand: **hold the black teach button** on the back of the CB3 pendant
+and push. RViz mirrors it live (telemetry is RTDE, independent of the control program).
+If hand-guiding killed ROS motion afterwards → §4.
+
+## 9 · One-time / rare
 
 ```bash
 # Re-extract kinematics calibration from the arm

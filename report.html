@@ -419,7 +419,15 @@
   </div>
 
   <div class="cmdgroup">
-    <h3><span class="tag">§8</span>One-time / rare</h3>
+    <h3><span class="tag">§8</span>Live RViz view — arm mirrors physical motion</h3>
+    <pre><span class="p">$</span> systemd-run --user --unit=ur10-rviz -E DISPLAY=:0 \
+    bash -c 'source /opt/ros/jazzy/setup.bash && exec rviz2 -d $HOME/ur10/rviz/live_view.rviz'
+<span class="p">$</span> systemctl --user stop ur10-rviz   <span class="c"># close it</span>
+<span class="c"># hand-guide: hold the teach button on the pendant's back — RViz follows live</span></pre>
+  </div>
+
+  <div class="cmdgroup">
+    <h3><span class="tag">§9</span>One-time / rare</h3>
     <pre><span class="c"># re-extract kinematics calibration</span>
 <span class="p">$</span> ros2 launch ur_calibration calibration_correction.launch.py \
     robot_ip:=192.168.0.1 target_filename:=$HOME/ur10/ur10_calibration.yaml
@@ -444,6 +452,8 @@
       <tr><td><code>motion_test.py</code></td><td>Self-verifying minimal motion test (±0.05 rad, subtle)</td></tr>
       <tr><td><code>nudge_wrist3.py</code></td><td>First-light motion script (±0.10 rad)</td></tr>
       <tr><td><code>ur10_calibration.yaml</code></td><td>This arm's factory kinematics (checksum-verified)</td></tr>
+      <tr><td><code>rviz/live_view.rviz</code></td><td>Official UR RViz config — live mirror of the physical arm (runbook §9)</td></tr>
+      <tr><td><code>torque-report.html</code></td><td>Briefing: UR Direct Torque Control — and why the CB3 is excluded</td></tr>
       <tr><td><code>report.html</code></td><td>This page</td></tr>
     </tbody>
   </table>
