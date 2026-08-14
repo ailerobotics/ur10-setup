@@ -108,6 +108,25 @@ take/release of the arm. Recovery is §4; if scaling stays 0 after re-arming,
 ros2 service call /controller_manager/list_controllers controller_manager_msgs/srv/ListControllers "{}"
 ```
 
+## 7b · Hardware-in-the-loop (Isaac twin) — bridge in `~/workspaces/ur10-hil`
+
+The physical arm executes the shelfbot mission's motions; the Isaac cell keeps
+the shelf, products and gripper virtually. Full bring-up + safety gates:
+`~/workspaces/ur10-hil/RUNBOOK.md`. The recurring bits:
+
+```bash
+cd ~/workspaces/ur10-hil && source /opt/ros/jazzy/setup.bash && source install/setup.bash
+tools/run_hil.sh            # mirror + relay(DRY RUN) + RSP, tmux `hil`
+tools/run_hil.sh --live     # relay forwards trajectories to the REAL arm
+tools/run_hil.sh down
+
+# end-to-end check (arm nudges wrist_3 ±0.05 rad through the mission action):
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 tools/hil_motion_test.py
+```
+
+Verified 2026-08-14: relay round-trip PASS; Isaac twin tracks the real arm
+< 2 mrad on all six joints.
+
 ## 8 · One-time / rare
 
 ```bash
