@@ -307,6 +307,11 @@
       <div class="what">MoveIt interactive planning commissioned</div>
       <div class="how">Live RViz mirror, then full MoveIt: drag marker <code>EE:goal_tool0</code>, OMPL/Pilz/CHOMP pipelines, and a user-driven drag→plan→<strong>Execute SUCCEEDED</strong> on the physical arm (driver: “Goal reached, success!”). Along the way: two stock-launch bugs worked around (<code>start_moveit.sh</code>) and the <code>ur10-rearm</code> watchdog added — hand-guiding kills the CB3's external-control program, and the watchdog re-arms it in ~10 s.</div>
     </li>
+    <li>
+      <div class="when">Aug 14 · 14:00</div>
+      <div class="what">NVIDIA cuMotion (cuRobo) added as a fourth pipeline</div>
+      <div class="how">Host has no CUDA toolkit, so the GPU planner runs <strong>inside the Isaac container</strong> (already shipping cuMotion 4.4) on the RTX 3060, joined to the host graph via UDPv4 DDS; the MoveIt plugin was <strong>built from source on the host</strong> (pure MoveIt C++, heavy CUDA deps ignored). move_group: “Successfully loaded planner … NVIDIA Isaac ROS cuMotion”; <code>/cumotion/move_group</code> reachable from host. Runs with our calibrated URDF + an adapted ur10e XRDF (buffers widened to 0.02 m) and a ground plane at base height.</div>
+    </li>
   </ol>
 </section>
 
@@ -447,6 +452,15 @@
   </div>
 
   <div class="cmdgroup">
+    <h3><span class="tag">§8c</span>NVIDIA cuMotion (cuRobo) — GPU planning pipeline</h3>
+    <pre><span class="p">$</span> systemd-run --user --unit=ur10-cumotion -p Restart=on-failure -p RestartSec=15 ~/ur10/cumotion/start_cumotion.sh
+<span class="c"># RViz: Context tab → pipeline "isaac_ros_cumotion" → Plan/Execute as usual</span>
+<span class="c"># planner runs in the Isaac container (host has no CUDA); plugin built on host reaches it</span>
+<span class="c"># via /cumotion/move_group · only planner that knows a ground plane exists</span>
+<span class="p">$</span> ros2 action list | grep cumotion   <span class="c"># health: /cumotion/move_group must be listed</span></pre>
+  </div>
+
+  <div class="cmdgroup">
     <h3><span class="tag">§9</span>One-time / rare</h3>
     <pre><span class="c"># re-extract kinematics calibration</span>
 <span class="p">$</span> ros2 launch ur_calibration calibration_correction.launch.py \
@@ -474,7 +488,8 @@
       <tr><td><code>nudge_wrist3.py</code></td><td>First-light motion script (±0.10 rad)</td></tr>
       <tr><td><code>ur10_calibration.yaml</code></td><td>This arm's factory kinematics (checksum-verified)</td></tr>
       <tr><td><code>rviz/live_view.rviz</code></td><td>Official UR RViz config — live mirror of the physical arm (runbook §8)</td></tr>
-      <tr><td><code>moveit/ur10_moveit.launch.py</code></td><td>Patched MoveIt launch — fixes the empty-RViz type clash (runbook §8b)</td></tr>
+      <tr><td><code>moveit/ur10_moveit.launch.py</code></td><td>Patched MoveIt launch — fixes the empty-RViz type clash; registers the cuMotion pipeline (runbook §8b/§8c)</td></tr>
+      <tr><td><code>cumotion/</code></td><td>NVIDIA cuMotion GPU planner: adapted XRDF, calibrated URDF, container runner (runbook §8c)</td></tr>
       <tr><td><code>torque-report.html</code></td><td>Briefing: UR Direct Torque Control — and why the CB3 is excluded</td></tr>
       <tr><td><code>report.html</code></td><td>This page</td></tr>
     </tbody>

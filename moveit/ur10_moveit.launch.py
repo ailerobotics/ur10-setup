@@ -136,12 +136,36 @@ def generate_launch_description():
     )
     ld.add_action(wait_robot_description)
 
+    # PATCH (aile): register NVIDIA cuMotion (cuRobo) as an additional planning
+    # pipeline when the host-built plugin workspace is present. The plugin is a
+    # thin action client of "cumotion/move_group"; the GPU planner itself runs
+    # in the Isaac container (see ~/ur10/cumotion/start_cumotion.sh).
+    cumotion_config = (
+        Path.home() / "workspaces" / "cumotion_src" / "install" /
+        "isaac_ros_cumotion_moveit" / "share" / "isaac_ros_cumotion_moveit" /
+        "config" / "isaac_ros_cumotion_planning.yaml"
+    )
+    extra_pipeline_params = []
+    if cumotion_config.is_file():
+        import yaml as _yaml
+        with open(cumotion_config) as f:
+            _cumotion_yaml = _yaml.safe_load(f)
+        extra_pipeline_params.append({
+            "planning_pipelines": [
+                "ompl", "pilz_industrial_motion_planner", "chomp",
+                "isaac_ros_cumotion",
+            ],
+            "default_planning_pipeline": "ompl",
+            "isaac_ros_cumotion": _cumotion_yaml,
+        })
+
     move_group_node = Node(
         package="moveit_ros_move_group",
         executable="move_group",
         output="screen",
         parameters=[
             moveit_config.to_dict(),
+            *extra_pipeline_params,
             warehouse_ros_config,
             {
                 "use_sim_time": use_sim_time,

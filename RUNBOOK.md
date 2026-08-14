@@ -183,6 +183,33 @@ but NOT the table, walls, or anything mounted around the arm. It will happily pl
 through them. Watch every Execute; e-stop in reach. The pendant speed slider also
 caps execution globally.
 
+## 8c · NVIDIA cuMotion (cuRobo) planner in the same RViz
+
+GPU planner (RTX 3060) running **inside the Isaac shelfbot container** (the host has no
+CUDA toolkit, so the deb is uninstallable natively); MoveIt reaches it through the
+host-built plugin via action `cumotion/move_group`. In RViz: **Context tab → pipeline
+dropdown → `isaac_ros_cumotion`** → Plan/Execute as usual.
+
+```bash
+# GPU planner (container; auto-restarts):
+systemd-run --user --unit=ur10-cumotion -p Restart=on-failure -p RestartSec=15 ~/ur10/cumotion/start_cumotion.sh
+journalctl --user -u ur10-cumotion -f          # "MotionPlan action server initialized"
+ros2 action list | grep cumotion               # must show /cumotion/move_group on the host
+
+systemctl --user stop ur10-cumotion            # stop (docker container dies with it)
+```
+
+Pieces (all in `cumotion/` + `~/workspaces/cumotion_src`):
+- `cumotion/ur10_calibrated.urdf` — dumped from /robot_description (has OUR calibration)
+- `cumotion/ur10.xrdf` — ur10e XRDF adapted: same link names, collision buffers 0.01→0.02 m
+  (spheres were authored for the e-Series' slightly different link lengths)
+- `cumotion/start_cumotion.sh` — container runner (UDPv4 DDS, --net=host, --gpus)
+- host plugin: `~/workspaces/cumotion_src` — `colcon build --packages-select
+  isaac_ros_cumotion_robot_description isaac_ros_cumotion_moveit` (heavy CUDA pkgs
+  COLCON_IGNOREd; the plugin is pure MoveIt C++). start_moveit.sh sources this overlay.
+- cuMotion plans with a **ground plane at base height** (add_ground_plane:=true) — it's the
+  only planner that knows the table exists. OMPL/Pilz/CHOMP still don't.
+
 ## 9 · One-time / rare
 
 ```bash

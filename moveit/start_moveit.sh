@@ -13,6 +13,10 @@
 # (bottom-left in RViz) or MotionPlanning display off/on toggle — then the
 # orange goal arm + drag ball appear.
 source /opt/ros/jazzy/setup.bash
+# Overlay with the host-built cuMotion MoveIt plugin (adds the isaac_ros_cumotion
+# planning pipeline). Harmless if the workspace is absent.
+[ -f "$HOME/workspaces/cumotion_src/install/setup.bash" ] && \
+  source "$HOME/workspaces/cumotion_src/install/setup.bash"
 (
   for _ in $(seq 1 60); do
     # succeeds only once the display has declared the param (post first load)
