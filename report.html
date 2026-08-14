@@ -302,6 +302,11 @@
       <div class="what">“It's not moving” — visibility, not function</div>
       <div class="how">The wrist_3 test rotates the bare flange &lt;3° — physically real but nearly invisible. Re-run on <strong>wrist_1</strong> (tilts the whole wrist block): encoders logged an <strong>8.58° sweep</strong> across 1,293 samples with every other joint within 0.01°, return Δ 0.00016 rad. New demo-grade check: <code>motion_test_visible.py</code>.</div>
     </li>
+    <li>
+      <div class="when">Aug 14 · 13:45</div>
+      <div class="what">MoveIt interactive planning commissioned</div>
+      <div class="how">Live RViz mirror, then full MoveIt: drag marker <code>EE:goal_tool0</code>, OMPL/Pilz/CHOMP pipelines, and a user-driven drag→plan→<strong>Execute SUCCEEDED</strong> on the physical arm (driver: “Goal reached, success!”). Along the way: two stock-launch bugs worked around (<code>start_moveit.sh</code>) and the <code>ur10-rearm</code> watchdog added — hand-guiding kills the CB3's external-control program, and the watchdog re-arms it in ~10 s.</div>
+    </li>
   </ol>
 </section>
 
