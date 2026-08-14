@@ -150,6 +150,18 @@ def generate_launch_description():
         import yaml as _yaml
         with open(cumotion_config) as f:
             _cumotion_yaml = _yaml.safe_load(f)
+        # PATCH (aile): cuRobo's interpolated output carries ~1e-3 rad/s residual
+        # velocities on the final waypoint, and scaled_joint_trajectory_controller
+        # hard-rejects trajectories that don't end at rest ("Velocity of last
+        # trajectory point ... is not zero"). Re-time the (collision-checked) path
+        # with the same response adapters the OMPL pipeline uses — TOTG ends at
+        # exactly zero velocity, so the controller accepts it. Trade-off: cuRobo's
+        # minimum-jerk timing is replaced by TOTG timing; the path is unchanged.
+        _cumotion_yaml["response_adapters"] = [
+            "default_planning_response_adapters/AddTimeOptimalParameterization",
+            "default_planning_response_adapters/ValidateSolution",
+            "default_planning_response_adapters/DisplayMotionPath",
+        ]
         extra_pipeline_params.append({
             "planning_pipelines": [
                 "ompl", "pilz_industrial_motion_planner", "chomp",
