@@ -42,10 +42,22 @@ ros2 topic echo --once /io_and_status_controller/robot_program_running   # 4. da
 ros2 topic echo --once /speed_scaling_state_broadcaster/speed_scaling    # 5. > 0
 ```
 
-## 4 · The #1 fix — robot reconnected / motion ignored
+## 4 · The #1 fix — robot reconnected / motion ignored / MoveIt Execute rejected
 
-Cable was replugged, robot rebooted, or pendant popped "check IP/connection"?
-The external-control script on the robot is dead. Re-arm it (no motion caused):
+Cable replugged, robot rebooted, **teach button held (hand-guiding kills the program!)**,
+or pendant popped "check IP/connection"? The external-control script on the robot is dead —
+symptoms: `robot_program_running: false`, trajectory controller `inactive`, MoveIt Execute
+fails instantly with "Goal was rejected by server".
+
+**Automated since 2026-08-14:** the `ur10-rearm` watchdog detects this and re-arms within
+~10 s (only when robot is RUNNING+NORMAL; resend causes no motion). Start it after a PC reboot:
+
+```bash
+systemd-run --user --unit=ur10-rearm -p Restart=on-failure -p RestartSec=10 ~/ur10/ur-rearm-watchdog.sh
+journalctl --user -u ur10-rearm -f     # watch it work
+```
+
+Manual version (what the watchdog runs):
 
 ```bash
 ros2 service call /io_and_status_controller/resend_robot_program std_srvs/srv/Trigger "{}"

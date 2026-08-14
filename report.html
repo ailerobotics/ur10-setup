@@ -312,9 +312,9 @@
     <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
     <tbody>
       <tr>
-        <td>Motion ignored; no ESTAB on :50001; pendant popped “check IP”</td>
-        <td>External-control script on robot died (any network blip)</td>
-        <td><code>resend_robot_program</code> service — runbook §4</td>
+        <td>Motion ignored / MoveIt Execute instantly rejected; no ESTAB on :50001</td>
+        <td>External-control script on robot died — network blip, or <strong>teach-button hand-guiding</strong> (always kills the program)</td>
+        <td>Auto-fixed by the <code>ur10-rearm</code> watchdog (~10 s); manual: runbook §4</td>
       </tr>
       <tr>
         <td>Driver spams “Background reading is not running”; speed reads 0</td>
@@ -392,10 +392,11 @@
   </div>
 
   <div class="cmdgroup">
-    <h3><span class="tag">§4</span>The #1 fix — robot reconnected / motion ignored</h3>
-    <pre><span class="c"># re-arm the external-control script on the robot (causes no motion)</span>
+    <h3><span class="tag">§4</span>The #1 fix — program died (hand-guiding does this!) — now automated</h3>
+    <pre><span class="c"># ur10-rearm watchdog auto-fixes within ~10 s; start it after a PC reboot:</span>
+<span class="p">$</span> systemd-run --user --unit=ur10-rearm -p Restart=on-failure -p RestartSec=10 ~/ur10/ur-rearm-watchdog.sh
+<span class="c"># manual version (causes no motion):</span>
 <span class="p">$</span> ros2 service call /io_and_status_controller/resend_robot_program std_srvs/srv/Trigger "{}"
-<span class="c"># if controllers went inactive too:</span>
 <span class="p">$</span> ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController \
     "{activate_controllers: [scaled_joint_trajectory_controller, friction_model_controller], strictness: 1}"</pre>
   </div>
@@ -460,6 +461,7 @@
       <tr><td><code>README.md</code></td><td>Architecture, network, driver operation, recovery playbook</td></tr>
       <tr><td><code>RUNBOOK.md</code></td><td>The recurring commands (source of section 05)</td></tr>
       <tr><td><code>ur-bringup.sh</code></td><td>Driver launch used by the systemd unit</td></tr>
+      <tr><td><code>ur-rearm-watchdog.sh</code></td><td>Auto re-arms external control after hand-guiding/blips (unit <code>ur10-rearm</code>)</td></tr>
       <tr><td><code>ur-detect.sh</code></td><td>Reachability probe + CB3/e-Series autodetect → <code>ur_type.txt</code></td></tr>
       <tr><td><code>install-ur-driver.sh</code></td><td>Pinned apt install (defeats the Isaac 99.x override)</td></tr>
       <tr><td><code>motion_test_visible.py</code></td><td>Demo-grade motion test — wrist_1 ±8.6°, encoder-verified</td></tr>
