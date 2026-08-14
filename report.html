@@ -310,7 +310,7 @@
     <li>
       <div class="when">Aug 14 · 14:00</div>
       <div class="what">NVIDIA cuMotion (cuRobo) added as a fourth pipeline</div>
-      <div class="how">Host has no CUDA toolkit, so the GPU planner runs <strong>inside the Isaac container</strong> (already shipping cuMotion 4.4) on the RTX 3060, joined to the host graph via UDPv4 DDS; the MoveIt plugin was <strong>built from source on the host</strong> (pure MoveIt C++, heavy CUDA deps ignored). move_group: “Successfully loaded planner … NVIDIA Isaac ROS cuMotion”; <code>/cumotion/move_group</code> reachable from host. Runs with our calibrated URDF + an adapted ur10e XRDF (buffers widened to 0.02 m) and a ground plane at base height.</div>
+      <div class="how">Host has no CUDA toolkit, so the GPU planner runs <strong>inside the Isaac container</strong> (already shipping cuMotion 4.4) on the RTX 3060, joined to the host graph via UDPv4 DDS; the MoveIt plugin was <strong>built from source on the host</strong> (pure MoveIt C++, heavy CUDA deps ignored). move_group: “Successfully loaded planner … NVIDIA Isaac ROS cuMotion”; <code>/cumotion/move_group</code> reachable from host. Runs with our calibrated URDF + an adapted ur10e XRDF (buffers widened to 0.02 m) and a ground plane at base height. One handoff bug fixed on the way: cuRobo's last waypoint carries ~1e-3 rad/s residual velocity and the UR controller rejects non-resting endings — TOTG response adapters re-time the collision-checked path. <strong>Verified on hardware 14:17: GPU plan in 0.124 s → Execute → “Goal reached, success!”</strong></div>
     </li>
   </ol>
 </section>
