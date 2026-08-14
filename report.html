@@ -1,0 +1,445 @@
+<title>UR10 Commissioning Record</title>
+<style>
+  :root {
+    --paper: #f6f8f7;
+    --panel: #ffffff;
+    --panel-2: #eef2f0;
+    --ink: #1b2325;
+    --ink-2: #51605e;
+    --line: #d5dcd9;
+    --accent: #0e7d86;        /* UR teal, desaturated */
+    --accent-ink: #ffffff;
+    --ok: #2f7d4f;
+    --warn: #a06c14;
+    --crit: #b23a3a;
+    --code-bg: #1d2528;
+    --code-ink: #d9e2e0;
+    --code-accent: #6cc5cc;
+    --chip-ok-bg: #e2f0e8;
+    --chip-warn-bg: #f5ecd8;
+    --chip-crit-bg: #f6e2e2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #131a1b;
+      --panel: #1a2224;
+      --panel-2: #202a2c;
+      --ink: #e3e9e7;
+      --ink-2: #93a3a0;
+      --line: #2c3a3c;
+      --accent: #4db6bf;
+      --accent-ink: #0d1516;
+      --ok: #66b788;
+      --warn: #d3a04c;
+      --crit: #d97b7b;
+      --code-bg: #0e1415;
+      --code-ink: #cfdad7;
+      --code-accent: #5fc3cb;
+      --chip-ok-bg: #1d3327;
+      --chip-warn-bg: #382e17;
+      --chip-crit-bg: #3a2020;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #131a1b;
+    --panel: #1a2224;
+    --panel-2: #202a2c;
+    --ink: #e3e9e7;
+    --ink-2: #93a3a0;
+    --line: #2c3a3c;
+    --accent: #4db6bf;
+    --accent-ink: #0d1516;
+    --ok: #66b788;
+    --warn: #d3a04c;
+    --crit: #d97b7b;
+    --code-bg: #0e1415;
+    --code-ink: #cfdad7;
+    --code-accent: #5fc3cb;
+    --chip-ok-bg: #1d3327;
+    --chip-warn-bg: #382e17;
+    --chip-crit-bg: #3a2020;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.6 "Avenir Next", Seravek, "Segoe UI", system-ui, sans-serif;
+  }
+  main { max-width: 900px; margin: 0 auto; padding: 40px 24px 88px; }
+  code, pre, .mono {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+
+  /* ---- tag plate header ---- */
+  header.plate {
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    background: var(--panel);
+    padding: 22px 26px;
+    display: flex; flex-wrap: wrap; gap: 18px 32px; align-items: center;
+    justify-content: space-between;
+  }
+  .plate .id h1 { margin: 0; font-size: 1.7rem; letter-spacing: .01em; text-wrap: balance; }
+  .plate .id .sub { color: var(--ink-2); font-size: .95rem; margin-top: 2px; }
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: .14em; font-size: .72rem;
+    color: var(--accent); font-weight: 600; margin-bottom: 6px;
+  }
+  .plate dl {
+    display: grid; grid-template-columns: auto auto; gap: 2px 14px;
+    margin: 0; font-size: .85rem;
+  }
+  .plate dt { color: var(--ink-2); text-transform: uppercase; letter-spacing: .08em; font-size: .7rem; align-self: center;}
+  .plate dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+  .chip {
+    display: inline-block; padding: 3px 12px; border-radius: 999px;
+    font-size: .78rem; font-weight: 600; letter-spacing: .04em;
+  }
+  .chip.ok   { background: var(--chip-ok-bg);   color: var(--ok); }
+  .chip.warn { background: var(--chip-warn-bg); color: var(--warn); }
+  .chip.crit { background: var(--chip-crit-bg); color: var(--crit); }
+
+  /* ---- sections ---- */
+  section { margin-top: 52px; }
+  h2 {
+    font-size: 1.25rem; margin: 0 0 4px;
+    display: flex; align-items: baseline; gap: 12px; text-wrap: balance;
+  }
+  h2 .no {
+    color: var(--accent); font-size: .8rem; font-weight: 700;
+    letter-spacing: .1em; font-variant-numeric: tabular-nums;
+  }
+  .lede { color: var(--ink-2); margin: 0 0 20px; max-width: 62ch; }
+
+  /* ---- status board ---- */
+  .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .stat {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    padding: 14px 16px; min-width: 0;
+  }
+  .stat .k { font-size: .72rem; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-2); }
+  .stat .v { font-size: 1.05rem; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .stat .d { font-size: .8rem; color: var(--ink-2); margin-top: 2px; }
+  .stat.good { border-left: 3px solid var(--ok); }
+
+  /* ---- diagram ---- */
+  .diagram {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    padding: 10px; overflow-x: auto;
+  }
+  .diagram svg { display: block; margin: 0 auto; min-width: 620px; }
+  .diagram text { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+
+  /* ---- timeline ---- */
+  .timeline { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); }
+  .timeline li { position: relative; padding: 0 0 26px 26px; }
+  .timeline li:last-child { padding-bottom: 4px; }
+  .timeline li::before {
+    content: ""; position: absolute; left: -7px; top: 6px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--paper);
+  }
+  .timeline li.rough::before { background: var(--warn); }
+  .timeline .when {
+    font-size: .74rem; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--ink-2); font-variant-numeric: tabular-nums;
+  }
+  .timeline .what { font-weight: 600; }
+  .timeline .how { color: var(--ink-2); font-size: .92rem; max-width: 68ch; }
+  .timeline .how code { font-size: .84em; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+
+  /* ---- tables ---- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { text-align: left; padding: 10px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    border-top: none; font-size: .72rem; text-transform: uppercase;
+    letter-spacing: .09em; color: var(--ink-2); background: var(--panel-2);
+  }
+  td code { font-size: .84em; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+
+  /* ---- runbook ---- */
+  .cmdgroup { margin-top: 22px; }
+  .cmdgroup h3 { font-size: .95rem; margin: 0 0 8px; display: flex; gap: 10px; align-items: baseline; }
+  .cmdgroup h3 .tag {
+    font-size: .68rem; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--accent); font-weight: 700;
+  }
+  pre {
+    background: var(--code-bg); color: var(--code-ink);
+    padding: 14px 16px; border-radius: 6px; overflow-x: auto;
+    font-size: .84rem; line-height: 1.55; margin: 0;
+  }
+  pre .c { color: color-mix(in srgb, var(--code-ink) 55%, transparent); }
+  pre .p { color: var(--code-accent); user-select: none; }
+  .note {
+    border-left: 3px solid var(--warn); background: var(--panel);
+    padding: 10px 16px; border-radius: 0 6px 6px 0; font-size: .92rem; margin-top: 14px;
+  }
+  .note.okay { border-left-color: var(--ok); }
+
+  footer {
+    margin-top: 64px; padding-top: 18px; border-top: 1px solid var(--line);
+    color: var(--ink-2); font-size: .85rem; display: flex; flex-wrap: wrap; gap: 8px 24px;
+  }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<main>
+<header class="plate">
+  <div class="id">
+    <div class="eyebrow">Aile Robotics · Commissioning Record</div>
+    <h1>UR10 — ROS 2 Bring-up</h1>
+    <div class="sub">CB3 controller · PolyScope 3.15.8 · direct ethernet to aileworkstation</div>
+  </div>
+  <dl>
+    <dt>Status</dt><dd><span class="chip ok">OPERATIONAL</span></dd>
+    <dt>Robot</dt><dd class="mono">192.168.0.1</dd>
+    <dt>Host</dt><dd class="mono">192.168.0.2 · enp5s0</dd>
+    <dt>Record</dt><dd>2026-08-13 → 08-14</dd>
+  </dl>
+</header>
+
+<section>
+  <h2><span class="no">01</span>State of the system</h2>
+  <p class="lede">Verified live against the hardware on 2026-08-14, after the robot was re-cabled.</p>
+  <div class="board">
+    <div class="stat good"><div class="k">Link</div><div class="v">0% loss · 0.086 ms</div><div class="d">ping bound to enp5s0</div></div>
+    <div class="stat good"><div class="k">Joint telemetry</div><div class="v">125.00 Hz</div><div class="d">/joint_states, CB3 native rate</div></div>
+    <div class="stat good"><div class="k">Driver</div><div class="v">ur10-driver.service</div><div class="d">systemd user unit, auto-restart</div></div>
+    <div class="stat good"><div class="k">Controllers</div><div class="v">8 active</div><div class="d">incl. scaled_joint_trajectory</div></div>
+    <div class="stat good"><div class="k">External control</div><div class="v">program running</div><div class="d">reverse ports 50001/3/4 ESTAB</div></div>
+    <div class="stat good"><div class="k">Motion test</div><div class="v">PASSED</div><div class="d">wrist_3 +2.86°, return Δ 0.0005 rad</div></div>
+  </div>
+  <div class="note">The teach pendant's network page may say <strong>“not connected”</strong> — on a direct cable this is cosmetic: its check wants a route to the internet, which doesn't exist here by design. Judge the link by the health checklist, never by that page. Setting the pendant's gateway field to <code>192.168.0.2</code> usually silences it.</div>
+</section>
+
+<section>
+  <h2><span class="no">02</span>Topology</h2>
+  <p class="lede">Point-to-point ethernet. No DHCP, no gateway — the host profile is <code>never-default</code> so this link can never capture the machine's internet route.</p>
+  <div class="diagram">
+  <svg viewBox="0 0 680 240" width="680" height="240" role="img" aria-label="Network topology: UR10 controller connected by ethernet to workstation">
+    <g fill="none" stroke="var(--ink-2)" stroke-width="1.5">
+      <rect x="30"  y="60" width="220" height="120" rx="8"/>
+      <rect x="430" y="60" width="220" height="120" rx="8"/>
+    </g>
+    <line x1="250" y1="120" x2="430" y2="120" stroke="var(--accent)" stroke-width="3"/>
+    <text x="340" y="108" text-anchor="middle" font-size="11" fill="var(--ink-2)">ethernet (direct)</text>
+    <text x="140" y="88"  text-anchor="middle" font-size="13" font-weight="bold" fill="var(--ink)">UR10 · CB3</text>
+    <text x="140" y="110" text-anchor="middle" font-size="12" fill="var(--accent)">192.168.0.1/24</text>
+    <text x="140" y="132" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">29999 dashboard</text>
+    <text x="140" y="148" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">30001-30003 primary/RT</text>
+    <text x="140" y="164" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">30004 RTDE · 125 Hz</text>
+    <text x="540" y="88"  text-anchor="middle" font-size="13" font-weight="bold" fill="var(--ink)">aileworkstation</text>
+    <text x="540" y="110" text-anchor="middle" font-size="12" fill="var(--accent)">192.168.0.2/24 · enp5s0</text>
+    <text x="540" y="132" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">nm profile “ur10”, never-default</text>
+    <text x="540" y="148" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">ur_robot_driver · ROS 2 Jazzy</text>
+    <text x="540" y="164" text-anchor="middle" font-size="10.5" fill="var(--ink-2)">listens 50001 / 50003 / 50004</text>
+    <path d="M 430 96 L 258 96" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="4 3" fill="none" marker-end="url(#arr)"/>
+    <path d="M 250 144 L 422 144" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="4 3" fill="none" marker-end="url(#arr)"/>
+    <text x="340" y="90"  text-anchor="middle" font-size="10" fill="var(--ink-2)">PC dials robot: 29999 · 3000x</text>
+    <text x="340" y="160" text-anchor="middle" font-size="10" fill="var(--ink-2)">robot dials back: 5000x</text>
+    <defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="var(--ink-2)"/></marker></defs>
+  </svg>
+  </div>
+</section>
+
+<section>
+  <h2><span class="no">03</span>How it got here</h2>
+  <p class="lede">The full sequence, including the failures — they carry most of the information.</p>
+  <ol class="timeline">
+    <li>
+      <div class="when">Aug 13 · 17:28</div>
+      <div class="what">Host network configured</div>
+      <div class="how">NetworkManager profile <code>ur10</code> on <code>enp5s0</code>: static <code>192.168.0.2/24</code> + link-local fallback, <code>ipv4.never-default yes</code>. The stale DHCP profile was disabled so it can't race for the port.</div>
+    </li>
+    <li>
+      <div class="when">Aug 13 · 17:33</div>
+      <div class="what">Driver stack installed — around the Isaac apt trap</div>
+      <div class="how">NVIDIA's Isaac repo overrides most <code>ros-jazzy-ur*</code> packages with a force-win <code>99.2.0</code> version but not <code>ur-description</code> — an unpinned install mixes incompatible halves. Pinned the whole stack to packages.ros.org → coherent <strong>3.8.0</strong>.</div>
+    </li>
+    <li>
+      <div class="when">Aug 13 · 17:45</div>
+      <div class="what">Robot identified from the wire</div>
+      <div class="how">Ping sweep found one host; dashboard confirmed <strong>UR10, CB3</strong> (PolyScope 3.15.8). CB3 ⇒ <code>headless_mode</code> works with <strong>no URCap</strong> on the pendant.</div>
+    </li>
+    <li>
+      <div class="when">Aug 13 · 17:50</div>
+      <div class="what">Factory kinematics extracted</div>
+      <div class="how"><code>ur10_calibration.yaml</code> pulled from the arm; driver later verified its checksum against the robot.</div>
+    </li>
+    <li class="rough">
+      <div class="when">Aug 13 · 17:51</div>
+      <div class="what">Collision: two driver instances</div>
+      <div class="how">A second stack failed with <em>“speed_slider_mask … controlled by another RTDE client”</em>. Lesson encoded in the runbook: <strong>exactly one driver may run</strong>. Both were stopped; one clean instance brought up.</div>
+    </li>
+    <li>
+      <div class="when">Aug 13 · 17:52</div>
+      <div class="what">First connection verified</div>
+      <div class="how">8 controllers active, /joint_states at 125 Hz, calibration checksum OK, external control accepted.</div>
+    </li>
+    <li>
+      <div class="when">Aug 13 · 19:32</div>
+      <div class="what">Driver daemonized</div>
+      <div class="how">Moved from a session-bound shell to systemd user unit <code>ur10-driver</code> (<code>Restart=on-failure</code>) — survives terminals and session ends.</div>
+    </li>
+    <li class="rough">
+      <div class="when">Aug 13 · evening</div>
+      <div class="what">Wedged controller diagnosed</div>
+      <div class="how">Dashboard alive but inert (<code>play</code> → “Failed to execute”, speed pinned at 0). Recovery: reboot controller from pendant, then remote <code>power on</code> + <code>brake release</code> over port 29999. Playbook written.</div>
+    </li>
+    <li>
+      <div class="when">Aug 14 · 12:20</div>
+      <div class="what">Reconnect handled, motion verified</div>
+      <div class="how">After re-cabling, the on-robot control script was dead (the expected failure mode). One call — <code>resend_robot_program</code> — re-armed it. Motion test: wrist_3 +2.86° and back, <code>error_code=0</code>, return within 0.0005 rad. <strong>PASSED.</strong></div>
+    </li>
+  </ol>
+</section>
+
+<section>
+  <h2><span class="no">04</span>Failure modes &amp; fixes</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Motion ignored; no ESTAB on :50001; pendant popped “check IP”</td>
+        <td>External-control script on robot died (any network blip)</td>
+        <td><code>resend_robot_program</code> service — runbook §4</td>
+      </tr>
+      <tr>
+        <td>Driver spams “Background reading is not running”; speed reads 0</td>
+        <td>Robot controller was rebooted; driver never survives that</td>
+        <td><code>systemctl --user restart ur10-driver</code></td>
+      </tr>
+      <tr>
+        <td>Dashboard inert: play fails, injected scripts don't run</td>
+        <td>Wedged CB3 runtime</td>
+        <td>Pendant reboot, then remote <code>power on</code> / <code>brake release</code> — runbook §5</td>
+      </tr>
+      <tr>
+        <td>“speed_slider_mask … controlled by another RTDE client”</td>
+        <td>Second driver instance running</td>
+        <td>Kill the extra; only one driver ever — runbook §7 to inspect</td>
+      </tr>
+      <tr>
+        <td>Robot pings even with cable unplugged</td>
+        <td>A building device upstream also answers 192.168.0.1 via wifi</td>
+        <td>Always <code>ping -I enp5s0</code></td>
+      </tr>
+      <tr>
+        <td>Pendant says “not connected to network”</td>
+        <td>Cosmetic: its check wants internet, which a direct cable lacks</td>
+        <td>Ignore, or set pendant gateway to 192.168.0.2</td>
+      </tr>
+      <tr>
+        <td>apt upgrade replaces driver with version 99.2.0</td>
+        <td>Isaac repo force-win versioning</td>
+        <td>Keep <code>/etc/apt/preferences.d/99-ur-from-ros2.pref</code></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="no">05</span>Runbook — the commands you'll reuse</h2>
+  <p class="lede">Mirror of <code>RUNBOOK.md</code> in the repo. Every <code>ros2</code> command needs <code>source /opt/ros/jazzy/setup.bash</code> first.</p>
+
+  <div class="cmdgroup">
+    <h3><span class="tag">§1</span>Is the robot reachable?</h3>
+    <pre><span class="c"># ALWAYS bind the interface — plain ping false-positives via wifi</span>
+<span class="p">$</span> ping -I enp5s0 -c3 192.168.0.1
+<span class="p">$</span> printf 'robotmode\nsafetymode\nprogramState\nquit\n' | nc -w5 192.168.0.1 29999
+<span class="p">$</span> ~/ur10/ur-detect.sh   <span class="c"># full probe: ports, CB3-vs-eSeries, writes ur_type.txt</span></pre>
+  </div>
+
+  <div class="cmdgroup">
+    <h3><span class="tag">§2</span>Driver service</h3>
+    <pre><span class="c"># start (after PC reboot — transient unit, does not autostart)</span>
+<span class="p">$</span> systemd-run --user --unit=ur10-driver -p Restart=on-failure -p RestartSec=5 ~/ur10/ur-bringup.sh
+<span class="p">$</span> systemctl --user status  ur10-driver
+<span class="p">$</span> systemctl --user restart ur10-driver   <span class="c"># ALWAYS after rebooting the robot controller</span>
+<span class="p">$</span> journalctl --user -u ur10-driver -f</pre>
+  </div>
+
+  <div class="cmdgroup">
+    <h3><span class="tag">§3</span>Health checklist after any (re)connect</h3>
+    <pre><span class="p">$</span> ping -I enp5s0 -c2 192.168.0.1                                          <span class="c"># 1 link</span>
+<span class="p">$</span> ss -tn | grep ':50001'                                                  <span class="c"># 2 must show ESTAB</span>
+<span class="p">$</span> ros2 topic hz /joint_states                                             <span class="c"># 3 ~125 Hz</span>
+<span class="p">$</span> ros2 topic echo --once /io_and_status_controller/robot_program_running  <span class="c"># 4 data: true</span>
+<span class="p">$</span> ros2 topic echo --once /speed_scaling_state_broadcaster/speed_scaling   <span class="c"># 5 &gt; 0</span></pre>
+  </div>
+
+  <div class="cmdgroup">
+    <h3><span class="tag">§4</span>The #1 fix — robot reconnected / motion ignored</h3>
+    <pre><span class="c"># re-arm the external-control script on the robot (causes no motion)</span>
+<span class="p">$</span> ros2 service call /io_and_status_controller/resend_robot_program std_srvs/srv/Trigger "{}"
+<span class="c"># if controllers went inactive too:</span>
+<span class="p">$</span> ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController \
+    "{activate_controllers: [scaled_joint_trajectory_controller, friction_model_controller], strictness: 1}"</pre>
+  </div>
+
+  <div class="cmdgroup">
+    <h3><span class="tag">§5</span>Wedged CB3 controller</h3>
+    <pre><span class="c"># after rebooting the controller from the pendant:</span>
+<span class="p">$</span> printf 'power on\nquit\n'      | nc 192.168.0.1 29999   <span class="c"># wait ~6 s</span>
+<span class="p">$</span> printf 'brake release\nquit\n' | nc 192.168.0.1 29999   <span class="c"># ~15 s to RUNNING</span></pre>
+  </div>
+
+  <div class="cmdgroup">
+    <h3><span class="tag">§6</span>Motion test</h3>
+    <pre><span class="p">$</span> source /opt/ros/jazzy/setup.bash && python3 ~/ur10/motion_test.py   <span class="c"># ±0.05 rad, self-verifying</span>
+<span class="c"># speed slider must be nonzero:</span>
+<span class="p">$</span> ros2 service call /io_and_status_controller/set_speed_slider \
+    ur_msgs/srv/SetSpeedSliderFraction "{speed_slider_fraction: 0.3}"</pre>
+  </div>
+
+  <div class="cmdgroup">
+    <h3><span class="tag">§7</span>Controllers (ros2controlcli not installed)</h3>
+    <pre><span class="p">$</span> ros2 service call /controller_manager/list_controllers controller_manager_msgs/srv/ListControllers "{}"</pre>
+  </div>
+
+  <div class="cmdgroup">
+    <h3><span class="tag">§8</span>One-time / rare</h3>
+    <pre><span class="c"># re-extract kinematics calibration</span>
+<span class="p">$</span> ros2 launch ur_calibration calibration_correction.launch.py \
+    robot_ip:=192.168.0.1 target_filename:=$HOME/ur10/ur10_calibration.yaml
+<span class="c"># reinstall driver stack (keeps the Isaac-repo pin)</span>
+<span class="p">$</span> sudo bash ~/ur10/install-ur-driver.sh</pre>
+  </div>
+</section>
+
+<section>
+  <h2><span class="no">06</span>Repository</h2>
+  <p class="lede">Everything above lives in <a href="https://github.com/ailerobotics/ur10-setup">ailerobotics/ur10-setup</a>.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>README.md</code></td><td>Architecture, network, driver operation, recovery playbook</td></tr>
+      <tr><td><code>RUNBOOK.md</code></td><td>The recurring commands (source of section 05)</td></tr>
+      <tr><td><code>ur-bringup.sh</code></td><td>Driver launch used by the systemd unit</td></tr>
+      <tr><td><code>ur-detect.sh</code></td><td>Reachability probe + CB3/e-Series autodetect → <code>ur_type.txt</code></td></tr>
+      <tr><td><code>install-ur-driver.sh</code></td><td>Pinned apt install (defeats the Isaac 99.x override)</td></tr>
+      <tr><td><code>motion_test.py</code></td><td>Self-verifying minimal motion test (±0.05 rad)</td></tr>
+      <tr><td><code>nudge_wrist3.py</code></td><td>First-light motion script (±0.10 rad)</td></tr>
+      <tr><td><code>ur10_calibration.yaml</code></td><td>This arm's factory kinematics (checksum-verified)</td></tr>
+      <tr><td><code>report.html</code></td><td>This page</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="note okay">Known limitation: the systemd unit is <strong>transient</strong> — after a PC reboot, start it again with the §2 command (or promote to a permanent unit + <code>loginctl enable-linger</code>).</div>
+</section>
+
+<footer>
+  <span>Aile Robotics — UR10 commissioning record</span>
+  <span>Verified against hardware 2026-08-14</span>
+  <span class="mono">github.com/ailerobotics/ur10-setup</span>
+</footer>
+</main>
