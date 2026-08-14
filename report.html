@@ -332,6 +332,11 @@
         <td>Kill the extra; only one driver ever — runbook §7 to inspect</td>
       </tr>
       <tr>
+        <td>Goal rejected or frozen right after checks passed</td>
+        <td>Another operator/session touched the robot in between (resend drops the reverse link; foreign slider write can pin scaling at 0)</td>
+        <td>One writer at a time — announce take/release. Then §4; driver restart if scaling stays 0 — runbook §6b</td>
+      </tr>
+      <tr>
         <td>Robot pings even with cable unplugged</td>
         <td>A building device upstream also answers 192.168.0.1 via wifi</td>
         <td>Always <code>ping -I enp5s0</code></td>

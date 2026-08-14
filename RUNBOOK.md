@@ -92,6 +92,15 @@ ros2 service call /io_and_status_controller/set_speed_slider \
   ur_msgs/srv/SetSpeedSliderFraction "{speed_slider_fraction: 0.3}"
 ```
 
+## 6b · Goal rejected / test hangs although everything "looks fine"
+
+Usually means **another operator** (person or agent session) touched the robot between
+your checks: a `resend_robot_program` from elsewhere drops the reverse connection for a
+moment → the watchdog deactivates motion controllers; a foreign slider write can leave
+scaling at 0 (goal accepted but frozen). Rule: **one writer at a time** — announce
+take/release of the arm. Recovery is §4; if scaling stays 0 after re-arming,
+`systemctl --user restart ur10-driver` (also clears any frozen goal).
+
 ## 7 · Controllers
 
 ```bash
