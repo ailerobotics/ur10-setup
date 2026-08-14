@@ -18,18 +18,28 @@ source /opt/ros/jazzy/setup.bash
 [ -f "$HOME/workspaces/cumotion_src/install/setup.bash" ] && \
   source "$HOME/workspaces/cumotion_src/install/setup.bash"
 (
-  for _ in $(seq 1 60); do
-    # succeeds only once the display has declared the param (post first load)
-    if ros2 param set /rviz2_moveit \
-         robot_description_kinematics.ur_manipulator.kinematics_solver \
-         kdl_kinematics_plugin/KDLKinematicsPlugin >/dev/null 2>&1; then
+  # Inject the IK solver and KEEP verifying it stuck: the display's first
+  # loadRobotModel can land AFTER our write and overwrite the solver back to
+  # "" (observed twice). Re-assert until the read-back is stable for two
+  # consecutive checks, then announce.
+  stable=0
+  for _ in $(seq 1 90); do
+    cur=$(timeout 5 ros2 param get /rviz2_moveit \
+            robot_description_kinematics.ur_manipulator.kinematics_solver 2>/dev/null \
+          | grep -o "KDLKinematicsPlugin")
+    if [ -n "$cur" ]; then
+      stable=$((stable + 1))
+      [ "$stable" -ge 2 ] && { echo "[start_moveit] IK solver injected and stable — click Reset in RViz once"; break; }
+    else
+      stable=0
+      ros2 param set /rviz2_moveit \
+        robot_description_kinematics.ur_manipulator.kinematics_solver \
+        kdl_kinematics_plugin/KDLKinematicsPlugin >/dev/null 2>&1
       ros2 param set /rviz2_moveit \
         robot_description_kinematics.ur_manipulator.kinematics_solver_search_resolution \
-        0.005 >/dev/null 2>&1 || true
-      echo "[start_moveit] IK solver injected into RViz node — click Reset in RViz once"
-      break
+        0.005 >/dev/null 2>&1
     fi
-    sleep 1
+    sleep 2
   done
 ) &
 exec ros2 launch "$HOME/ur10/moveit/ur10_moveit.launch.py" ur_type:=ur10 launch_rviz:=true "$@"
