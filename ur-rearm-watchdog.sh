@@ -38,8 +38,16 @@ while true; do
   fi
 
   echo "[rearm] external control down >5s, robot healthy — re-arming"
+  # Orphaned-program guard: if the ROBOT believes a program is running while the
+  # driver sees none (no reverse connection), that stale instance swallows the
+  # resend. Stop it first — halts only the program, never moves the arm.
+  if { sleep 0.7; printf 'running\nquit\n'; sleep 1; } | timeout 6 nc "$ROBOT_IP" 29999 2>/dev/null | grep -q "Program running: true"; then
+    echo "[rearm] orphaned program on controller — stopping it first"
+    { sleep 0.7; printf 'stop\nquit\n'; sleep 1; } | timeout 6 nc "$ROBOT_IP" 29999 >/dev/null 2>&1
+    sleep 2
+  fi
   timeout 12 ros2 service call /io_and_status_controller/resend_robot_program std_srvs/srv/Trigger "{}" >/dev/null 2>&1
-  sleep 2
+  sleep 4
   timeout 12 ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController \
     "{activate_controllers: [scaled_joint_trajectory_controller, friction_model_controller], strictness: 1}" >/dev/null 2>&1
   verify=$(timeout 6 ros2 topic echo /io_and_status_controller/robot_program_running --once 2>/dev/null | awk '/data:/{print $2}')
