@@ -337,6 +337,11 @@
         <td>One writer at a time — announce take/release. Then §4; driver restart if scaling stays 0 — runbook §6b</td>
       </tr>
       <tr>
+        <td>MoveIt RViz opens but shows no robot; log: “Wrong parameter type … setting it to {string} is not allowed”</td>
+        <td>Stock <code>ur_moveit.launch.py</code> (3.8.0/Jazzy) pre-declares typed params the MotionPlanning display re-sets as strings</td>
+        <td>Launch via our patched <code>moveit/ur10_moveit.launch.py</code> — runbook §8b</td>
+      </tr>
+      <tr>
         <td>Robot pings even with cable unplugged</td>
         <td>A building device upstream also answers 192.168.0.1 via wifi</td>
         <td>Always <code>ping -I enp5s0</code></td>
@@ -427,6 +432,15 @@
   </div>
 
   <div class="cmdgroup">
+    <h3><span class="tag">§8b</span>MoveIt — interactive planning (drag TCP, IK, planners)</h3>
+    <pre><span class="p">$</span> systemd-run --user --unit=ur10-moveit -E DISPLAY=:0 \
+    bash -c 'source /opt/ros/jazzy/setup.bash && exec ros2 launch $HOME/ur10/moveit/ur10_moveit.launch.py ur_type:=ur10 launch_rviz:=true'
+<span class="c"># drag TCP ball → Plan → Execute · planners: Context tab (OMPL / Pilz / CHOMP)</span>
+<span class="c"># stock ur_moveit.launch.py is broken on Jazzy (type clash, empty RViz) — use our patched copy</span>
+<span class="c"># SAFETY: planning scene is EMPTY — MoveIt does not know the table. Watch every Execute.</span></pre>
+  </div>
+
+  <div class="cmdgroup">
     <h3><span class="tag">§9</span>One-time / rare</h3>
     <pre><span class="c"># re-extract kinematics calibration</span>
 <span class="p">$</span> ros2 launch ur_calibration calibration_correction.launch.py \
@@ -452,7 +466,8 @@
       <tr><td><code>motion_test.py</code></td><td>Self-verifying minimal motion test (±0.05 rad, subtle)</td></tr>
       <tr><td><code>nudge_wrist3.py</code></td><td>First-light motion script (±0.10 rad)</td></tr>
       <tr><td><code>ur10_calibration.yaml</code></td><td>This arm's factory kinematics (checksum-verified)</td></tr>
-      <tr><td><code>rviz/live_view.rviz</code></td><td>Official UR RViz config — live mirror of the physical arm (runbook §9)</td></tr>
+      <tr><td><code>rviz/live_view.rviz</code></td><td>Official UR RViz config — live mirror of the physical arm (runbook §8)</td></tr>
+      <tr><td><code>moveit/ur10_moveit.launch.py</code></td><td>Patched MoveIt launch — fixes the empty-RViz type clash (runbook §8b)</td></tr>
       <tr><td><code>torque-report.html</code></td><td>Briefing: UR Direct Torque Control — and why the CB3 is excluded</td></tr>
       <tr><td><code>report.html</code></td><td>This page</td></tr>
     </tbody>

@@ -143,6 +143,29 @@ To move the arm by hand: **hold the black teach button** on the back of the CB3 
 and push. RViz mirrors it live (telemetry is RTDE, independent of the control program).
 If hand-guiding killed ROS motion afterwards → §4.
 
+## 8b · MoveIt — interactive planning in RViz (drag TCP, IK, planner switch)
+
+Uses our patched launch (`moveit/ur10_moveit.launch.py`) — the stock
+`ur_moveit_config 3.8.0` launch breaks the RViz MotionPlanning display on Jazzy
+(param type clash, robot never renders; see comment in the file). Driver must be running.
+
+```bash
+systemd-run --user --unit=ur10-moveit -E DISPLAY=:0 \
+  bash -c 'source /opt/ros/jazzy/setup.bash && exec ros2 launch $HOME/ur10/moveit/ur10_moveit.launch.py ur_type:=ur10 launch_rviz:=true'
+
+systemctl --user stop ur10-moveit        # close it
+journalctl --user -u ur10-moveit -f      # logs
+```
+
+Using it: drag the ball/arrows on the TCP (orange arm = goal state) → **Plan** →
+check the preview → **Execute**. Planner switch: Context tab → OMPL / Pilz / CHOMP.
+Keep "Velocity Scaling" ≤ 0.1 for interactive use.
+
+**SAFETY: the planning scene is empty** — MoveIt knows the robot's self-collisions
+but NOT the table, walls, or anything mounted around the arm. It will happily plan
+through them. Watch every Execute; e-stop in reach. The pendant speed slider also
+caps execution globally.
+
 ## 9 · One-time / rare
 
 ```bash
