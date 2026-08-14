@@ -337,9 +337,9 @@
         <td>One writer at a time — announce take/release. Then §4; driver restart if scaling stays 0 — runbook §6b</td>
       </tr>
       <tr>
-        <td>MoveIt RViz opens but shows no robot; log: “Wrong parameter type … setting it to {string} is not allowed”</td>
-        <td>Stock <code>ur_moveit.launch.py</code> (3.8.0/Jazzy) pre-declares typed params the MotionPlanning display re-sets as strings</td>
-        <td>Launch via our patched <code>moveit/ur10_moveit.launch.py</code> — runbook §8b</td>
+        <td>MoveIt RViz: no robot (“Wrong parameter type … {string} is not allowed”), or robot but no drag ball (“No kinematics plugins defined”)</td>
+        <td>Stock launch pre-declares params the MotionPlanning display clashes with; a bare RViz node lacks the IK solver</td>
+        <td><code>moveit/start_moveit.sh</code>: bare launch + post-init solver injection + one Reset click — runbook §8b</td>
       </tr>
       <tr>
         <td>Robot pings even with cable unplugged</td>
@@ -433,10 +433,10 @@
 
   <div class="cmdgroup">
     <h3><span class="tag">§8b</span>MoveIt — interactive planning (drag TCP, IK, planners)</h3>
-    <pre><span class="p">$</span> systemd-run --user --unit=ur10-moveit -E DISPLAY=:0 \
-    bash -c 'source /opt/ros/jazzy/setup.bash && exec ros2 launch $HOME/ur10/moveit/ur10_moveit.launch.py ur_type:=ur10 launch_rviz:=true'
+    <pre><span class="p">$</span> systemd-run --user --unit=ur10-moveit -E DISPLAY=:0 ~/ur10/moveit/start_moveit.sh
+<span class="c"># wait for the robot, then click "Reset" (bottom-left) ONCE → drag ball appears</span>
 <span class="c"># drag TCP ball → Plan → Execute · planners: Context tab (OMPL / Pilz / CHOMP)</span>
-<span class="c"># stock ur_moveit.launch.py is broken on Jazzy (type clash, empty RViz) — use our patched copy</span>
+<span class="c"># stock ur_moveit.launch.py is broken on Jazzy (type clash / missing IK) — use our starter</span>
 <span class="c"># SAFETY: planning scene is EMPTY — MoveIt does not know the table. Watch every Execute.</span></pre>
   </div>
 

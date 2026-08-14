@@ -145,16 +145,21 @@ If hand-guiding killed ROS motion afterwards → §4.
 
 ## 8b · MoveIt — interactive planning in RViz (drag TCP, IK, planner switch)
 
-Uses our patched launch (`moveit/ur10_moveit.launch.py`) — the stock
-`ur_moveit_config 3.8.0` launch breaks the RViz MotionPlanning display on Jazzy
-(param type clash, robot never renders; see comment in the file). Driver must be running.
+Uses our patched launch + self-healing starter (`moveit/start_moveit.sh`) — the stock
+`ur_moveit_config 3.8.0` launch breaks the RViz MotionPlanning display on Jazzy two ways:
+params pre-declared on the RViz node crash `loadRobotModel` (empty RViz, no robot), and
+starting bare leaves the display without an IK solver (robot but **no drag ball**). The
+starter launches bare, injects the solver post-init, and then needs **one Reset click**.
 
 ```bash
-systemd-run --user --unit=ur10-moveit -E DISPLAY=:0 \
-  bash -c 'source /opt/ros/jazzy/setup.bash && exec ros2 launch $HOME/ur10/moveit/ur10_moveit.launch.py ur_type:=ur10 launch_rviz:=true'
+systemd-run --user --unit=ur10-moveit -E DISPLAY=:0 ~/ur10/moveit/start_moveit.sh
+# wait for the robot to appear, then click "Reset" (bottom-left in RViz) ONCE
+# → the orange goal arm + TCP drag ball appear (marker EE:goal_tool0)
 
 systemctl --user stop ur10-moveit        # close it
 journalctl --user -u ur10-moveit -f      # logs
+# if the ball is missing later: re-run the two `ros2 param set /rviz2_moveit
+# robot_description_kinematics...` lines from start_moveit.sh, then Reset again
 ```
 
 Using it: drag the ball/arrows on the TCP (orange arm = goal state) → **Plan** →
