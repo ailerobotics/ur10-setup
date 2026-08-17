@@ -1,0 +1,99 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Tree Height: 500
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 0.5
+      Plane Cell Count: 12
+      Reference Frame: world
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Show Names: true
+      Show Axes: true
+      Show Arrows: false
+      Marker Scale: 0.6
+      Frame Timeout: 9999
+    - Class: rviz_default_plugins/PointCloud2
+      Name: CameraCloud
+      Enabled: true
+      Topic:
+        Value: /camera/camera/depth/color/points
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Style: Points
+      Size (Pixels): 2
+      Color Transformer: RGB8
+      Position Transformer: XYZ
+      Decay Time: 0
+    - Class: rviz_default_plugins/Image
+      Name: RGB
+      Enabled: true
+      Topic:
+        Value: /camera/rgb
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Normalize Range: true
+    - Class: rviz_default_plugins/Image
+      Name: DetectionMask
+      Enabled: true
+      Topic:
+        Value: /perception/tray_mask
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Normalize Range: true
+    - Class: rviz_default_plugins/Image
+      Name: TrainedModel
+      Enabled: true
+      Topic:
+        Value: /detect_new/annotated
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Normalize Range: true
+    - Class: rviz_default_plugins/Pose
+      Name: TrayPose
+      Enabled: true
+      Topic:
+        Value: /perception/tray_pose
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+      Shape: Arrow
+      Color: 57; 255; 20
+      Shaft Length: 0.3
+      Head Length: 0.12
+  Global Options:
+    Background Color: 33; 33; 38
+    Fixed Frame: world
+    Frame Rate: 30
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 4.5
+      Focal Point:
+        X: 0.0
+        Y: -0.9
+        Z: 0.8
+      Pitch: 0.35
+      Yaw: 3.6
+    Saved: ~
+Window Geometry:
+  Height: 1000
+  Width: 1600
