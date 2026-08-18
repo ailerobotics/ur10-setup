@@ -67,6 +67,11 @@ for a detection, save annotated frame), `tray_best_live.py` (one-shot custom
 model on a live frame), `tray_live_loop.py` (continuous annotator publishing
 `/detect_new/annotated`; the container copy is what runs).
 
+`approach/`: the eye-in-hand demo — wrist D435i on the tool flange, domain 0,
+IMU on, detector bridge + plan-confirm-execute approach script. Own README.
+In that mode the world->PerceptionCamera look-at TF below MUST NOT be
+published (it is gated off in `approach/wrist_rig.launch.py`).
+
 ## Traps hit on 2026-08-17 (each cost real time)
 
 - **`serial_no` degrades to a double** through every launch path — CLI nested
