@@ -1,0 +1,84 @@
+# nvblox overrides for the HANDHELD cell scan (layered on top of, in order:
+#   nvblox_examples_bringup/config/nvblox/nvblox_base.yaml
+#   isaac_ros_manipulation_bringup/config/nvblox/nvblox_manipulator_base.yaml
+#   isaac_ros_manipulation_bringup/config/nvblox/specializations/nvblox_manipulator_realsense.yaml
+# so only the deltas live here; see scan.launch.py / planner.launch.py).
+#
+# Every value below exists because the stock manipulator config was written
+# for a FIXED camera watching a moving arm; ours is a moving camera watching
+# a static cell, saved once and reused. Decisions dated 2026-08-26.
+/**:
+  ros__parameters:
+    # 2 cm, not the manipulator default 1 cm: a whole cell at 1 cm is ~8x the
+    # memory/time for a map whose registration error is itself ~1-2 cm
+    # (cuVSLAM drift + tag anchor). 2 cm matches the error budget and keeps
+    # the .nvblx in the tens of MB.
+    voxel_size: 0.02
+    num_cameras: 1
+
+    # The map is built DIRECTLY in the robot's frame through the static
+    # base_link->map anchor (tools/tag_anchor.py). Anything else would need a
+    # re-registration step at every load, which is exactly the defect the
+    # anchor-before-integrate rule avoids.
+    global_frame: "base_link"
+
+    # No decay, no clearing: this is a snapshot map. The base config clears
+    # voxels 7 m from base_link and decays TSDF weights at 5 Hz for moving
+    # scenes; either would silently erase parts of the cell while the captain
+    # walks the far side.
+    decay_tsdf_rate_hz: 0.0
+    map_clearing_radius_m: -1.0
+    clear_map_outside_radius_rate_hz: 0.0
+
+    # 3-D ESDF, computed only when cuMotion asks (get_esdf_and_gradient with
+    # update_esdf=true). Continuous ESDF updates would burn GPU during the
+    # scan for nothing.
+    esdf_mode: "3d"
+    update_esdf_rate_hz: 0.0
+    publish_esdf_distance_slice: false
+
+    # Mesh at 2 Hz so the container RViz (run_rviz.sh) shows the cell growing
+    # during the walk — this is the captain's live "is it mapping?" signal.
+    # The manipulator config turns meshing off because it costs GPU; for a
+    # one-off scan the feedback is worth more. planner.launch.py sets it to 0.
+    update_mesh_rate_hz: 2.0
+    use_color: true
+    integrate_color_rate_hz: 5.0
+
+    static_mapper:
+      # Reach envelope + 0.5 m (UR10 working radius 1.30 m around a shoulder
+      # ~0.13 m above base_link) — but y extends to +2.4 so the gondola shelf
+      # front (y 1.4..2.4 per cams/approach/README.md) is mapped even where the
+      # arm cannot reach it: a plan may still sweep the wrist toward it.
+      # Corners are in global_frame (base_link).
+      workspace_bounds_type: "bounding_box"
+      workspace_bounds_min_corner_x_m: -1.8
+      workspace_bounds_min_corner_y_m: -1.8
+      workspace_bounds_min_height_m: -0.6
+      workspace_bounds_max_corner_x_m: 1.8
+      workspace_bounds_max_corner_y_m: 2.4
+      workspace_bounds_max_height_m: 2.0
+
+      # D435i depth error grows ~quadratically with range (~1 % at 2 m, mush
+      # by 4-5 m); integrating out to the base config's 5 m would paint noisy
+      # walls into the ESDF the planner must respect. 3 m keeps everything
+      # the arm can reach at good quality — walk closer instead.
+      projective_integrator_max_integration_distance_m: 3.0
+
+      # Constant weighting (manipulator default) but fuse up to 20 frames,
+      # not 5: the manipulator config wants reactivity to moving objects, a
+      # snapshot scan wants noise averaging. Each surface is seen from many
+      # viewpoints during a walk; this is what makes 2 cm voxels clean.
+      projective_integrator_weighting_mode: "constant"
+      projective_integrator_max_weight: 20.0
+
+      # Voxels that project onto MASKED pixels (the robot segmenter's arm
+      # mask) or invalid depth decay by this factor per frame, so the parked
+      # arm cannot leave a ghost even if a few frames slipped through before
+      # the mask was valid. Manipulator default; kept on purpose.
+      projective_tsdf_integrator_invalid_depth_decay_factor: 0.8
+
+      # ESDF distances are only needed near obstacles; 2 m of signed distance
+      # is plenty for a 0.04 m collision buffer and keeps the ESDF query fast.
+      esdf_integrator_max_distance_m: 2.0
+      esdf_integrator_min_weight: 0.1
