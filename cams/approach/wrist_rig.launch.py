@@ -32,11 +32,22 @@ Mount guess (rough by design — the demo stops >= 0.25 m short of the target):
   toward tool0 +X — the strap offset — and 1.5 cm forward; translation is a
   pure guess, unverifiable from gravity).
 
+Calibrated mount (2026-08-26, cell map): `calib:=auto` (default) loads the
+newest cams/cellmap/calib/tool0_to_camera_*.yaml (hand-eye calibration,
+cams/cellmap/handeye_calibrate.py) and publishes THAT tool0 -> camera_link;
+the guess above is used only when no calibration exists, or explicitly with
+`calib:=guess`. Why the default changed: a map built on the ±5 cm / 4 deg
+guess is off by several cm at 1 m — more than the planner's collision
+buffer — while the approach demo's 0.25 m standoff never cared.
+`calib:=/path/to.yaml` pins a specific file.
+
 Run:
   ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 \
     ros2 launch ~/ur10/cams/approach/wrist_rig.launch.py
 """
+import glob
 import math
+import pathlib
 
 import numpy as np
 
@@ -93,6 +104,25 @@ def _setup(context, *args, **kwargs):
            LaunchConfiguration('cam_xyz').perform(context).split(',')]
     roll = float(LaunchConfiguration('cam_roll_deg').perform(context))
     qx, qy, qz, qw = mount_guess_quat(roll)
+    calib = LaunchConfiguration('calib').perform(context).strip()
+    calib_file = None
+    if calib == 'auto':
+        found = sorted(glob.glob(str(pathlib.Path(__file__).resolve().parent.parent
+                                     / 'cellmap' / 'calib' / 'tool0_to_camera_*.yaml')))
+        calib_file = found[-1] if found else None
+    elif calib not in ('', 'guess'):
+        calib_file = calib
+    if calib_file:
+        import yaml
+        d = yaml.safe_load(open(calib_file))['tool0_to_camera_link']
+        assert d['parent'] == 'tool0' and d['child'] == 'camera_link', calib_file
+        xyz = [float(v) for v in d['xyz']]
+        qx, qy, qz, qw = (float(v) for v in d['quaternion_xyzw'])
+        print(f'[wrist_rig] tool0->camera_link from CALIBRATION {calib_file}: '
+              f'xyz {xyz} rpy {d.get("rpy_deg")}')
+    else:
+        print('[wrist_rig] tool0->camera_link = mount GUESS (no calibration file'
+              + (' found)' if calib == 'auto' else ', calib:=guess)'))
 
     params = {
         'align_depth.enable': True,
@@ -194,6 +224,10 @@ def generate_launch_description():
                                           'the base mount mapping (deg). Default '
                                           'fitted to the IMU gravity vector, '
                                           '2026-08-18 (4.2 deg residual).'),
+        DeclareLaunchArgument('calib', default_value='auto',
+                              description='auto = newest cams/cellmap/calib/'
+                                          'tool0_to_camera_*.yaml; guess = the mount '
+                                          'guess above; or a yaml path.'),
         DeclareLaunchArgument('lookat_tf', default_value='false',
                               description='Publish the table-rig world->PerceptionCamera '
                                           'look-at TF. MUST stay false in eye-in-hand '
