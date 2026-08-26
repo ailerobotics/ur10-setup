@@ -34,6 +34,9 @@ Args:
   fps:=30           colour+depth rate (D435i: 30 or 60 at 640x360).
   cfg_dir:=/cfg     where ur10_calibrated.urdf / ur10.xrdf are mounted.
   nvblox_config:=/cellmap/nvblox_cell.yaml
+  container:=cellmap_container   component container name; use a different one
+                    (e.g. cellmap_mapper) when adding segmenter+nvblox to an
+                    already running camera+cuVSLAM instance via docker exec.
 """
 import os
 
@@ -66,6 +69,7 @@ def _setup(ctx, *args, **kwargs):
     cfg_dir = LaunchConfiguration('cfg_dir').perform(ctx)
     nvblox_cfg = LaunchConfiguration('nvblox_config').perform(ctx)
     use_seg = _true(ctx, 'segmenter')
+    container = LaunchConfiguration('container').perform(ctx)
     actions = []
 
     if _true(ctx, 'camera'):
@@ -196,7 +200,7 @@ def _setup(ctx, *args, **kwargs):
 
     if composables:
         actions.append(ComposableNodeContainer(
-            name=CONTAINER, namespace='', package='rclcpp_components',
+            name=container, namespace='', package='rclcpp_components',
             executable='component_container_mt', output='screen',
             composable_node_descriptions=composables,
         ))
@@ -213,5 +217,6 @@ def generate_launch_description():
         DeclareLaunchArgument('cfg_dir', default_value='/cfg'),
         DeclareLaunchArgument('nvblox_config',
                               default_value='/cellmap/nvblox_cell.yaml'),
+        DeclareLaunchArgument('container', default_value=CONTAINER),
         OpaqueFunction(function=_setup),
     ])

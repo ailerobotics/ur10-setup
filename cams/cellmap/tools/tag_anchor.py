@@ -109,6 +109,7 @@ class Anchor(Node):
         if a.depth:
             self.create_subscription(Image, a.depth, self._depth, qos)
         self.n_img = self.n_det = 0
+        self.checks = []
 
     def _info(self, m):
         if self.K is None:
@@ -166,6 +167,25 @@ class Anchor(Node):
         q, p = t.transform.rotation, t.transform.translation
         T_map_cam = T([p.x, p.y, p.z], R.from_quat([q.x, q.y, q.z, q.w]).as_matrix())
         T_map_tag = T_map_cam @ T_cam_tag
+        if self.a.check_only:
+            try:
+                tb = self.tfb.lookup_transform(BASE, self.a.map_frame, Time(),
+                                               timeout=Duration(seconds=0.2))
+            except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                    tf2_ros.ExtrapolationException):
+                self.status(f'no TF {BASE}->{self.a.map_frame} yet (anchor not published?)')
+                return
+            qb, pb = tb.transform.rotation, tb.transform.translation
+            T_base_map = T([pb.x, pb.y, pb.z], R.from_quat([qb.x, qb.y, qb.z, qb.w]).as_matrix())
+            seen = T_base_map @ T_map_tag
+            dp = seen[:3, 3] - self.T_base_tag[:3, 3]
+            dR = R.from_matrix(seen[:3, :3] @ self.T_base_tag[:3, :3].T).magnitude()
+            self.checks.append(np.linalg.norm(dp))
+            self.status(f'CHECK tag {self.a.tag_id}: seen-through-chain vs arm-measured '
+                        f'{np.linalg.norm(dp)*1e3:5.1f} mm ({dp[0]*1e3:+.0f},{dp[1]*1e3:+.0f},'
+                        f'{dp[2]*1e3:+.0f}) {np.degrees(dR):.2f} deg  [median of '
+                        f'{len(self.checks)}: {np.median(self.checks)*1e3:.1f} mm]  tag at {rng:.2f} m')
+            return
         if self.published is None:
             if rng > self.a.max_range:
                 self.status(f'tag at {rng:.2f} m — come closer than {self.a.max_range} m')
@@ -270,6 +290,10 @@ def main():
     ap.add_argument('--max-range', type=float, default=1.2)
     ap.add_argument('--max-spread-mm', type=float, default=20.0)
     ap.add_argument('--max-spread-deg', type=float, default=1.0)
+    ap.add_argument('--check-only', action='store_true',
+                    help='do not publish: look the tag up THROUGH the already published '
+                         'base_link->map chain and print the residual vs its arm-measured '
+                         'pose (second-landmark sanity check, e.g. --tag anchor/tag1.yaml)')
     ap.add_argument('--out', default=None,
                     help='anchor yaml (default anchor/anchor-<date>.yaml next to the tag file)')
     a = ap.parse_args()

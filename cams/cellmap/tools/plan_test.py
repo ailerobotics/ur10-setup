@@ -312,6 +312,8 @@ def main():
                     help='send --goal-pose as a POSE constraint (planner does IK against '
                          'its world) instead of pre-solving IK here')
     ap.add_argument('--start-pose', help='x,y,z m: IK from the live joints -> virtual start')
+    ap.add_argument('--start-from', help='label of a saved plan: its END joints become the '
+                    'start (a configuration cuMotion itself found collision-free)')
     ap.add_argument('--out', default=os.path.join(os.path.dirname(__file__), '..', 'plans'))
     ap.add_argument('--plot', nargs='*', help='labels to plot (no planning)')
     ap.add_argument('--check-box', help='xmin,xmax,ymin,ymax,zmin,zmax: sweep ALL collision '
@@ -349,9 +351,13 @@ def main():
     node = PlanTest(a)
     node.wait(lambda: node.joints is not None, 10, '/joint_states')
     live = list(node.joints)
-    start = ([float(v) for v in a.start_joints.split(',')] if a.start_joints
-             else node.ik_joints([float(v) for v in a.start_pose.split(',')], None, live)
-             if a.start_pose else live)
+    if a.start_from:
+        prev = yaml.safe_load(open(os.path.join(a.out, f'{a.start_from}.yaml')))
+        start = [float(v) for v in prev['joint_path'][-1]]
+    else:
+        start = ([float(v) for v in a.start_joints.split(',')] if a.start_joints
+                 else node.ik_joints([float(v) for v in a.start_pose.split(',')], None, live)
+                 if a.start_pose else live)
     pose_goal = None
     if a.goal_pose and a.pose_goal:
         xyz = [float(v) for v in a.goal_pose.split(',')]

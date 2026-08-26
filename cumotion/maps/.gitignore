@@ -1,0 +1,9 @@
+# Cell maps: commit a cell-*.nvblx only if it is under ~50 MB; larger ones live
+# in ~/ur10/cumotion/maps/ on the host (start_cumotion_map.sh looks in both).
+# Meshes (.ply), loops and probes are evidence, not inputs — never committed.
+*.ply
+*.csv
+loop-*
+spheres-probe.json
+test-*.nvblx
+cell-sim*.nvblx
