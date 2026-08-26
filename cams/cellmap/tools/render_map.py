@@ -155,7 +155,7 @@ def main():
     if a.plan or a.box:
         ax.legend(fontsize=8, loc='upper center', bbox_to_anchor=(0.5, -0.12))
     fig.suptitle(a.title or os.path.basename(a.ply))
-    fig.tight_layout(); fig.savefig(out, dpi=130)
+    fig.tight_layout(); fig.savefig(out, dpi=130, bbox_inches='tight')
     print('->', out)
 
 
