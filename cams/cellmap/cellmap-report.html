@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cell Map v1 — wrist-camera obstacle map for cuMotion</title>
+<style>
+  :root {
+    --paper: #f6f8f7;
+    --panel: #ffffff;
+    --panel-2: #eef2f0;
+    --ink: #1b2325;
+    --ink-2: #51605e;
+    --line: #d5dcd9;
+    --accent: #0e7d86;
+    --accent-ink: #ffffff;
+    --ok: #2f7d4f;
+    --warn: #a06c14;
+    --crit: #b23a3a;
+    --code-bg: #1d2528;
+    --code-ink: #d9e2e0;
+    --chip-ok-bg: #e2f0e8;
+    --chip-warn-bg: #f5ecd8;
+    --chip-crit-bg: #f6e2e2;
+    --accent-soft: rgba(14, 125, 134, 0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #131a1b; --panel: #1a2224; --panel-2: #202a2c;
+      --ink: #e3e9e7; --ink-2: #93a3a0; --line: #2c3a3c;
+      --accent: #4db6bf; --accent-ink: #0d1516;
+      --ok: #66b788; --warn: #d3a04c; --crit: #d97b7b;
+      --code-bg: #0e1415; --code-ink: #cfdad7;
+      --chip-ok-bg: #1d3327; --chip-warn-bg: #382e17; --chip-crit-bg: #3a2020;
+      --accent-soft: rgba(77, 182, 191, 0.14);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #131a1b; --panel: #1a2224; --panel-2: #202a2c;
+    --ink: #e3e9e7; --ink-2: #93a3a0; --line: #2c3a3c;
+    --accent: #4db6bf; --accent-ink: #0d1516;
+    --ok: #66b788; --warn: #d3a04c; --crit: #d97b7b;
+    --code-bg: #0e1415; --code-ink: #cfdad7;
+    --chip-ok-bg: #1d3327; --chip-warn-bg: #382e17; --chip-crit-bg: #3a2020;
+    --accent-soft: rgba(77, 182, 191, 0.14);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .cp-wrap { max-width: 1060px; margin: 0 auto; padding: 28px 20px 60px; }
+  header.cp-head { margin-bottom: 26px; }
+  .cp-head h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -0.01em; }
+  .cp-head .cp-sub { color: var(--ink-2); max-width: 74ch; }
+  .cp-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .cp-chip {
+    font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent); border: 1px solid var(--line);
+  }
+  .cp-chip.ok   { background: var(--chip-ok-bg);   color: var(--ok); }
+  .cp-chip.warn { background: var(--chip-warn-bg); color: var(--warn); }
+  h2 { font-size: 19px; margin: 38px 0 6px; }
+  h2 .cp-n {
+    display: inline-block; background: var(--accent); color: var(--accent-ink);
+    width: 24px; height: 24px; border-radius: 6px; text-align: center;
+    line-height: 24px; font-size: 13px; margin-right: 8px; vertical-align: 2px;
+  }
+  .cp-lead { color: var(--ink-2); margin: 0 0 16px; max-width: 80ch; }
+  .cp-panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 18px; min-width: 0;
+  }
+  .cp-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 14px; }
+  .cp-grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 14px; }
+  figure { margin: 0; }
+  figure img { width: 100%; max-width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  figcaption { font-size: 13px; color: var(--ink-2); margin-top: 8px; }
+  .cp-role { border-top: 4px solid var(--accent); }
+  .cp-role h3 { margin: 2px 0 2px; font-size: 16px; }
+  .cp-role .cp-alias { font-size: 12px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; }
+  .cp-kv { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13.5px; }
+  .cp-kv td { padding: 5px 0; border-top: 1px dashed var(--line); vertical-align: top; }
+  .cp-kv td:first-child { color: var(--ink-2); white-space: nowrap; padding-right: 12px; width: 1%; }
+  code, .cp-code {
+    font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--panel-2); border-radius: 5px; padding: 1px 6px;
+  }
+  .cp-tablewrap { overflow-x: auto; }
+  table.cp-score { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13.5px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  .cp-score th, .cp-score td { padding: 9px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .cp-score th { background: var(--panel-2); font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-2); }
+  .cp-score tr:last-child td { border-bottom: none; }
+  .cp-good { color: var(--ok); font-weight: 600; }
+  .cp-mid  { color: var(--warn); font-weight: 600; }
+  .cp-bad  { color: var(--crit); font-weight: 600; }
+  .cp-svgwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; overflow-x: auto; }
+  .cp-svgwrap svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  .cp-next { list-style: none; padding: 0; margin: 8px 0 0; }
+  .cp-next li { padding: 9px 0 9px 34px; position: relative; border-top: 1px dashed var(--line); }
+  .cp-next li::before {
+    content: attr(data-k); position: absolute; left: 0; top: 8px;
+    width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft);
+    color: var(--accent); font-size: 12px; font-weight: 700; text-align: center; line-height: 24px;
+  }
+  .cp-pending { border-left: 4px solid var(--warn); }
+  .cp-pending .cp-alias { color: var(--warn); }
+  .cp-flow { font: 12.5px/1.7 ui-monospace, Menlo, Consolas, monospace; white-space: pre; overflow-x: auto; color: var(--ink-2); margin: 0; }
+  .cp-foot { margin-top: 44px; font-size: 12.5px; color: var(--ink-2); border-top: 1px solid var(--line); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="cp-wrap">
+
+<header class="cp-head">
+  <h1>Cell Map v1 — a 3-D obstacle map cuMotion can plan against</h1>
+  <div class="cp-sub">
+    MoveIt's planning scene is empty and cuMotion knows only a ground plane, so every
+    "collision-free" plan in this cell is collision-free by ignorance. This page records how we
+    gave the planner a real world: the wrist D435i, freedriven around the cell, fused by nvblox
+    into a 2 cm ESDF directly in <code>base_link</code>, saved once and loaded by an opt-in
+    planner. Built 2026-08-26.
+  </div>
+  <div class="cp-chips">
+    <span class="cp-chip ok">pipeline built &amp; bench-rehearsed end to end</span>
+    <span class="cp-chip ok">box detour +3.5 cm vs Pilz −11 cm (synthetic)</span>
+    <span class="cp-chip">design change: camera stays on the arm, no SLAM</span>
+    <span class="cp-chip warn">calibration + live scan: captain steps, in progress</span>
+  </div>
+</header>
+
+<h2><span class="cp-n">1</span>The defect this fixes</h2>
+<p class="cp-lead">
+  Three planners run in this cell and none of them knows the shelf exists. OMPL, Pilz and CHOMP
+  plan against an empty scene; cuMotion is the only one with any world at all, and that world is
+  a single ground plane (<code>RUNBOOK</code> §8b/8c). The approach demo works around this with a
+  hand-maintained whitelist of collision boxes — which protects only against the obstacles
+  somebody remembered to type in.
+</p>
+<div class="cp-grid2">
+  <div class="cp-panel">
+    <div class="cp-alias">before</div>
+    <h3>Empty scene</h3>
+    <p style="margin:8px 0 0; color:var(--ink-2)">
+      A straight-line plan between two poses goes straight through whatever is between them.
+      Bench-measured on a synthetic 20 cm cube: Pilz PTP drives the arm <b>11 cm inside</b> the
+      obstacle and reports success.
+    </p>
+  </div>
+  <div class="cp-panel">
+    <div class="cp-alias">after</div>
+    <h3>ESDF world</h3>
+    <p style="margin:8px 0 0; color:var(--ink-2)">
+      cuMotion reads an nvblox ESDF built from what the camera actually saw. Same two poses,
+      same cube: the plan arcs over it with <b>3.5 cm clearance</b> at the closest collision
+      sphere, and straightens again once the cube is removed and re-scanned.
+    </p>
+  </div>
+</div>
+
+<h2><span class="cp-n">2</span>The design change that made this tractable</h2>
+<p class="cp-lead">
+  The original design (firstmate's <code>cell-map-slam.html</code>, 2026-08-26 rev 2) had the
+  captain <em>carry</em> the camera and recover its pose with cuVSLAM, then register the SLAM map
+  to the robot through an AprilTag. The captain changed the plan the same day: the camera stays
+  strapped to the tool flange and the arm is freedriven by hand. That deletes an entire error
+  source and an entire subsystem.
+</p>
+<div class="cp-tablewrap">
+<table class="cp-score">
+  <tr><th>Concern</th><th>Handheld + cuVSLAM</th><th>Camera on the arm (chosen)</th></tr>
+  <tr>
+    <td>Camera pose</td>
+    <td>Visual odometry — drifts, can lose tracking on plain walls, needs a loop-closure check</td>
+    <td class="cp-good">Forward kinematics — sub-mm, drift-free, always available</td>
+  </tr>
+  <tr>
+    <td>Registration to the robot</td>
+    <td>AprilTag anchor <code>base_link → map</code>, must be up <em>before</em> integration starts; tag error enters every voxel</td>
+    <td class="cp-good">None. Depth is integrated in <code>base_link</code> natively</td>
+  </tr>
+  <tr>
+    <td>Remaining unknown</td>
+    <td>VSLAM drift <em>and</em> the mount transform</td>
+    <td class="cp-mid">The mount transform only — so calibrating it becomes step 1</td>
+  </tr>
+  <tr>
+    <td>Missing packages</td>
+    <td><code>realsense_splitter</code> absent; firmware 5.12.8.200 may not emit the metadata the stereo-IR mode needs</td>
+    <td class="cp-good">Nothing missing — segmenter and nvblox are both in the image</td>
+  </tr>
+  <tr>
+    <td>Coverage</td>
+    <td>The whole room, including space the arm can never enter</td>
+    <td class="cp-mid">The reach envelope — which is exactly the volume collision avoidance is about</td>
+  </tr>
+</table>
+</div>
+
+<h2><span class="cp-n">3</span>Pipeline and frame chain</h2>
+<p class="cp-lead">
+  There is no <code>map</code> or <code>odom</code> frame anywhere in this system. The camera's
+  pose is read out of the robot, and the only transform that is not measured by the robot itself
+  is the one bolted between the flange and the lens.
+</p>
+<div class="cp-svgwrap">
+<p class="cp-flow">  /joint_states ──► base_link ──► tool0 ──► camera_link ──► camera_color_optical_frame
+   (UR driver)                       ▲                            │
+                                     │                            ▼
+                     calib/tool0_to_camera_&lt;date&gt;.yaml        depth + colour
+                     ── hand-eye, AX = XB ──                      │
+                                                                  ▼
+                            /joint_states ──► robot segmenter ──► masked depth
+                                                                  │
+                                                                  ▼
+                                          nvblox  (2 cm TSDF/ESDF, global_frame base_link)
+                                                                  │
+                                            save_map ──► cumotion/maps/cell-&lt;date&gt;.nvblx
+                                                                  │
+                                            load_map ──► cuMotion read_esdf_world:=true
+</p>
+</div>
+<div class="cp-grid2" style="margin-top:14px">
+  <div class="cp-panel">
+    <div class="cp-alias">why a segmenter</div>
+    <h3>The arm must not map itself</h3>
+    <p style="margin:8px 0 0; color:var(--ink-2)">
+      The wrist camera sees the forearm from very close, where the XRDF spheres are a coarse
+      model — and the strapped camera and its cable are not in the model at all. Unmasked, the
+      arm becomes a permanent obstacle and <em>every</em> plan starts in collision. The masked
+      halo stays <b>unobserved</b>, which cuMotion treats as free, so the mask costs nothing:
+      bench-verified by planning successfully out of a park pose whose region was never observed.
+    </p>
+  </div>
+  <div class="cp-panel">
+    <div class="cp-alias">why calibration is a gate, not an option</div>
+    <h3>4° at 1 m is 7 cm</h3>
+    <p style="margin:8px 0 0; color:var(--ink-2)">
+      The mount transform currently in <code>wrist_rig.launch.py</code> is a documented guess
+      (±5 cm, 4.2° residual). A map built on it is <em>worse than no map</em>: it would clear
+      paths that hit real shelves, with the planner's confidence attached. So
+      <code>run_scan.sh</code> refuses to start without a calibration file. Target &lt; 5 mm / 1°,
+      independently validated against a second tag at &lt; 10 mm / 1°.
+    </p>
+  </div>
+</div>
+
+<h2><span class="cp-n">4</span>Bench rehearsal — the whole pipeline, before touching the arm</h2>
+<p class="cp-lead">
+  The captain's physical time is expensive and hard to repeat, so the entire chain was rehearsed
+  first on synthetic depth (<code>tools/fake_depth.py</code> renders a table plane, a shelf slab
+  at y 1.4 and a 20 cm cube, and publishes the camera TF directly). The real nvblox, real
+  segmenter, real cuMotion and real save/load did all the rest. <b>The arm never moved.</b>
+</p>
+<div class="cp-tablewrap">
+<table class="cp-score">
+  <tr><th>Plan</th><th>Planner</th><th>Tool path</th><th>Max deviation from the straight line</th><th>Arm vs box (spheres + buffer)</th></tr>
+  <tr>
+    <td><code>sim5-box-cumotion</code></td><td>cuMotion + map, pose goal</td>
+    <td>1.13 m (1.40×)</td><td>34 cm</td><td class="cp-good">clear, +3.5 cm</td>
+  </tr>
+  <tr>
+    <td><code>sim5-box-pilz</code></td><td>Pilz PTP, no map</td>
+    <td>0.93 m (1.14×)</td><td>19 cm</td><td class="cp-bad">through the box, −11 cm</td>
+  </tr>
+  <tr>
+    <td><code>sim6-nobox-cumotion</code></td><td>cuMotion + map, box removed &amp; re-scanned</td>
+    <td>0.95 m (1.18×)</td><td>22 cm</td><td class="cp-mid">through the <em>former</em> box volume, −6.7 cm → detour gone</td>
+  </tr>
+</table>
+</div>
+<figure class="cp-panel" style="margin-top:14px">
+  <img src="bench/sim-plans.png" alt="Top and side renders of the synthetic map with the cuMotion detour, the Pilz straight line through the box, and the straightened post-removal plan">
+  <figcaption><b>Synthetic map with the three plans.</b> The detour is real geometry, not a
+  cost-function artefact: the same planner straightens out as soon as the cube is removed from
+  the map and the map is re-saved.</figcaption>
+</figure>
+<div class="cp-grid3" style="margin-top:14px">
+  <div class="cp-panel">
+    <h3>Round trip</h3>
+    <p style="margin:8px 0 0; color:var(--ink-2)"><code>save_map</code> → <code>load_map</code>
+    verified; 19–33 MB per synthetic map. ESDF hand-off:
+    <code>Initialized grid from nvblox: 193×217×121 @ 0.02 m</code>. Zero-crossing lands at the
+    table surface within one voxel.</p>
+  </div>
+  <div class="cp-panel">
+    <h3>Live, through the guess TF</h3>
+    <p style="margin:8px 0 0; color:var(--ink-2)">Segmenter output at 18 Hz and 105 k observed
+    voxels from the parked wrist view — the real camera path works; only the mount transform is
+    still uncalibrated.</p>
+  </div>
+  <div class="cp-panel">
+    <h3>Planning cost</h3>
+    <p style="margin:8px 0 0; color:var(--ink-2)">0.10–0.13 s per plan with the ESDF world —
+    the map does not make the GPU planner slow.</p>
+  </div>
+</div>
+
+<h2><span class="cp-n">5</span>Three defects the bench found before the captain could hit them</h2>
+<p class="cp-lead">
+  Each of these would have burned a physical session. All three are now designed out, and the
+  reasoning is recorded so the next person does not undo them.
+</p>
+<ul class="cp-next">
+  <li data-k="1"><b>A planner that looks alive and refuses everything.</b>
+    cuMotion with <code>read_esdf_world:=true</code> blocks forever if the ESDF service is
+    absent, and answers <code>World update failed</code> to every request if nvblox is up but
+    <em>empty</em>. <code>planner.launch.py</code> therefore starts cuMotion only after
+    <code>map_ctl.py load</code> exits 0, and shuts down loudly otherwise — so nothing can ever
+    block on the ESDF service with no map.</li>
+  <li data-k="2"><b>A 0.04 m buffer that breaks every start state.</b>
+    Widening the world buffer uniformly puts the upper arm's root sphere (r 0.09, sitting 3.8 cm
+    above the mounting plane) <em>inside</em> cuMotion's ground plane, and every plan fails with
+    <code>INVALID_INITIAL_CSPACE_POSITION</code>. <code>ur10_map.xrdf</code> widens
+    forearm/wrist_1/2/3/tool0 to 0.04 and keeps shoulder/upper_arm at 0.02 — those links never
+    leave the base region anyway.</li>
+  <li data-k="3"><b>Joint goals that are already in collision.</b>
+    A goal pre-solved by MoveIt's <code>/compute_ik</code> against an empty scene can put the
+    forearm 1–9 cm inside the box; cuMotion then fails at trajopt with
+    <code>UNKNOWN_STATUS</code>. Giving cuMotion a tool0 <em>pose</em> goal lets it choose the
+    configuration against its own world. The approach demo's 170° rewind guard is re-applied to
+    every returned trajectory.</li>
+</ul>
+
+<h2><span class="cp-n">6</span>Live results — captain steps</h2>
+<p class="cp-lead">
+  Everything below needs the arm and the printed tags. The tooling is built and waiting; results
+  are filled in here as each step completes.
+</p>
+<div class="cp-grid2">
+  <div class="cp-panel cp-pending">
+    <div class="cp-alias">pending</div>
+    <h3>Hand-eye calibration</h3>
+    <table class="cp-kv">
+      <tr><td>Tool</td><td><code>handeye_calibrate.py --target 18</code>, running and waiting on tag 0</td></tr>
+      <tr><td>Solvers</td><td>Park / Daniilidis / Tsai / Horaud (Andreff reported, never chosen)</td></tr>
+      <tr><td>Accept</td><td>&lt; 5 mm / 1° residual, solvers agreeing within ~2 mm</td></tr>
+      <tr><td>Result</td><td><i>awaiting the captain's freedrive pose session</i></td></tr>
+    </table>
+  </div>
+  <div class="cp-panel cp-pending">
+    <div class="cp-alias">pending</div>
+    <h3>Independent validation (tag 1)</h3>
+    <table class="cp-kv">
+      <tr><td>Method</td><td>tag 1 seen through the calibrated chain vs its pose measured by touching three corners with the TCP</td></tr>
+      <tr><td>Accept</td><td>median &lt; 10 mm / 1°</td></tr>
+      <tr><td>Reads as</td><td>growing with angle/range → rotation error; constant offset → translation error</td></tr>
+      <tr><td>Result</td><td><i>awaiting calibration</i></td></tr>
+    </table>
+  </div>
+</div>
+<div class="cp-grid2" style="margin-top:14px">
+  <div class="cp-panel cp-pending">
+    <div class="cp-alias">pending</div>
+    <h3>Scan and save</h3>
+    <table class="cp-kv">
+      <tr><td>Checks</td><td>surfaces stay put while the arm moves (smear = calibration or timestamp error); table z ≈ 0; shelf front y ≈ 1.5 (approach demo measured 1.516 at x ≈ 0); arm absent</td></tr>
+      <tr><td>Record</td><td>sweep duration, <code>.nvblx</code> size, observed voxel count</td></tr>
+      <tr><td>Result</td><td><i>awaiting calibration</i></td></tr>
+    </table>
+  </div>
+  <div class="cp-panel cp-pending">
+    <div class="cp-alias">pending</div>
+    <h3>Box-avoidance acceptance test</h3>
+    <table class="cp-kv">
+      <tr><td>Test</td><td>cardboard box on the straight line between two known poses, scanned → plan must route around it; box removed and re-scanned → plan straightens</td></tr>
+      <tr><td>Evidence</td><td>plan-only is sufficient; execution stays captain-confirmed at ≤ 0.05 scaling</td></tr>
+      <tr><td>Result</td><td><i>awaiting the scan</i></td></tr>
+    </table>
+  </div>
+</div>
+
+<h2><span class="cp-n">7</span>What this map does not protect you from</h2>
+<div class="cp-tablewrap">
+<table class="cp-score">
+  <tr><th>Limit</th><th>Consequence</th><th>Mitigation in place</th></tr>
+  <tr>
+    <td><b>Snapshot, not live</b></td>
+    <td>Anything moved after the scan is invisible until re-scanned</td>
+    <td>Ground plane + the approach demo's whitelist boxes stay on as independent guards; RUNBOOK §10 lists the re-scan triggers</td>
+  </tr>
+  <tr>
+    <td><b>Unobserved = free</b></td>
+    <td>The map only protects against what the camera <em>saw</em>; a gap in the sweep is a hole in the world</td>
+    <td>Sweep recipe covers the whole reach envelope; the same rule is what makes the robot mask free</td>
+  </tr>
+  <tr>
+    <td><b>Coverage = reach envelope</b></td>
+    <td>Walls beyond reach are not mapped</td>
+    <td>By design — the arm cannot hit what it cannot reach</td>
+  </tr>
+  <tr>
+    <td><b>Error budget</b></td>
+    <td>calibration residual + 2 cm voxels + ~1 %-of-range depth noise</td>
+    <td>0.04 m world buffer absorbs it; <b>thin objects may still defeat it</b></td>
+  </tr>
+  <tr>
+    <td><b>Min range ~17 cm</b></td>
+    <td>Surfaces closer than that to the lens are never mapped</td>
+    <td>Sweep from standoff; documented</td>
+  </tr>
+  <tr>
+    <td><b>Camera body not in the collision model</b></td>
+    <td>The planner does not know the strapped D435i sticks out of the flange</td>
+    <td>Next step once the calibrated offset is known — spheres on <code>tool0</code> in <code>ur10_map.xrdf</code></td>
+  </tr>
+  <tr>
+    <td><b>Version drift</b></td>
+    <td>Isaac 4.x pins librealsense 2.56.3 / firmware 5.16.0.1; this box runs 2.58.1 / 5.12.8.200</td>
+    <td>Working so far; a firmware flash is a captain decision, never taken by an agent</td>
+  </tr>
+</table>
+</div>
+
+<h2><span class="cp-n">8</span>Nothing existing changed</h2>
+<p class="cp-lead">
+  The map is strictly opt-in. <code>start_cumotion.sh</code> keeps its default behaviour, the
+  tray rig and the approach demo are untouched, and neither reads the map.
+  <code>start_cumotion_map.sh</code> is a sibling script that deliberately reuses the container
+  name, so docker itself refuses to run both planners at once — they would both answer the
+  <code>cumotion/move_group</code> action and MoveIt would talk to whichever won the race.
+</p>
+
+<div class="cp-foot">
+  UR10 cell · cell map v1 · 2026-08-26 · sources: <code>cams/cellmap/README.md</code> (design and
+  procedure), <code>RUNBOOK.md</code> §10 (recurring commands), <code>cams/cellmap/bench/</code>
+  (rehearsal figures). Phase 2 — live map refresh from the wrist camera during normal operation —
+  is out of scope for v1.
+</div>
+
+</div>
+</body>
+</html>

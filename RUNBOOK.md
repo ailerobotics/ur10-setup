@@ -226,3 +226,75 @@ nmcli connection add type ethernet con-name ur10 ifname enp5s0 \
   ipv4.never-default yes ipv6.method disabled \
   connection.autoconnect yes connection.autoconnect-priority 10
 ```
+
+## 10 · Cell map: scan, re-scan, use
+
+Static 3-D obstacle map of the cell in `base_link`, built from the **wrist**
+D435i while the captain freedrives the arm, consumed by cuMotion as an ESDF.
+Rationale, design decisions and the full procedure with pose/sweep recipes:
+`cams/cellmap/README.md`. This section is the recurring commands only.
+
+Frame chain — no `map`/`odom`, no SLAM; the camera pose is pure kinematics:
+
+```
+base_link → tool0 → camera_link → camera_color_optical_frame
+   /joint_states   ↑ cams/cellmap/calib/tool0_to_camera_<date>.yaml   (RealSense static TF)
+```
+
+### Use an existing map (the common case)
+
+```bash
+# the map planner replaces the default one — SAME container name, so stop it first
+systemctl --user stop ur10-cumotion; docker stop ur10-cumotion   # the unit stop alone can orphan the container
+~/ur10/cumotion/start_cumotion_map.sh          # newest cumotion/maps/cell-*.nvblx
+```
+
+Starts nvblox (map server, no camera) → `load_map` → cuMotion with
+`read_esdf_world:=true` and `cumotion/ur10_map.xrdf` (0.04 m world buffer on
+forearm/wrists/tool). cuMotion is started **only after the loader exits 0**:
+`read_esdf_world:=true` against a missing ESDF service blocks forever, and
+against an empty nvblox it answers `World update failed` to every request —
+a planner that looks alive and refuses everything.
+
+```bash
+# back to the default (no map) planner — nothing here changes start_cumotion.sh
+systemctl --user stop ur10-cumotion; docker stop ur10-cumotion
+systemd-run --user --unit=ur10-cumotion -p Restart=on-failure -p RestartSec=15 ~/ur10/cumotion/start_cumotion.sh
+```
+
+### When to re-scan
+
+- Anything the arm can reach was moved, added or removed. The map is a
+  **snapshot**; unobserved space is treated as **free**, so a new obstacle is
+  invisible to the planner exactly as it was before the map existed.
+- The arm was re-calibrated, or the camera was unstrapped/restrapped — the
+  mount transform changes and the whole map shifts with it. Re-run the
+  hand-eye calibration first, then re-scan.
+- Never needed for the tray rig or the approach demo: both are unchanged and
+  do not read the map.
+
+### Re-scan (captain, ~15 min incl. calibration check)
+
+```bash
+cams/cellmap/run_scan.sh                       # segmenter + nvblox; refuses without a calib yaml
+cams/cellmap/run_rviz.sh                       # RViz WITH the nvblox plugin (host RViz cannot decode nvblox_msgs/Mesh)
+cams/cellmap/scan_session.sh cell-$(date +%F)  # prints the sweep recipe, then Enter → save_map + .ply
+```
+
+**What good looks like:** surfaces stay put while the arm moves; table at
+z ≈ 0 and shelf front at y ≈ 1.5 (`cams/cellmap/tools/map_ctl.py esdf --probe x,y`);
+the arm itself absent (robot segmenter). **Smear** that follows the arm =
+calibration or timestamp error — stop and do not save, re-run the hand-eye
+calibration.
+
+Maps live in `cumotion/maps/` when under ~50 MB (committed), otherwise in
+`~/ur10/cumotion/maps/` on the host (see `cumotion/maps/README.md`).
+
+### Known limits
+
+Snapshot only; coverage = what the wrist camera saw from the reach envelope
+(walls beyond reach are out of scope); min range ~17 cm, so surfaces closer
+than that to the lens are not mapped; error budget ≈ calibration residual +
+2 cm voxels + ~1 %-of-range depth noise, which the 0.04 m buffer absorbs but
+thin objects may defeat. Ground plane and the approach demo's whitelist boxes
+stay on as independent guards.
