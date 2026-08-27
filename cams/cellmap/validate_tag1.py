@@ -36,7 +36,9 @@ Three independent checks, none of which needs a tape on the robot:
 """
 import argparse
 import datetime as dt
+import json
 import os
+import signal
 import sys
 import time
 
@@ -87,6 +89,24 @@ def tf_to_T(t):
     return M
 
 
+def to_py(x):
+    """numpy scalars/arrays -> plain python, recursively.
+
+    yaml.safe_dump refuses np.float64 ('cannot represent an object'), and it
+    only fails at the very END of a run — after the captain's sweep is over.
+    Convert once, centrally, instead of hunting float() calls.
+    """
+    if isinstance(x, dict):
+        return {k: to_py(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [to_py(v) for v in x]
+    if isinstance(x, np.ndarray):
+        return x.tolist()
+    if isinstance(x, np.generic):
+        return x.item()
+    return x
+
+
 def mean_rot_axis(vs):
     """Mean unit vector + per-sample angle to it (deg)."""
     m = np.mean(vs, axis=0)
@@ -106,6 +126,16 @@ class Validate(Node):
         self.obs = {i: [] for i in a.tags}      # id -> list of dicts
         self.n_img = self.n_rej = 0
         self.t_last = 0.0
+        self.prev_tool = None            # (t, xyz) for tool speed
+        # Append every accepted observation to disk AS IT ARRIVES. The first
+        # sweep was lost because the tool only persisted aggregates at exit
+        # and Ctrl-C killed it before the verdict ran (2026-08-27): a
+        # captain's physical sweep is expensive and must never depend on a
+        # clean shutdown.
+        self.raw = open(a.raw, 'w', buffering=1)
+        self.raw.write(json.dumps({'meta': {'tag_size_m': a.tag_size,
+                                            'tags': a.tags,
+                                            'expected_mm': a.expected_mm}}) + '\n')
         self.why = {}
         self.tfb = tf2_ros.Buffer()
         # spin_thread=True gives the TF listener its OWN executor thread.
@@ -192,6 +222,15 @@ class Validate(Node):
             self._bump(f'TF unavailable ({type(e).__name__})')
             return
         T_base_opt = T_base_tool @ T_tool_opt
+        # Tool speed, so fast-motion outliers can be SHOWN rather than guessed
+        # at (rolling shutter + any residual stamp error scale with speed).
+        pos = T_base_tool[:3, 3]
+        speed = 0.0
+        if self.prev_tool is not None:
+            dt = now - self.prev_tool[0]
+            if dt > 1e-3:
+                speed = float(np.linalg.norm(pos - self.prev_tool[1]) / dt)
+        self.prev_tool = (now, pos.copy())
         for c, i in zip(corners, ids.ravel()):
             i = int(i)
             if i not in self.obs:
@@ -222,9 +261,14 @@ class Validate(Node):
             T_base_tag = T_base_opt @ T_cam_tag
             n_cam = Rct[:, 2]
             obl = float(np.degrees(np.arccos(min(1.0, abs(n_cam @ np.array([0, 0, 1.0]))))))
+            rec = {'p': T_base_tag[:3, 3].tolist(), 'n': T_base_tag[:3, 2].tolist(),
+                   'range': rng, 'obliquity': obl, 'reproj': err,
+                   'tool_speed': speed, 'tag': i, 't': now}
             self.obs[i].append({'p': T_base_tag[:3, 3].copy(),
                                 'n': T_base_tag[:3, 2].copy(),
-                                'range': rng, 'obliquity': obl, 'reproj': err})
+                                'range': rng, 'obliquity': obl, 'reproj': err,
+                                'tool_speed': speed})
+            self.raw.write(json.dumps(rec) + '\n')
 
     # ---- statistics
     def stats(self, i):
@@ -234,16 +278,26 @@ class Validate(Node):
         P = np.array([x['p'] for x in o])
         N = np.array([x['n'] for x in o])
         N = N / np.linalg.norm(N, axis=1, keepdims=True)
-        mp = P.mean(axis=0)
+        # Robust centre: the guide accepts on the MEDIAN, and fast-motion
+        # views throw metre-scale outliers that drag a plain mean off the
+        # true pose. Centre on the geometric median-ish (component-wise
+        # median) so the deviations themselves are not biased by outliers.
+        mp = np.median(P, axis=0)
         dev = np.linalg.norm(P - mp, axis=1) * 1e3
         mn, ang = mean_rot_axis(N)
         rr = np.array([x['range'] for x in o])
         ob = np.array([x['obliquity'] for x in o])
+        sp = np.array([x.get('tool_speed', 0.0) for x in o])
         return {'n': len(o), 'mean_p': mp, 'mean_n': mn,
                 'pos_rms_mm': float(np.sqrt((dev ** 2).mean())),
+                'pos_med_mm': float(np.median(dev)),
+                'pos_p95_mm': float(np.percentile(dev, 95)),
                 'pos_max_mm': float(dev.max()),
                 'nrm_rms_deg': float(np.sqrt((ang ** 2).mean())),
+                'nrm_med_deg': float(np.median(ang)),
+                'nrm_p95_deg': float(np.percentile(ang, 95)),
                 'nrm_max_deg': float(ang.max()),
+                'speed_med': float(np.median(sp)), 'speed_max': float(sp.max()),
                 'range_min': float(rr.min()), 'range_max': float(rr.max()),
                 'obl_min': float(ob.min()), 'obl_max': float(ob.max())}
 
@@ -252,8 +306,9 @@ class Validate(Node):
         for i in self.a.tags:
             s = self.stats(i)
             parts.append(f'tag{i} n/a' if s is None else
-                         f'tag{i} n={s["n"]:4d} spread {s["pos_rms_mm"]:5.1f}mm rms '
-                         f'(max {s["pos_max_mm"]:5.1f}) normal {s["nrm_rms_deg"]:4.2f}deg '
+                         f'tag{i} n={s["n"]:4d} spread {s["pos_med_mm"]:5.1f}mm med '
+                         f'({s["pos_rms_mm"]:.1f} rms, max {s["pos_max_mm"]:5.1f}) '
+                         f'normal {s["nrm_med_deg"]:4.2f}deg med '
                          f'range {s["range_min"]:.2f}-{s["range_max"]:.2f} '
                          f'obliq {s["obl_min"]:.0f}-{s["obl_max"]:.0f}deg')
         top = sorted(self.why.items(), key=lambda kv: -kv[1])[:1]
@@ -283,21 +338,32 @@ class Validate(Node):
             lines.append(f'(a) consistency : NO DATA for tag {self.a.target_tag}')
             ok_all = False
         else:
-            ok = s['pos_rms_mm'] < self.a.tol_spread_mm
+            ok = (s['pos_med_mm'] < self.a.tol_spread_mm
+                  and s['nrm_med_deg'] < self.a.tol_normal_deg)
             ok_all &= ok
             implied = np.degrees(np.arctan2(s['pos_rms_mm'] * 1e-3,
                                             max(s['range_min'], 1e-6)))
             out['checks']['consistency'] = {
+                'pos_med_mm': s['pos_med_mm'], 'pos_p95_mm': s['pos_p95_mm'],
                 'pos_rms_mm': s['pos_rms_mm'], 'pos_max_mm': s['pos_max_mm'],
+                'normal_med_deg': s['nrm_med_deg'], 'normal_p95_deg': s['nrm_p95_deg'],
                 'normal_rms_deg': s['nrm_rms_deg'], 'normal_max_deg': s['nrm_max_deg'],
+                'tool_speed_med_mps': s['speed_med'], 'tool_speed_max_mps': s['speed_max'],
                 'implied_rot_deg_at_min_range': float(implied), 'pass': bool(ok)}
             lines.append(
-                f'(a) consistency : tag {self.a.target_tag} lands within '
-                f'{s["pos_rms_mm"]:.1f} mm rms / {s["pos_max_mm"]:.1f} mm max over '
-                f'{s["n"]} views ({s["range_min"]:.2f}-{s["range_max"]:.2f} m, '
-                f'obliquity {s["obl_min"]:.0f}-{s["obl_max"]:.0f} deg); normal spread '
-                f'{s["nrm_rms_deg"]:.2f} deg rms  -> {"PASS" if ok else "FAIL"} '
-                f'(< {self.a.tol_spread_mm} mm)')
+                f'(a) consistency : tag {self.a.target_tag}, {s["n"]} views '
+                f'({s["range_min"]:.2f}-{s["range_max"]:.2f} m, obliquity '
+                f'{s["obl_min"]:.0f}-{s["obl_max"]:.0f} deg)\n'
+                f'                  position spread  med {s["pos_med_mm"]:5.1f} | '
+                f'p95 {s["pos_p95_mm"]:5.1f} | rms {s["pos_rms_mm"]:5.1f} | '
+                f'max {s["pos_max_mm"]:6.1f} mm\n'
+                f'                  normal   spread  med {s["nrm_med_deg"]:5.2f} | '
+                f'p95 {s["nrm_p95_deg"]:5.2f} | rms {s["nrm_rms_deg"]:5.2f} | '
+                f'max {s["nrm_max_deg"]:6.2f} deg\n'
+                f'                  tool speed med {s["speed_med"]*1e3:.0f} mm/s, '
+                f'max {s["speed_max"]*1e3:.0f} mm/s  -> {"PASS" if ok else "FAIL"} '
+                f'on the MEDIAN (< {self.a.tol_spread_mm} mm / '
+                f'{self.a.tol_normal_deg} deg)')
             if s['obl_max'] - s['obl_min'] < 20 or s['range_max'] - s['range_min'] < 0.15:
                 lines.append('    WARNING: the sweep was not diverse enough (want '
                              '>20 deg of obliquity and >0.15 m of range span) — a '
@@ -344,6 +410,26 @@ class Validate(Node):
         return out, lines
 
 
+class Offline:
+    """Replays a raw jsonl through the same stats/verdict code as the live run."""
+    stats = Validate.stats
+    verdict = Validate.verdict
+
+    def __init__(self, a):
+        self.a = a
+        self.obs = {i: [] for i in a.tags}
+        for line in open(a.from_raw):
+            r = json.loads(line)
+            if 'meta' in r or r.get('tag') not in self.obs:
+                continue
+            if a.max_speed and r.get('tool_speed', 0.0) > a.max_speed:
+                continue
+            self.obs[r['tag']].append({'p': np.array(r['p']), 'n': np.array(r['n']),
+                                       'range': r['range'], 'obliquity': r['obliquity'],
+                                       'reproj': r['reproj'],
+                                       'tool_speed': r.get('tool_speed', 0.0)})
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -365,11 +451,38 @@ def main():
     ap.add_argument('--tol-scale-mm', type=float, default=10.0)
     ap.add_argument('--tol-z-mm', type=float, default=5.0)
     ap.add_argument('--tol-normal-deg', type=float, default=1.0)
+    ap.add_argument('--max-speed', type=float, default=0.0,
+                    help='with --from-raw: drop views taken faster than this tool '
+                         'speed (m/s); 0 = keep all')
     ap.add_argument('--seconds', type=float, default=0, help='auto-stop (0 = Ctrl-C)')
     ap.add_argument('--out', default=None)
+    ap.add_argument('--raw', default=None,
+                    help='jsonl of every accepted observation, written live so a '
+                         'sweep survives any crash (default calib/validate-raw-<date>.jsonl)')
+    ap.add_argument('--from-raw', default=None,
+                    help='re-analyse a raw jsonl offline (no ROS, no arm) — e.g. to '
+                         'apply a different gate without asking for another sweep')
     a = ap.parse_args()
+    if a.raw is None:
+        a.raw = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'calib',
+                             f'validate-raw-{dt.date.today().isoformat()}.jsonl')
+        os.makedirs(os.path.dirname(a.raw), exist_ok=True)
     if a.target_tag not in a.tags:
         sys.exit(f'--target-tag {a.target_tag} must be one of --tags {a.tags}')
+
+    if a.from_raw:                       # offline re-analysis, no ROS
+        n = Offline(a)
+        res, lines = n.verdict()
+        print('\n'.join(lines))
+        print(f'\nVERDICT: {"ACCEPT" if res["pass"] else "DIAGNOSE"}  '
+              f'(guide: < 10 mm / 1 deg end-to-end, judged on the MEDIAN)')
+        out = a.out or os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    'calib', f'validate-{dt.date.today().isoformat()}.yaml')
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        with open(out, 'w') as f:
+            yaml.safe_dump(to_py(res), f, default_flow_style=False, sort_keys=False)
+        print(f'\nwrote {out}')
+        return 0 if res['pass'] else 1
 
     rclpy.init()
     n = Validate(a)
@@ -377,13 +490,24 @@ def main():
           f'{a.target_tag}; reproj <= {a.max_reproj} px, range {a.min_range}-{a.max_range} m.')
     print('Sweep the camera around the tags — many distances and SLANTED views. '
           'Ctrl-C when done.')
+    # Handle SIGINT with a FLAG, not an exception. tf2's spin_thread=True
+    # runs its own executor with a SIGINT guard condition, so Ctrl-C did not
+    # surface as KeyboardInterrupt here and the process died before the
+    # verdict ran, losing a whole captain sweep (2026-08-27). A flag makes
+    # shutdown ordinary control flow, and the verdict runs in `finally`
+    # regardless of how the loop ends.
+    stop = {'now': False}
+    signal.signal(signal.SIGINT, lambda *_: stop.update(now=True))
     t0 = time.time()
     try:
-        while rclpy.ok() and (a.seconds <= 0 or time.time() - t0 < a.seconds):
+        while (rclpy.ok() and not stop['now']
+               and (a.seconds <= 0 or time.time() - t0 < a.seconds)):
             rclpy.spin_once(n, timeout_sec=0.05)
-    except KeyboardInterrupt:
-        pass
+    except (KeyboardInterrupt, Exception) as e:              # noqa: BLE001
+        print(f'\nstopping early: {type(e).__name__}: {e}')
     print('\n')
+    n.raw.close()
+    print(f'raw observations -> {a.raw}')
     res, lines = n.verdict()
     print('\n'.join(lines))
     print(f'\nVERDICT: {"ACCEPT" if res["pass"] else "DIAGNOSE"}  '
@@ -397,11 +521,14 @@ def main():
                                 f'validate-{dt.date.today().isoformat()}.yaml')
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, 'w') as f:
-        yaml.safe_dump(res, f, default_flow_style=False, sort_keys=False)
+        yaml.safe_dump(to_py(res), f, default_flow_style=False, sort_keys=False)
     print(f'\nwrote {out}')
-    n.destroy_node()
-    rclpy.shutdown()
-    return 0 if res['pass'] else 1
+    sys.stdout.flush()
+    # os._exit, deliberately: tf2's spin_thread executor is not a daemon and
+    # its __del__ raises InvalidHandle during interpreter shutdown, so a
+    # normal return can hang the CLI after the results are already safely
+    # on disk (observed 2026-08-27).
+    os._exit(0 if res['pass'] else 1)
 
 
 if __name__ == '__main__':
