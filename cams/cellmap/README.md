@@ -22,12 +22,13 @@ and are recorded in `cellmap-report.html` as they happen.
 | File | Runs where | Does |
 |---|---|---|
 | `handeye_calibrate.py` | host | AX = XB eye-in-hand calibration from AprilTag 0 + TF; gated sampling, 5 solvers, residuals, `calib/tool0_to_camera_<date>.yaml` |
-| `../approach/wrist_rig.launch.py` | host, domain 0 | the wrist camera; `calib:=auto` publishes the calibrated `tool0 → camera_link` (default), `calib:=guess` the old mount guess |
-| `tools/make_tags.py` → `tags/` | host | print-exact AprilTag 36h11 sheets (120 mm, corner labels A-D, 100 mm ruler) |
+| `../approach/wrist_rig.launch.py` | host, domain 0 | the wrist camera; `calib:=auto` publishes the calibrated `tool0 → camera_link` (default), `calib:=guess` the old mount guess; `camera_params:=../cellmap/d435i_wrist_serial.yaml` pins the D435i by serial |
+| `tools/make_tags.py` → `tags/` | host | print-exact AprilTag 36h11 sheets (120 mm, corner labels A-D, 100 mm ruler), drawn as **vector** cells and self-verified by re-rendering the finished PDF and re-detecting it |
 | `tools/tag_corners.py` | host | arm-measured pose of tag 1 (TCP touches corners A, B, C; dwell-detected from TF or `--pendant` readings) |
 | `tools/tag_validate.py` | host | second-landmark check: tag 1 seen through the calibrated chain vs its arm-measured pose |
 | `run_scan.sh` → `scan.launch.py` | Isaac container `ur10-cellmap-scan`, domain 0 | robot segmenter + nvblox fed by the wrist rig's topics; refuses to run without a calibration file |
 | `nvblox_cell.yaml` | container | nvblox deltas vs NVIDIA's manipulator config (2 cm, `base_link`, workspace box, no decay) |
+| `d435i_wrist_serial.yaml` | host | quoted params file that pins `serial_no` to the wrist D435i (the trap below) |
 | `scan_session.sh` | host | sweep recipe → Enter → `save_map` + `.ply` |
 | `tools/map_ctl.py` | container | `save` / `load` / `ply` / `esdf` (column probes, per-sphere clearances) |
 | `run_rviz.sh` → `cellmap.rviz` | container on the workstation display | RViz **with the nvblox plugin** (host RViz cannot decode `nvblox_msgs/Mesh`) |
@@ -220,6 +221,37 @@ Acceptance: a cardboard box scanned on the straight line between two poses →
 the plan routes around it (arm-sweep clearance ≥ 0 via `--recheck
 --check-box`); box removed + re-scan → the plan straightens. Execution stays
 captain-confirmed (approach demo rules, ≤ 0.05 scaling).
+
+## Traps hit
+
+- **A print-ready PDF that renders as stripes** (2026-08-27, cost the captain
+  a print run). `tools/make_tags.py` drew the tag with
+  `ax.imshow(marker, cmap='gray')`; matplotlib 3.6.3's PDF backend encoded
+  that two-valued array as a 1-bit `/Indexed /DeviceRGB` image with
+  `/Predictor 10` and packed the rows wrong. Poppler *and* ghostscript render
+  diagonal black/white stripes and `detectMarkers` finds nothing at any
+  scale — while the **PNG written from the same figure was perfect**, so
+  every thumbnail and preview looked fine. Fix: draw the 8x8 cells as vector
+  `Rectangle` patches (no image codec path at all, and resolution-independent),
+  and *verify the artefact you actually ship* — `make_tags.py` now renders its
+  own PDF with `pdftoppm`, re-detects the id and measures the black square
+  (120.01 mm) before it prints "wrote". Regression-checked: the gate fails on
+  the old PDF and passes on the new one. This is the task's own thesis applied
+  to its tooling — a failure that is invisible until it is physical is exactly
+  what the map is meant to eliminate.
+- **`serial_no` cannot be pinned through a launch argument** (see
+  `../README.md`): launch_ros re-serialises the parameter dict through YAML
+  without quoting and rcl types `018322070619` as a double. A params *file* is
+  passed straight to `--params-file` untouched, so
+  `d435i_wrist_serial.yaml` + `wrist_rig.launch.py camera_params:=...` pins the
+  wrist D435i. Needed since 2026-08-27, when a second RealSense (D415) was
+  connected and began enumerating *first*.
+- **The colour stream can stall on its own while depth stays healthy**
+  (2026-08-26 19:24 → 2026-08-27 14:47). Nothing logged an error; the
+  calibration tool simply sat at `0/18 samples, no tag in view` for 19 h.
+  Restarting `wrist_rig.launch.py` fixed it with no USB power-cycle. Check
+  `ros2 topic hz /camera/rgb` **and** the image stamp age, not just that the
+  camera node is running.
 
 ## Known limitations (v1)
 
