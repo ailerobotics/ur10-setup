@@ -273,6 +273,25 @@ systemd-run --user --unit=ur10-cumotion -p Restart=on-failure -p RestartSec=15 ~
 - Never needed for the tray rig or the approach demo: both are unchanged and
   do not read the map.
 
+### Resuming after a part-finished session (as of 2026-08-27)
+
+Hand-eye calibration is **done and validated**:
+`cams/cellmap/calib/tool0_to_camera_2026-08-27.yaml`, published automatically by
+`wrist_rig.launch.py` (`calib:=auto`). It does not need repeating unless the
+camera is unstrapped or the arm re-calibrated. To pick up at the scan:
+
+```bash
+# 1. robot back on the wire (see §1-§4), then freedrive on
+# 2. camera rig, with the D435i pinned by serial (a second RealSense is connected)
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 ROS_DOMAIN_ID=0 ros2 launch cams/approach/wrist_rig.launch.py \
+    camera_params:=cams/cellmap/d435i_wrist_serial.yaml
+#    confirm: "[wrist_rig] tool0->camera_link from CALIBRATION ..."  (or tf2_echo tool0 camera_link)
+# 3. straight to the scan
+cams/cellmap/run_scan.sh
+DISPLAY=:0 XAUTHORITY=$(ls -t /tmp/xauth_* | head -1) cams/cellmap/run_rviz.sh
+cams/cellmap/scan_session.sh cell-$(date +%F)
+```
+
 ### Re-scan (captain, ~15 min incl. calibration check)
 
 ```bash

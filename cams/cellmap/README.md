@@ -11,11 +11,13 @@ the arm, no SLAM (FK is sub-mm and drift-free; the only error left is the
 mount transform, so calibration becomes step 1). This README is the "why"
 and the procedure; recurring commands are in `RUNBOOK.md` §10.
 
-Status 2026-08-26: pipeline built, **bench-rehearsed end to end on synthetic
-depth** (`bench/`, no arm motion) and wired live to the wrist camera
-(segmenter + nvblox integrating through the mount guess); the hand-eye
-calibration, validation, scan and box test are the captain's physical steps
-and are recorded in `cellmap-report.html` as they happen.
+Status 2026-08-27: **hand-eye calibration DONE and independently validated**
+(below); the calibrated transform is what `wrist_rig.launch.py` publishes.
+The mapping stack (segmenter + nvblox) is verified launchable and was left
+running. **Still pending, next session: the scan sweep (step 3), the map
+save, and the box-avoidance test (step 4).** Pipeline was bench-rehearsed end
+to end on synthetic depth first (`bench/`, no arm motion). Results are
+recorded in `cellmap-report.html` as they happen.
 
 ## Pieces
 
@@ -156,6 +158,86 @@ planning 0.1–0.13 s, ESDF zero-crossing at the table surface within a voxel,
 and — live, through the guess TF — segmenter output at 18 Hz and 105 k
 observed voxels from the parked wrist view.
 
+## Calibration result (2026-08-27)
+
+18 poses, freedriven by the captain, tag 0 at 0.36-0.76 m. Solved with
+`handeye_calibrate.py`; plot `calib/tool0_to_camera_2026-08-27.png`.
+
+```
+tool0 -> camera_link   xyz [0.0517, -0.0101, 0.0579] m
+                       rpy [-134.95, -89.13, -44.48] deg
+```
+
+| solver | tool0 -> optical xyz (mm) | tag spread rms | tag rot rms |
+|---|---|---|---|
+| **park** (chosen) | 52.0, -25.1, 57.9 | **3.04 mm** | **1.60 deg** |
+| horaud | 52.0, -25.2, 57.9 | 3.01 mm | 1.60 deg |
+| tsai | 51.9, -25.4, 58.1 | 3.05 mm | 1.60 deg |
+| daniilidis | 51.9, -25.3, 54.9 | 3.40 mm | 1.60 deg |
+| andreff | 50.9, -23.4, 92.3 | 9.10 mm | 1.60 deg |
+
+Park/horaud/tsai agree within **0.4 mm**; daniilidis is 3 mm off in z;
+andreff (the linear method) is 34 mm out and is never chosen. The calibrated
+transform differs from the old mount guess by **44.7 mm / 28.0 deg** — a map
+built on the guess would have been wrong by far more than the 0.04 m
+collision buffer, which is why calibration was made the gate.
+
+**The translation target was met (3.0 mm rms < 5 mm); the rotation target was
+NOT (1.60 deg rms > 1 deg). No sample was dropped to fix that, and here is
+why.** The per-sample rotation residual is not a few outliers but a gradient
+that tracks viewing geometry: it correlates **-0.72** with the tag's viewing
+obliquity, and the error is ~3x *tilt* (mean 1.31 deg, about in-plane axes)
+versus *spin* (0.47 deg, about the tag normal). That is the signature of the
+planar-tag pose ambiguity — tilt is poorly constrained when you look straight
+at a flat tag — i.e. noise in the *tag pose measurement*, not error in X.
+Re-solving on subsets confirms it: dropping the worst samples barely moves
+the residual, and the subsets that *do* meet 1 deg only manage it by
+destroying pose diversity, which swings X itself by up to 44 mm:
+
+| subset | n | rot rms | shift in X | max rotation spread |
+|---|---|---|---|---|
+| all 18 | 18 | 1.60 deg | — | 177 deg |
+| drop 5 worst | 13 | 1.20 deg | 4.6 mm / 0.37 deg | 158 deg |
+| obliquity >= 10 deg | 8 | 0.93 deg | 12.6 mm / 0.86 deg | 64 deg |
+| obliquity >= 15 deg | 6 | 0.54 deg | **44.2 mm / 1.85 deg** | 64 deg |
+
+AX = XB is constrained by rotation *differences* between poses, so a subset
+that "passes" on 6 near-identical views is less trustworthy, not more.
+Evaluated against the *unchanged* full-set X, the samples whose tag pose is
+itself well conditioned (obliquity >= 15 deg) agree to **0.81 deg / 2.96 mm**
+— inside target. The residual metric conflates X error with tag-measurement
+noise, so it is an upper bound, not an estimate. The tie was broken by
+independent validation rather than by argument.
+
+### Validation — camera-only, and it PASSED
+
+The flange carries only the camera: no gripper, no pointer, and the pendant's
+active TCP measured **533 mm off the flange** (a leftover). So the
+corner-touch method in `tools/tag_corners.py` is unusable here — it would have
+recorded every corner half a metre out, and its own geometry checks would
+*not* have caught it if the wrist orientation stayed roughly constant.
+`validate_tag1.py` validates with the camera alone instead (799 views):
+
+| check | result | threshold |
+|---|---|---|
+| consistency, tag 1 (566 views) | pos med **3.8** / p95 6.3 / max 11.4 mm; normal med **0.59** / p95 2.13 deg | med < 10 mm / 1 deg |
+| consistency, tag 0 (233 views) | pos med **3.5** / p95 7.0 mm; normal med **0.55** deg | |
+| scale, tag0-tag1 centres | **620.1 mm** vs 622.0 mm tape -> **1.9 mm** | < 10 mm |
+| table plane | dz **0.7 mm**, normals differ **0.32 deg** | < 5 mm / 1 deg |
+| coverage | 0.30-0.71 m, obliquity 2-55 deg, **392 views beyond 30 deg** | must include slanted views |
+
+**Judge on the median, not the rms**: fast freedrive motion throws outliers up
+to ~6 cm (max tool speed 211 mm/s) that dominate an rms while saying nothing
+about the calibration. Coverage is checked as a histogram, not min/max — a
+small spread from near-identical views bounds nothing, and the tool warns
+when the sweep was too uniform.
+
+This settles the 1.60 deg question: **two coplanar tags agree to 0.32 deg and
+0.7 mm in z, and scale is right to 1.9 mm against a tape.** X is good; the
+solve's rotation residual was pessimistic. An independent overhead-only read
+(25 frames) gave 7 mm in z and 1.6 deg of tilt — worse, and consistently so,
+because overhead views sit exactly in the ill-conditioned regime.
+
 ## Procedure
 
 Safety: no commanded arm motion in steps 1–3 (freedrive only); e-stop in
@@ -164,6 +246,14 @@ freedrive kills the external-control program (RUNBOOK §4) — the rearm
 watchdog restores it, and `/joint_states` (RTDE telemetry) keeps flowing
 regardless (confirm on the first session: the calibration tool prints the
 tool0 pose live).
+
+### Resuming a part-finished session
+The calibration is a **one-off**: once `calib/tool0_to_camera_<date>.yaml`
+exists, steps 0–2 do not need repeating unless the camera is unstrapped or
+the arm re-calibrated. To resume at the scan: reconnect the robot
+(RUNBOOK §1–§4), turn freedrive back on, confirm the rig is publishing the
+calibrated transform (`[wrist_rig] tool0->camera_link from CALIBRATION` in
+its log, or `tf2_echo tool0 camera_link`), then go straight to step 3.
 
 ### 0. Tags on the table
 Print `tags/apriltag36h11-id0-120mm.pdf` and `id1` at **100 %** (the 100 mm
@@ -186,25 +276,42 @@ of each other and residual < 5 mm / 1° → good. Restart `wrist_rig.launch.py`
 (it now loads the yaml; check its `[wrist_rig] tool0->camera_link from
 CALIBRATION` line).
 
-### 2. Validation with tag 1
+### 2. Validation with tag 1 — camera only
 ```bash
-FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/tag_corners.py --tags 1 --tip tcp
-FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/tag_validate.py --tag cams/cellmap/anchor/tag1.yaml --seconds 60 --out cams/cellmap/calib/validate-$(date +%F).yaml
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/validate_tag1.py --expected-mm <tape>
 ```
-Corners: freedrive the tip to A, B, C of tag 1 (labels on the sheet), still
-~3 s each; the tool checks |AB| = |BC| = 120 ± 4 mm and ∠ABC = 90 ± 1°.
-Validation: move the arm around while the camera looks at tag 1; accept at
-median < 10 mm / 1°. A residual that grows with angle/range = rotation
-error; a constant offset = translation error → re-calibrate with more
-varied poses.
+Measure tag 0 centre → tag 1 centre with a tape (mm) and pass it as
+`--expected-mm`. Freedrive the camera around **both** tags: ~1 min each,
+0.35–0.75 m, deliberately **slanted** (20–45° off straight-on) as well as
+overhead, plus wrist rotation. Ctrl-C when done; the verdict prints and a
+yaml is written. Accept on the **median**: < 10 mm position spread and < 1°
+normal spread, scale within 10 mm, both tags within 5 mm in z and 1° in
+normal. A spread that grows with angle/range = rotation error; a constant
+offset between tags = translation/scale error.
+
+`tools/tag_corners.py` (TCP touches three corners) is the arm-measured
+alternative and is **not usable on this cell** — nothing is mounted on the
+flange but the camera, so there is no tip and the pendant TCP is meaningless.
+It is kept for a cell that does have a pointer.
+
+Every accepted view is streamed to `calib/validate-raw-<date>.jsonl`, so a
+sweep survives any crash and can be re-analysed offline with
+`--from-raw <file>` (optionally `--max-speed` to drop fast-motion views)
+without asking the captain for another one.
 
 ### 3. Scan and save
 ```bash
 cams/cellmap/run_scan.sh            # segmenter + nvblox, refuses without a calib yaml
-cams/cellmap/run_rviz.sh            # map growing on the display
+cams/cellmap/run_rviz.sh            # map growing on the display (needs DISPLAY/XAUTHORITY of the session)
 cams/cellmap/scan_session.sh cell-$(date +%F)
 ```
-Sweep recipe is printed by the session script. **What good looks like:** a
+Sweep recipe is printed by the session script. **Sweep the camera slowly**
+(~0.1–0.2 m/s) at 0.4–1.0 m standoff, and cover every surface **from at
+least two directions** — a surface seen once stays noisy. Order that works:
+the whole table top from three sides, then the reachable shelf faces from two
+heights each, then anything standing on table or floor within reach, then the
+reachable walls and fixtures low and high. Never point closer than ~0.2 m
+(below the D435i minimum range nothing is mapped at all). **What good looks like:** a
 surface that stays put while the arm moves; table at z ≈ 0 (`map_ctl.py esdf
 --probe x,y`), shelf front at y ≈ 1.5 (approach demo measured 1.516 at
 x ≈ 0), arm absent. **Smear** while moving = calibration or timestamp error;

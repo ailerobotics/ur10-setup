@@ -119,13 +119,14 @@
     "collision-free" plan in this cell is collision-free by ignorance. This page records how we
     gave the planner a real world: the wrist D435i, freedriven around the cell, fused by nvblox
     into a 2 cm ESDF directly in <code>base_link</code>, saved once and loaded by an opt-in
-    planner. Built 2026-08-26.
+    planner. Built 2026-08-26, calibrated and validated 2026-08-27.
   </div>
   <div class="cp-chips">
-    <span class="cp-chip ok">pipeline built &amp; bench-rehearsed end to end</span>
+    <span class="cp-chip ok">hand-eye calibration done &amp; independently validated</span>
+    <span class="cp-chip ok">scale right to 1.9 mm against a tape</span>
     <span class="cp-chip ok">box detour +3.5 cm vs Pilz −11 cm (synthetic)</span>
     <span class="cp-chip">design change: camera stays on the arm, no SLAM</span>
-    <span class="cp-chip warn">calibration + live scan: captain steps, in progress</span>
+    <span class="cp-chip warn">scan sweep + box test: next session</span>
   </div>
 </header>
 
@@ -324,43 +325,87 @@
 
 <h2><span class="cp-n">6</span>Live results — captain steps</h2>
 <p class="cp-lead">
-  Everything below needs the arm and the printed tags. The tooling is built and waiting; results
-  are filled in here as each step completes.
+  Everything below needs the arm and the printed tags. <b>Calibration and validation are done
+  and passed (2026-08-27).</b> The scan sweep and the box-avoidance test are the remaining
+  physical steps and are scheduled for the next session; the mapping stack is verified
+  launchable and was left running.
 </p>
 <div class="cp-grid2">
-  <div class="cp-panel cp-pending">
-    <div class="cp-alias">pending</div>
+  <div class="cp-panel cp-role">
+    <div class="cp-alias">done · 2026-08-27</div>
     <h3>Hand-eye calibration</h3>
     <table class="cp-kv">
-      <tr><td>Tool</td><td><code>handeye_calibrate.py --target 18</code>, running and waiting on tag 0</td></tr>
-      <tr><td>Solvers</td><td>Park / Daniilidis / Tsai / Horaud (Andreff reported, never chosen)</td></tr>
-      <tr><td>Accept</td><td>&lt; 5 mm / 1° residual, solvers agreeing within ~2 mm</td></tr>
-      <tr><td>Result</td><td><i>awaiting the captain's freedrive pose session</i></td></tr>
+      <tr><td>Result</td><td><code>tool0 → camera_link</code> xyz <b>[0.0517, −0.0101, 0.0579] m</b>, rpy [−134.95, −89.13, −44.48]°</td></tr>
+      <tr><td>Samples</td><td>18 freedriven poses, tag 0 at 0.36–0.76 m</td></tr>
+      <tr><td>Solver spread</td><td>park / horaud / tsai agree within <b>0.4 mm</b>; daniilidis 3 mm off in z; andreff 34 mm out (never chosen)</td></tr>
+      <tr><td>Residual</td><td>translation <b class="cp-good">3.0 mm rms</b> (target 5) · rotation <b class="cp-mid">1.60° rms</b> (target 1) — see below</td></tr>
+      <tr><td>vs old guess</td><td><b>44.7 mm / 28.0°</b> — a map on the guess would have been wrong by far more than the 4 cm buffer</td></tr>
     </table>
   </div>
-  <div class="cp-panel cp-pending">
-    <div class="cp-alias">pending</div>
-    <h3>Independent validation (tag 1)</h3>
+  <div class="cp-panel cp-role">
+    <div class="cp-alias">done · 2026-08-27 · PASSED</div>
+    <h3>Independent validation — camera only</h3>
     <table class="cp-kv">
-      <tr><td>Method</td><td>tag 1 seen through the calibrated chain vs its pose measured by touching three corners with the TCP</td></tr>
-      <tr><td>Accept</td><td>median &lt; 10 mm / 1°</td></tr>
-      <tr><td>Reads as</td><td>growing with angle/range → rotation error; constant offset → translation error</td></tr>
-      <tr><td>Result</td><td><i>awaiting calibration</i></td></tr>
+      <tr><td>Consistency</td><td>tag 1, 566 views: position <b class="cp-good">3.8 mm median</b> (p95 6.3), normal <b class="cp-good">0.59° median</b> (p95 2.13)</td></tr>
+      <tr><td>Scale</td><td>620.1 mm camera vs <b>622 mm tape</b> → <b class="cp-good">1.9 mm</b></td></tr>
+      <tr><td>Table plane</td><td>two coplanar tags: Δz <b class="cp-good">0.7 mm</b>, normals differ <b class="cp-good">0.32°</b></td></tr>
+      <tr><td>Coverage</td><td>0.30–0.71 m, obliquity 2–55°, <b>392 of 799 views beyond 30°</b></td></tr>
+      <tr><td>Verdict</td><td><b class="cp-good">ACCEPT</b> against &lt; 10 mm / 1°</td></tr>
     </table>
   </div>
 </div>
+<figure class="cp-panel" style="margin-top:14px">
+  <img src="calib/tool0_to_camera_2026-08-27.png" alt="Three-panel calibration plot: per-sample tag position deviation, per-sample rotation deviation, and rms residual per solver">
+  <figcaption><b>Per-sample residuals and solver agreement.</b> Left: position deviation
+  through X, every sample inside the 5 mm target. Middle: rotation deviation — note this is
+  not a few outliers but a <em>gradient</em>, samples 11–14 worst. Right: park, daniilidis,
+  tsai and horaud land on the same answer; andreff (linear) is the outlier at 9 mm.</figcaption>
+</figure>
+
+<div class="cp-panel" style="margin-top:14px; border-top:4px solid var(--accent)">
+  <h3>Why the rotation target was missed — and why no sample was dropped to fix it</h3>
+  <p style="margin:8px 0 0; color:var(--ink-2)">
+    The obvious move was to delete the 2–3 worst samples and re-solve into a pass. That would
+    have been fabrication, and the data says so. The per-sample rotation residual correlates
+    <b>−0.72</b> with the tag's viewing obliquity, and the error is ~3× <em>tilt</em>
+    (1.31° mean, about in-plane axes) versus <em>spin</em> (0.47°, about the tag normal) —
+    the signature of the planar-tag pose ambiguity. It is noise in the tag pose
+    <em>measurement</em>, not error in X.
+  </p>
+  <div class="cp-tablewrap" style="margin-top:12px">
+  <table class="cp-score">
+    <tr><th>subset</th><th>n</th><th>rotation rms</th><th>shift in X</th><th>max rotation spread</th></tr>
+    <tr><td>all 18 (kept)</td><td>18</td><td>1.60°</td><td>—</td><td>177°</td></tr>
+    <tr><td>drop 5 worst</td><td>13</td><td>1.20°</td><td>4.6 mm / 0.37°</td><td>158°</td></tr>
+    <tr><td>obliquity ≥ 10°</td><td>8</td><td>0.93°</td><td>12.6 mm / 0.86°</td><td>64°</td></tr>
+    <tr><td>obliquity ≥ 15°</td><td>6</td><td class="cp-good">0.54°</td><td class="cp-bad">44.2 mm / 1.85°</td><td class="cp-bad">64°</td></tr>
+  </table>
+  </div>
+  <p style="margin:12px 0 0; color:var(--ink-2)">
+    No subset both meets 1° and leaves X stable. AX = XB is constrained by rotation
+    <em>differences</em> between poses, so the subset that "passes" does it by collapsing
+    diversity from 177° to 64° — and X itself then swings 44 mm, worse than the error being
+    chased. Against the <em>unchanged</em> full-set X, the well-conditioned samples
+    (obliquity ≥ 15°) already agree to <b>0.81° / 2.96 mm</b>. The tie was broken by
+    independent measurement, not argument: two coplanar tags agreeing to 0.32° and 0.7 mm,
+    and scale correct to 1.9 mm against a tape. An overhead-only cross-check (25 frames) read
+    7 mm and 1.6° — worse, and consistently so, because overhead views sit precisely in the
+    ill-conditioned regime.
+  </p>
+</div>
 <div class="cp-grid2" style="margin-top:14px">
   <div class="cp-panel cp-pending">
-    <div class="cp-alias">pending</div>
+    <div class="cp-alias">next session</div>
     <h3>Scan and save</h3>
     <table class="cp-kv">
       <tr><td>Checks</td><td>surfaces stay put while the arm moves (smear = calibration or timestamp error); table z ≈ 0; shelf front y ≈ 1.5 (approach demo measured 1.516 at x ≈ 0); arm absent</td></tr>
       <tr><td>Record</td><td>sweep duration, <code>.nvblx</code> size, observed voxel count</td></tr>
-      <tr><td>Result</td><td><i>awaiting calibration</i></td></tr>
+      <tr><td>Stack</td><td>verified launchable 2026-08-27: segmenter masking at 18.9 Hz with the correct colour intrinsics, nvblox integrating in <code>base_link</code>, <code>save_map</code> round-trip OK, and the ESDF zero-crossing at tag 1 within one voxel of the independently measured tag plane</td></tr>
+      <tr><td>Result</td><td><i>sweep scheduled for the next session</i></td></tr>
     </table>
   </div>
   <div class="cp-panel cp-pending">
-    <div class="cp-alias">pending</div>
+    <div class="cp-alias">next session</div>
     <h3>Box-avoidance acceptance test</h3>
     <table class="cp-kv">
       <tr><td>Test</td><td>cardboard box on the straight line between two known poses, scanned → plan must route around it; box removed and re-scanned → plan straightens</td></tr>
@@ -422,7 +467,7 @@
 </p>
 
 <div class="cp-foot">
-  UR10 cell · cell map v1 · 2026-08-26 · sources: <code>cams/cellmap/README.md</code> (design and
+  UR10 cell · cell map v1 · calibration and validation 2026-08-27 · sources: <code>cams/cellmap/README.md</code> (design and
   procedure), <code>RUNBOOK.md</code> §10 (recurring commands), <code>cams/cellmap/bench/</code>
   (rehearsal figures). Phase 2 — live map refresh from the wrist camera during normal operation —
   is out of scope for v1.
