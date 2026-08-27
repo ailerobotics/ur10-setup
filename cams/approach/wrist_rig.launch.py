@@ -136,13 +136,22 @@ def _setup(context, *args, **kwargs):
         params['unite_imu_method'] = 2   # linear_interpolation -> one Imu msg
                                          # with both accel + gyro on /camera/imu
 
+    # camera_params: OPT-IN path to a hand-written params YAML, used to pin
+    # serial_no (see cams/cellmap/d435i_wrist_serial.yaml for why a file and
+    # not a launch arg). Default '' = unchanged first-device behaviour, so the
+    # approach demo keeps working exactly as before.
+    cam_params = LaunchConfiguration('camera_params').perform(context).strip()
+    param_list = ([cam_params] if cam_params else []) + [params]
+    if cam_params:
+        print(f'[wrist_rig] extra camera params file: {cam_params}')
+
     camera = Node(
         package='realsense2_camera',
         executable='realsense2_camera_node',
         name='camera',
         namespace='camera',
         output='screen',
-        parameters=[params],
+        parameters=param_list,
         remappings=[
             ('/camera/camera/color/image_raw', '/camera/rgb'),
             ('/camera/camera/aligned_depth_to_color/image_raw',
@@ -187,8 +196,10 @@ def _setup(context, *args, **kwargs):
                LaunchConfiguration('cam_pos').perform(context).split(',')]
         aim = [float(v) for v in
                LaunchConfiguration('cam_aim').perform(context).split(',')]
-        import importlib.util
-        import pathlib
+        import importlib.util   # NB: do NOT re-import pathlib here — a
+                                # function-local import would shadow the
+                                # module-level one for the WHOLE function and
+                                # break the calib lookup above (UnboundLocalError)
         spec = importlib.util.spec_from_file_location(
             'table_rig', pathlib.Path(__file__).resolve().parent.parent
             / 'rig.launch.py')
@@ -228,6 +239,13 @@ def generate_launch_description():
                               description='auto = newest cams/cellmap/calib/'
                                           'tool0_to_camera_*.yaml; guess = the mount '
                                           'guess above; or a yaml path.'),
+        DeclareLaunchArgument('camera_params', default_value='',
+                              description='Path to an extra realsense2_camera '
+                                          'params YAML, e.g. cams/cellmap/'
+                                          'd435i_wrist_serial.yaml to pin the '
+                                          'wrist D435i by serial when a second '
+                                          'RealSense is connected. Empty '
+                                          '(default) = first device, unchanged.'),
         DeclareLaunchArgument('lookat_tf', default_value='false',
                               description='Publish the table-rig world->PerceptionCamera '
                                           'look-at TF. MUST stay false in eye-in-hand '

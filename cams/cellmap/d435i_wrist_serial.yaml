@@ -1,0 +1,17 @@
+# Pins the realsense2_camera node to the WRIST D435i by serial.
+#
+# Why a hand-written file and not a launch argument: `serial_no` degrades to a
+# double through every launch-argument path (cams/README.md "Traps hit",
+# 2026-08-17) — launch_ros re-serialises the parameter dict through YAML
+# without quoting, rcl types `018322070619` as a number, and the node refuses
+# it. ParameterValue(value_type=str) does not survive the round-trip either.
+# A params FILE is passed straight through to --params-file with no
+# re-serialisation, so the quotes below survive.
+#
+# Why it is needed at all: a second RealSense (D415, serial 024122061936) was
+# plugged into this workstation on 2026-08-27 and enumerates FIRST, so the
+# "first device" default can open the wrong camera. Node name `camera`,
+# namespace `/camera` -> fully-qualified `/camera/camera`.
+/camera/camera:
+  ros__parameters:
+    serial_no: "018322070619"
