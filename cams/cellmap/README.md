@@ -1,0 +1,385 @@
+# cams/cellmap — 3-D obstacle map of the cell from the wrist camera, for cuMotion (v1)
+
+The D435i stays strapped to the tool flange. The captain freedrives the arm
+so the camera sweeps the cell; the camera pose is pure kinematics
+(`base_link → tool0` from `/joint_states` plus a **hand-eye-calibrated**
+`tool0 → camera_link`), nvblox fuses the depth into a 2 cm ESDF directly in
+`base_link`, the map is saved once, and every later session cuMotion plans
+against it. Design history: firstmate's `cell-map-slam.html` (handheld +
+cuVSLAM, 2026-08-26 rev 2) → captain decision the same day: camera stays on
+the arm, no SLAM (FK is sub-mm and drift-free; the only error left is the
+mount transform, so calibration becomes step 1). This README is the "why"
+and the procedure; recurring commands are in `RUNBOOK.md` §10.
+
+Status 2026-08-27: **hand-eye calibration DONE and independently validated**
+(below); the calibrated transform is what `wrist_rig.launch.py` publishes.
+The mapping stack (segmenter + nvblox) is verified launchable and was left
+running. **Still pending, next session: the scan sweep (step 3), the map
+save, and the box-avoidance test (step 4).** Pipeline was bench-rehearsed end
+to end on synthetic depth first (`bench/`, no arm motion). Results are
+recorded in `cellmap-report.html` as they happen.
+
+## Pieces
+
+| File | Runs where | Does |
+|---|---|---|
+| `handeye_calibrate.py` | host | AX = XB eye-in-hand calibration from AprilTag 0 + TF; gated sampling, 5 solvers, residuals, `calib/tool0_to_camera_<date>.yaml` |
+| `../approach/wrist_rig.launch.py` | host, domain 0 | the wrist camera; `calib:=auto` publishes the calibrated `tool0 → camera_link` (default), `calib:=guess` the old mount guess; `camera_params:=../cellmap/d435i_wrist_serial.yaml` pins the D435i by serial |
+| `tools/make_tags.py` → `tags/` | host | print-exact AprilTag 36h11 sheets (120 mm, corner labels A-D, 100 mm ruler), drawn as **vector** cells and self-verified by re-rendering the finished PDF and re-detecting it |
+| `tools/tag_corners.py` | host | arm-measured pose of tag 1 (TCP touches corners A, B, C; dwell-detected from TF or `--pendant` readings) |
+| `tools/tag_validate.py` | host | second-landmark check: tag 1 seen through the calibrated chain vs its arm-measured pose |
+| `run_scan.sh` → `scan.launch.py` | Isaac container `ur10-cellmap-scan`, domain 0 | robot segmenter + nvblox fed by the wrist rig's topics; refuses to run without a calibration file |
+| `nvblox_cell.yaml` | container | nvblox deltas vs NVIDIA's manipulator config (2 cm, `base_link`, workspace box, no decay) |
+| `d435i_wrist_serial.yaml` | host | quoted params file that pins `serial_no` to the wrist D435i (the trap below) |
+| `scan_session.sh` | host | sweep recipe → Enter → `save_map` + `.ply` |
+| `tools/map_ctl.py` | container | `save` / `load` / `ply` / `esdf` (column probes, per-sphere clearances) |
+| `run_rviz.sh` → `cellmap.rviz` | container on the workstation display | RViz **with the nvblox plugin** (host RViz cannot decode `nvblox_msgs/Mesh`) |
+| `tools/render_map.py` | host | headless top/side renders of a saved `.ply` with tool paths and boxes (report figures without a display) |
+| `planner.launch.py` | container `ur10-cumotion` | nvblox (serves the saved map, no camera) → `load_map` → cuMotion `read_esdf_world:=true` |
+| `../../cumotion/start_cumotion_map.sh` | host | opt-in sibling of `start_cumotion.sh`; newest `cell-*.nvblx` |
+| `../../cumotion/ur10_map.xrdf` | container | world buffers 0.04 m on forearm/wrists/tool, 0.02 on shoulder/upper arm (why: below) |
+| `tools/plan_test.py` | host | plan-only legs (joint or **pose** goal, `--start-from` chaining), FK tool path, arm-sweep clearance vs a box, plots |
+| `tools/fake_depth.py` | host | synthetic depth camera + TF for the bench rehearsal |
+
+## Frame chain
+
+```
+world → base_link → tool0 → camera_link → camera_color_optical_frame
+        (robot, /joint_states)  ↑ calib/tool0_to_camera_<date>.yaml   (RealSense static TF)
+```
+
+* No `map`/`odom` frames, no registration: the depth is integrated in
+  `base_link` at the image stamp through TF. The image stamps run ~160 ms
+  behind wall clock (measured); TF keeps 10 s, so lookups at the stamp are
+  exact — as long as the arm is *moving slowly*: any timestamp error shows
+  up as smear proportional to joint speed (see "what good looks like").
+* The calibration is solved for `tool0 → camera_color_optical_frame` (what
+  the tag is seen in) and converted to `tool0 → camera_link` through the
+  driver's own static `camera_link → optical` (0, 0.015, 0) so the
+  RealSense's internal tree keeps working; `wrist_rig.launch.py` publishes it.
+* The pendant's TCP readout is in UR's `base` frame, which ur_description
+  rotates **180° about Z** relative to `base_link` (verified live:
+  `tf2_echo base_link base` = yaw 180°), and this robot's active TCP is
+  ~0.5 m off the flange. `tag_corners.py` therefore reads TF; `--pendant`
+  converts pendant readings through the same live TF.
+
+## Design decisions (dated 2026-08-26 unless noted)
+
+**Hand-eye calibration is the gate, not an option.** The mount transform in
+`wrist_rig.launch.py` is a documented guess (±5 cm translation, 4.2°
+gravity-fit residual): 4° at 1 m is 7 cm of map error, more than the
+planner's 4 cm buffer, so a map on the guess is *worse* than no map (it
+would clear paths that hit real shelves). `run_scan.sh` refuses to start
+without a `calib/tool0_to_camera_*.yaml` (override `nocalib` for wiring
+tests only). Target < 5 mm / 1°; validation with a second, independently
+measured tag < 10 mm / 1°.
+
+**Why the calibration tool is picky.** Samples are taken only when the arm
+is still (joint velocities < 0.01 rad/s for 1 s, gyro < 0.03 rad/s) because
+the colour sensor is rolling-shutter and the TF is looked up at "now";
+the tag must be 0.3–0.8 m away and fully inside the frame with a 40 px
+margin (corner refinement degrades at the border); mean reprojection error
+< 1 px; the tag pose must be stable over 10 frames (< 2 mm); and each pose
+must differ from the last by > 8° or > 4 cm, because AX = XB is only
+constrained by *rotation differences* between poses — twenty near-identical
+poses give a confident-looking but wrong answer. Five solvers are run and
+their agreement is reported; the residual that matters is the spread of the
+tag's base_link pose across samples when each is mapped through X (that is
+literally what the map will feel). Synthetic check: Park/Daniilidis/Tsai/
+Horaud recover a known X to 1.3 mm / 0.1° with 1 mm / 0.2° tag noise;
+Andreff is the outlier (linear method) and is never chosen.
+
+**2 cm voxels, `base_link`, bounding box = reach + 0.5 m, y to +2.4.** 1 cm
+(NVIDIA's manipulator default) is ~8× the memory for a map whose error is
+itself ~1–2 cm; the box (`nvblox_cell.yaml`) is the UR10 envelope plus
+margin, extended to y 2.4 so the gondola front is mapped even where the arm
+cannot reach it — a plan may still sweep the wrist toward it. Decay and
+radius-clearing are OFF (the manipulator config expects a fixed camera and a
+moving scene; for a snapshot they would erase the far side while the arm
+sweeps elsewhere). Max integration range 3 m (D435i depth noise grows
+~quadratically). `projective_integrator_max_weight` 20 instead of 5: a
+snapshot wants noise averaging over many viewpoints, not reactivity.
+
+**Robot segmenter with a 0.10 m buffer.** The wrist camera sees the arm from
+very close where the XRDF spheres are a coarse model, and the strapped
+camera + cable are not in the model at all; without the mask the arm maps
+itself and every plan starts "in collision". The masked halo stays
+*unobserved*, which cuMotion treats as **free** (bench-verified: planning
+from the park pose succeeded on a map whose park region was never observed),
+so the halo costs nothing.
+
+**Unobserved = free** (bench finding; `map_ctl.py esdf` shows the −1000
+sentinel). Consequence: the map only protects against what the camera SAW.
+The sweep recipe covers everything the arm can reach; unscanned obstacles
+are invisible to the planner exactly as before the map. The ground plane and
+the approach demo's whitelist boxes stay on as independent guards.
+
+**Buffers: 0.04 m on forearm/wrist_1/2/3/tool0, 0.02 kept on
+shoulder/upper_arm.** The extra 2 cm absorbs the map error budget. It cannot
+be applied to the upper arm: its root sphere (r 0.09) sits 3.8 cm above the
+mounting plane — 1.8 cm clear of cuMotion's ground plane at 0.02, *inside*
+it at 0.04, and every start state then fails with
+`INVALID_INITIAL_CSPACE_POSITION` (bench). Those links never leave the base
+region anyway.
+
+**Load-then-plan, gated on the loader's exit code.** cuMotion with
+`read_esdf_world:=true` blocks forever if the ESDF service is absent
+(`start_cumotion.sh`'s warning), and an nvblox that is up but EMPTY makes
+`World update failed` on every request — a planner that looks alive and
+refuses everything. `planner.launch.py` starts cuMotion only after
+`map_ctl.py load` returns 0, else shuts down loudly. Same container name as
+the default planner (`ur10-cumotion`), so docker refuses to run both.
+
+**Pose goals for collision-aware IK.** With a map, a joint goal pre-solved by
+MoveIt's `/compute_ik` (empty scene) can be in collision for cuMotion —
+bench: the goal's forearm ran 1–9 cm into the box and trajopt failed with
+`UNKNOWN_STATUS`. A tool0 *pose* goal lets cuMotion pick the configuration
+against its own world (`plan_test.py --pose-goal`; `--start-from <label>`
+starts a leg from a configuration cuMotion itself found valid). The approach
+demo's 170° rewind guard is re-applied to every returned trajectory.
+
+## Bench rehearsal (2026-08-26, synthetic depth, arm never moved)
+
+`tools/fake_depth.py` rendered a table plane, a shelf slab at y 1.4 and a
+20 cm cube at the midpoint of park → (0.60, 0.70, 0.75), publishing the
+camera TF directly; the real nvblox/cuMotion stack did the rest.
+
+| plan | planner | tool path | max dev. from line | arm vs box (spheres + buffer) |
+|---|---|---|---|---|
+| `sim5-box-cumotion` | cuMotion + map, pose goal | 1.13 m (1.40×) | 34 cm | **clear, +3.5 cm** |
+| `sim5-box-pilz` | Pilz PTP (no map) | 0.93 m (1.14×) | 19 cm | **through, −11 cm** |
+| `sim6-nobox-cumotion` | cuMotion + map, box removed & re-scanned | 0.95 m (1.18×) | 22 cm | through the *former* box volume, −6.7 cm → detour gone |
+
+![bench plans](bench/sim-plans.png)
+
+Also verified: `save_map`/`load_map` round trip (19–33 MB per synthetic
+map), ESDF hand-off (`Initialized grid from nvblox: 193×217×121 @ 0.02 m`),
+planning 0.1–0.13 s, ESDF zero-crossing at the table surface within a voxel,
+and — live, through the guess TF — segmenter output at 18 Hz and 105 k
+observed voxels from the parked wrist view.
+
+## Calibration result (2026-08-27)
+
+18 poses, freedriven by the captain, tag 0 at 0.36-0.76 m. Solved with
+`handeye_calibrate.py`; plot `calib/tool0_to_camera_2026-08-27.png`.
+
+```
+tool0 -> camera_link   xyz [0.0517, -0.0101, 0.0579] m
+                       rpy [-134.95, -89.13, -44.48] deg
+```
+
+| solver | tool0 -> optical xyz (mm) | tag spread rms | tag rot rms |
+|---|---|---|---|
+| **park** (chosen) | 52.0, -25.1, 57.9 | **3.04 mm** | **1.60 deg** |
+| horaud | 52.0, -25.2, 57.9 | 3.01 mm | 1.60 deg |
+| tsai | 51.9, -25.4, 58.1 | 3.05 mm | 1.60 deg |
+| daniilidis | 51.9, -25.3, 54.9 | 3.40 mm | 1.60 deg |
+| andreff | 50.9, -23.4, 92.3 | 9.10 mm | 1.60 deg |
+
+Park/horaud/tsai agree within **0.4 mm**; daniilidis is 3 mm off in z;
+andreff (the linear method) is 34 mm out and is never chosen. The calibrated
+transform differs from the old mount guess by **44.7 mm / 28.0 deg** — a map
+built on the guess would have been wrong by far more than the 0.04 m
+collision buffer, which is why calibration was made the gate.
+
+**The translation target was met (3.0 mm rms < 5 mm); the rotation target was
+NOT (1.60 deg rms > 1 deg). No sample was dropped to fix that, and here is
+why.** The per-sample rotation residual is not a few outliers but a gradient
+that tracks viewing geometry: it correlates **-0.72** with the tag's viewing
+obliquity, and the error is ~3x *tilt* (mean 1.31 deg, about in-plane axes)
+versus *spin* (0.47 deg, about the tag normal). That is the signature of the
+planar-tag pose ambiguity — tilt is poorly constrained when you look straight
+at a flat tag — i.e. noise in the *tag pose measurement*, not error in X.
+Re-solving on subsets confirms it: dropping the worst samples barely moves
+the residual, and the subsets that *do* meet 1 deg only manage it by
+destroying pose diversity, which swings X itself by up to 44 mm:
+
+| subset | n | rot rms | shift in X | max rotation spread |
+|---|---|---|---|---|
+| all 18 | 18 | 1.60 deg | — | 177 deg |
+| drop 5 worst | 13 | 1.20 deg | 4.6 mm / 0.37 deg | 158 deg |
+| obliquity >= 10 deg | 8 | 0.93 deg | 12.6 mm / 0.86 deg | 64 deg |
+| obliquity >= 15 deg | 6 | 0.54 deg | **44.2 mm / 1.85 deg** | 64 deg |
+
+AX = XB is constrained by rotation *differences* between poses, so a subset
+that "passes" on 6 near-identical views is less trustworthy, not more.
+Evaluated against the *unchanged* full-set X, the samples whose tag pose is
+itself well conditioned (obliquity >= 15 deg) agree to **0.81 deg / 2.96 mm**
+— inside target. The residual metric conflates X error with tag-measurement
+noise, so it is an upper bound, not an estimate. The tie was broken by
+independent validation rather than by argument.
+
+### Validation — camera-only, and it PASSED
+
+The flange carries only the camera: no gripper, no pointer, and the pendant's
+active TCP measured **533 mm off the flange** (a leftover). So the
+corner-touch method in `tools/tag_corners.py` is unusable here — it would have
+recorded every corner half a metre out, and its own geometry checks would
+*not* have caught it if the wrist orientation stayed roughly constant.
+`validate_tag1.py` validates with the camera alone instead (799 views):
+
+| check | result | threshold |
+|---|---|---|
+| consistency, tag 1 (566 views) | pos med **3.8** / p95 6.3 / max 11.4 mm; normal med **0.59** / p95 2.13 deg | med < 10 mm / 1 deg |
+| consistency, tag 0 (233 views) | pos med **3.5** / p95 7.0 mm; normal med **0.55** deg | |
+| scale, tag0-tag1 centres | **620.1 mm** vs 622.0 mm tape -> **1.9 mm** | < 10 mm |
+| table plane | dz **0.7 mm**, normals differ **0.32 deg** | < 5 mm / 1 deg |
+| coverage | 0.30-0.71 m, obliquity 2-55 deg, **392 views beyond 30 deg** | must include slanted views |
+
+**Judge on the median, not the rms**: fast freedrive motion throws outliers up
+to ~6 cm (max tool speed 211 mm/s) that dominate an rms while saying nothing
+about the calibration. Coverage is checked as a histogram, not min/max — a
+small spread from near-identical views bounds nothing, and the tool warns
+when the sweep was too uniform.
+
+This settles the 1.60 deg question: **two coplanar tags agree to 0.32 deg and
+0.7 mm in z, and scale is right to 1.9 mm against a tape.** X is good; the
+solve's rotation residual was pessimistic. An independent overhead-only read
+(25 frames) gave 7 mm in z and 1.6 deg of tilt — worse, and consistently so,
+because overhead views sit exactly in the ill-conditioned regime.
+
+## Procedure
+
+Safety: no commanded arm motion in steps 1–3 (freedrive only); e-stop in
+reach whenever the arm is powered; one writer at a time (RUNBOOK §6b);
+freedrive kills the external-control program (RUNBOOK §4) — the rearm
+watchdog restores it, and `/joint_states` (RTDE telemetry) keeps flowing
+regardless (confirm on the first session: the calibration tool prints the
+tool0 pose live).
+
+### Resuming a part-finished session
+The calibration is a **one-off**: once `calib/tool0_to_camera_<date>.yaml`
+exists, steps 0–2 do not need repeating unless the camera is unstrapped or
+the arm re-calibrated. To resume at the scan: reconnect the robot
+(RUNBOOK §1–§4), turn freedrive back on, confirm the rig is publishing the
+calibrated transform (`[wrist_rig] tool0->camera_link from CALIBRATION` in
+its log, or `tf2_echo tool0 camera_link`), then go straight to step 3.
+
+### 0. Tags on the table
+Print `tags/apriltag36h11-id0-120mm.pdf` and `id1` at **100 %** (the 100 mm
+ruler must measure 100 mm), mount on rigid board. Tag 0 flat on the table
+inside reach where the wrist camera can see it from many angles (this is the
+calibration target); tag 1 ~0.5 m away, also flat, in reach (validation).
+Both stay put for the whole session. Keep `wrist_rig.launch.py` running.
+
+### 1. Hand-eye calibration
+```bash
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/handeye_calibrate.py --target 18
+```
+Pose recipe (freedrive, tag 0 always fully in view, 0.3–0.8 m): 5 poses
+from the left, 5 from the right, 5 from above, 3 close/low; between poses
+rotate the wrist ~30° about the optical axis and tilt 15–30°; hold still
+~2 s. The tool beeps and prints `sample N/18 ACCEPTED` or the reason it did
+not take one (moving, too far, tag at the border, same pose as before…).
+Read the final block: all four of Park/Daniilidis/Tsai/Horaud within ~2 mm
+of each other and residual < 5 mm / 1° → good. Restart `wrist_rig.launch.py`
+(it now loads the yaml; check its `[wrist_rig] tool0->camera_link from
+CALIBRATION` line).
+
+### 2. Validation with tag 1 — camera only
+```bash
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/validate_tag1.py --expected-mm <tape>
+```
+Measure tag 0 centre → tag 1 centre with a tape (mm) and pass it as
+`--expected-mm`. Freedrive the camera around **both** tags: ~1 min each,
+0.35–0.75 m, deliberately **slanted** (20–45° off straight-on) as well as
+overhead, plus wrist rotation. Ctrl-C when done; the verdict prints and a
+yaml is written. Accept on the **median**: < 10 mm position spread and < 1°
+normal spread, scale within 10 mm, both tags within 5 mm in z and 1° in
+normal. A spread that grows with angle/range = rotation error; a constant
+offset between tags = translation/scale error.
+
+`tools/tag_corners.py` (TCP touches three corners) is the arm-measured
+alternative and is **not usable on this cell** — nothing is mounted on the
+flange but the camera, so there is no tip and the pendant TCP is meaningless.
+It is kept for a cell that does have a pointer.
+
+Every accepted view is streamed to `calib/validate-raw-<date>.jsonl`, so a
+sweep survives any crash and can be re-analysed offline with
+`--from-raw <file>` (optionally `--max-speed` to drop fast-motion views)
+without asking the captain for another one.
+
+### 3. Scan and save
+```bash
+cams/cellmap/run_scan.sh            # segmenter + nvblox, refuses without a calib yaml
+cams/cellmap/run_rviz.sh            # map growing on the display (needs DISPLAY/XAUTHORITY of the session)
+cams/cellmap/scan_session.sh cell-$(date +%F)
+```
+Sweep recipe is printed by the session script. **Sweep the camera slowly**
+(~0.1–0.2 m/s) at 0.4–1.0 m standoff, and cover every surface **from at
+least two directions** — a surface seen once stays noisy. Order that works:
+the whole table top from three sides, then the reachable shelf faces from two
+heights each, then anything standing on table or floor within reach, then the
+reachable walls and fixtures low and high. Never point closer than ~0.2 m
+(below the D435i minimum range nothing is mapped at all). **What good looks like:** a
+surface that stays put while the arm moves; table at z ≈ 0 (`map_ctl.py esdf
+--probe x,y`), shelf front at y ≈ 1.5 (approach demo measured 1.516 at
+x ≈ 0), arm absent. **Smear** while moving = calibration or timestamp error;
+stop, do not save. Maps: `cumotion/maps/` if < 50 MB (committed), else
+`~/ur10/cumotion/maps/`.
+
+### 4. Plan with the map
+```bash
+systemctl --user stop ur10-cumotion; docker stop ur10-cumotion   # the unit stop alone can orphan the container
+cumotion/start_cumotion_map.sh                                   # newest cell-*.nvblx, voxels:=true
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py --label with-box --goal-pose X,Y,Z --pose-goal
+```
+Acceptance: a cardboard box scanned on the straight line between two poses →
+the plan routes around it (arm-sweep clearance ≥ 0 via `--recheck
+--check-box`); box removed + re-scan → the plan straightens. Execution stays
+captain-confirmed (approach demo rules, ≤ 0.05 scaling).
+
+## Traps hit
+
+- **A print-ready PDF that renders as stripes** (2026-08-27, cost the captain
+  a print run). `tools/make_tags.py` drew the tag with
+  `ax.imshow(marker, cmap='gray')`; matplotlib 3.6.3's PDF backend encoded
+  that two-valued array as a 1-bit `/Indexed /DeviceRGB` image with
+  `/Predictor 10` and packed the rows wrong. Poppler *and* ghostscript render
+  diagonal black/white stripes and `detectMarkers` finds nothing at any
+  scale — while the **PNG written from the same figure was perfect**, so
+  every thumbnail and preview looked fine. Fix: draw the 8x8 cells as vector
+  `Rectangle` patches (no image codec path at all, and resolution-independent),
+  and *verify the artefact you actually ship* — `make_tags.py` now renders its
+  own PDF with `pdftoppm`, re-detects the id and measures the black square
+  (120.01 mm) before it prints "wrote". Regression-checked: the gate fails on
+  the old PDF and passes on the new one. This is the task's own thesis applied
+  to its tooling — a failure that is invisible until it is physical is exactly
+  what the map is meant to eliminate.
+- **`serial_no` cannot be pinned through a launch argument** (see
+  `../README.md`): launch_ros re-serialises the parameter dict through YAML
+  without quoting and rcl types `018322070619` as a double. A params *file* is
+  passed straight to `--params-file` untouched, so
+  `d435i_wrist_serial.yaml` + `wrist_rig.launch.py camera_params:=...` pins the
+  wrist D435i. Needed since 2026-08-27, when a second RealSense (D415) was
+  connected and began enumerating *first*.
+- **The colour stream can stall on its own while depth stays healthy**
+  (2026-08-26 19:24 → 2026-08-27 14:47). Nothing logged an error; the
+  calibration tool simply sat at `0/18 samples, no tag in view` for 19 h.
+  Restarting `wrist_rig.launch.py` fixed it with no USB power-cycle. Check
+  `ros2 topic hz /camera/rgb` **and** the image stamp age, not just that the
+  camera node is running.
+
+## Known limitations (v1)
+
+- **Snapshot map.** Anything moved after the scan is invisible until
+  re-scanned; unobserved space is free. Re-scan after moving anything the
+  arm can reach; the whitelist boxes and ground plane stay on.
+- **Coverage = the wrist camera's view from the reach envelope**; walls
+  beyond reach are out of scope by design.
+- **Error budget** ≈ calibration residual + 2 cm voxels + D435i depth noise
+  (~1 % of range); the 0.04 buffer absorbs it, thin objects may not.
+  Min range ~17 cm: surfaces closer than that to the lens are not mapped.
+- **Camera body not in the arm's collision model yet** (spheres to add to
+  `ur10_map.xrdf` on `tool0` once the calibrated offset is known — next step).
+- **Version drift**: Isaac 4.x pins librealsense 2.56.3 / fw 5.16.0.1; this
+  box runs 2.58.1 / 5.12.8.200.
+- **Planner swap is manual**: default and map planners share the container
+  name; `systemctl --user stop ur10-cumotion` can leave the container running
+  (observed 2026-08-26) — `docker stop`.
+
+## Future work (out of scope for v1)
+
+Live refresh: keep nvblox integrating from the wrist camera during normal
+operation (same node, same cuMotion switch) so moved trays stop being
+invisible; a second fixed camera (the tray rig) for the table region.
