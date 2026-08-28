@@ -1,0 +1,44 @@
+# Reduced joint limits for the pneumatic-line wire strap (PROPOSED 2026-08-28).
+#
+# STATUS: **UNCONFIRMED — awaiting captain sign-off.** Nothing in this repo,
+# RUNBOOK.md, the URDF/XRDF or ~/ur10 documents a pneumatic-line or wire-strap
+# restriction; the stock UR10 limits are +-360 deg on pan/lift/wrists and
+# +-180 deg on the elbow, i.e. no restriction at all. These numbers are a
+# conservative proposal, not a measured constraint.
+#
+# METHOD, and why it is built this way: the neutral routing position of the
+# lines is unknown, so an absolute "safe cone" cannot be derived. What IS
+# known is that the lines are in an acceptable state RIGHT NOW — the captain
+# has been hand-guiding the arm through the whole scan without a complaint.
+# So each joint is limited to a WINDOW AROUND ITS CURRENT POSITION: a motion
+# that stays close to the present configuration cannot strain the lines much
+# more than they are already strained, whatever the neutral is.
+#
+# Windows are tightest on the joints that twist the bundle rather than swing
+# it: wrist_3 (flange rotation, twists the tool-end lines directly) and
+# shoulder_pan (winds the entire bundle at the base).
+#
+# CONSEQUENCE: these limits are tied to the reference pose below. If the arm
+# is re-parked in a materially different configuration before execution, they
+# MUST be regenerated (make_limited_urdf.py re-reads the live joint state).
+#
+# Applied by cumotion/make_limited_urdf.py -> ur10_pneumatic.urdf, which
+# cuMotion reads as its robot description, so the PLANNER cannot generate a
+# trajectory outside them. plan_test.py --joint-limits re-checks every
+# waypoint independently as a second guard.
+
+reference_pose_rad:        # live /joint_states, 2026-08-28, arm parked after the scan
+  shoulder_pan_joint:  -4.3067   # -246.8 deg
+  shoulder_lift_joint: -1.3336   #  -76.4 deg
+  elbow_joint:          1.5676   #  +89.8 deg
+  wrist_1_joint:        2.9386   # +168.4 deg
+  wrist_2_joint:        4.3670   # +250.2 deg
+  wrist_3_joint:       -1.5911   #  -91.2 deg
+
+window_deg:                # +- around the reference pose
+  shoulder_pan_joint:  30   # winds the whole bundle at the base
+  shoulder_lift_joint: 45   # swings, does not twist
+  elbow_joint:         45   # swings, does not twist
+  wrist_1_joint:       45
+  wrist_2_joint:       30
+  wrist_3_joint:       20   # twists the tool-end lines most -> tightest
