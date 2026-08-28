@@ -219,6 +219,23 @@ def main():
     print(f'EXECUTING {saved["label"]}: {len(got)} points, {dur:.1f} s at {SPEED} scaling')
     if not n.fjt.wait_for_server(timeout_sec=15.0):
         sys.exit('trajectory controller action unavailable')
+    # Start NOW. move_group returns the trajectory stamped with its own
+    # planning time; by the time it reaches the controller that stamp is in
+    # the past and the goal is rejected outright — which looks exactly like
+    # 'the arm will not move' with no other symptom. A zero stamp means
+    # 'begin immediately' (verified 2026-08-28: the hand-built trajectory in
+    # --exact mode had a zero stamp and was accepted; the planner's own was
+    # rejected).
+    # The controller REFUSES a trajectory whose last point is not exactly at
+    # rest: 'Velocity of last trajectory point of joint X is not zero'.
+    # cuMotion leaves ~4e-4 rad/s of residual terminal velocity, which is
+    # physically nothing but is a hard reject — and the only symptom is the
+    # arm not moving. Pin the final point to zero velocity/acceleration;
+    # the motion is meant to end stopped anyway.
+    traj.points[-1].velocities = [0.0] * len(traj.joint_names)
+    traj.points[-1].accelerations = [0.0] * len(traj.joint_names)
+    traj.header.stamp.sec = 0
+    traj.header.stamp.nanosec = 0
     g = FollowJointTrajectory.Goal()
     g.trajectory = traj
     fut = n.fjt.send_goal_async(g)
