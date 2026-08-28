@@ -71,7 +71,12 @@ class FK(Node):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--tag', required=True, help='x,y,z of the tag centre in base_link')
-    ap.add_argument('--standoff', type=float, default=0.25, help='m above the tag')
+    ap.add_argument('--standoff', type=float, default=0.25,
+                    help='m from the target along --dir')
+    ap.add_argument('--dir', default='0,0,1',
+                    help='unit direction from the target to the standoff point. '
+                         '0,0,1 = above it (a tag flat on the table); 0,-1,0 = in front '
+                         'of it toward the robot (a shelf face)')
     ap.add_argument('--limits', default=os.path.join(os.path.dirname(__file__),
                                                      '..', '..', '..', 'cumotion',
                                                      'pneumatic_limits.yaml'))
@@ -100,7 +105,9 @@ def main():
     tag = np.array([float(v) for v in a.tag.split(',')])
     if a.min_height is None:
         a.min_height = a.standoff
-    target = tag + np.array([0, 0, a.standoff])
+    dvec = np.array([float(v) for v in a.dir.split(',')], float)
+    dvec /= np.linalg.norm(dvec)
+    target = tag + dvec * a.standoff
 
     rclpy.init()
     n = FK()
@@ -126,8 +133,10 @@ def main():
             # is refused. Staying at or above the requested standoff height is
             # what "safe standoff" means; being a bit far is fine, being low
             # is not.
-            floor = tag[2] + a.min_height
-            pen = 0.0 if p[2] >= floor else 10.0 * (floor - p[2])
+            # Keep the link on the standoff SIDE of the target: never let the
+            # search creep past the surface it is approaching.
+            along = float((p - tag) @ dvec)
+            pen = 0.0 if along >= a.min_height else 10.0 * (a.min_height - along)
             out.append((d + 0.004 * ang + pen, d, ang))   # 1 cm ~ 2.5 deg of aim
         return out
 

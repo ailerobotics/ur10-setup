@@ -29,6 +29,7 @@ import numpy as np
 import rclpy
 import yaml
 from control_msgs.action import FollowJointTrajectory
+from geometry_msgs.msg import WrenchStamped
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from execute_plan import Exec, JOINTS, SPEED           # noqa: E402
@@ -36,6 +37,49 @@ from execute_plan import Exec, JOINTS, SPEED           # noqa: E402
 HOME = [-4.3076, -1.3337, 1.5676, 2.9386, 4.3670, -1.5911]
 TAG0 = [-2.2472, -1.1492, 1.8986, 3.5012, 4.6681, -1.6669]
 TAG1 = [-2.5620, -0.7045, 1.1731, 3.6891, 4.4676, -1.5466]
+
+
+class Force:
+    """Rolling baseline of the estimated external wrench, and the deviation
+    from it.
+
+    This robot is a CB3 (PolyScope 3.15.8) with NO wrist force/torque
+    sensor: the wrench is estimated from joint currents, carries a standing
+    bias of ~13.6 N that cannot be zeroed (zero_ftsensor is e-Series only,
+    it returns success=False here), and drifts with pose. So an ABSOLUTE
+    force threshold is useless. What is usable is the DEVIATION from a
+    short rolling baseline: a hand push shows up as a step against it,
+    while the slow pose-dependent drift is tracked out.
+
+    This is a ROS-side guard that trips well below the robot's own safety
+    Force limit — which on CB3 cannot be set lower than 100 N and is the
+    reason a light push does not stop the arm by itself.
+    """
+
+    def __init__(self, node, window=1.5):
+        self.buf = []
+        self.window = window
+        self.peak = 0.0
+        node.create_subscription(WrenchStamped,
+                                 '/force_torque_sensor_broadcaster/wrench',
+                                 self._cb, 20)
+
+    def _cb(self, m):
+        f = np.array([m.wrench.force.x, m.wrench.force.y, m.wrench.force.z])
+        self.buf.append((time.time(), f))
+        cut = time.time() - self.window
+        while len(self.buf) > 2 and self.buf[0][0] < cut:
+            self.buf.pop(0)
+
+    def deviation(self):
+        """N of force deviation from the rolling baseline."""
+        if len(self.buf) < 10:
+            return 0.0
+        base = np.mean([f for _, f in self.buf[:len(self.buf) // 2]], axis=0)
+        now = np.mean([f for _, f in self.buf[-3:]], axis=0)
+        d = float(np.linalg.norm(now - base))
+        self.peak = max(self.peak, d)
+        return d
 
 
 def dashboard_running(ip='192.168.0.1'):
@@ -49,7 +93,7 @@ def dashboard_running(ip='192.168.0.1'):
         return False
 
 
-def run_leg(n, name, goal, lo, hi, a):
+def run_leg(n, name, goal, lo, hi, a, force=None):
     """Plan fresh, gate, execute. Returns (ok, message)."""
     q0 = n.q()
     print(f'  [{name}] planning fresh from live state...', flush=True)
@@ -112,6 +156,12 @@ def run_leg(n, name, goal, lo, hi, a):
             gh.cancel_goal_async(); return False, 'STOP file seen — leg cancelled mid-motion'
         if el > dur + 20:
             gh.cancel_goal_async(); return False, 'overran its duration by 20 s'
+        if force is not None and a.max_force_n > 0 and el > a.grace:
+            fd = force.deviation()
+            if fd > a.max_force_n:
+                gh.cancel_goal_async()
+                return False, (f'external force deviation {fd:.1f} N exceeded '
+                               f'{a.max_force_n:.1f} N — contact detected, stopped')
         if len(n.js) >= 6 and el > a.grace:
             tq = min(max(el, times[0]), times[-1])
             exp = np.array([np.interp(tq, times, got[:, i]) for i in range(6)])
@@ -128,8 +178,11 @@ def run_leg(n, name, goal, lo, hi, a):
         return False, f'controller returned error_code {code}'
     if err > 1.0:
         return False, f'ended {err:.2f} deg from the goal'
+    fpk = f', peak force dev {force.peak:.1f} N' if force is not None else ''
+    if force is not None:
+        force.peak = 0.0
     return True, (f'ok, {dur:.1f} s, worst tracking {math.degrees(worst):.2f} deg, '
-                  f'final error {err:.2f} deg')
+                  f'final error {err:.2f} deg{fpk}')
 
 
 def main():
@@ -141,7 +194,28 @@ def main():
                     help='also cancel a leg mid-motion when the stop file appears')
     ap.add_argument('--time', type=float, default=25.0)
     ap.add_argument('--start-tol-rad', type=float, default=0.02)
-    ap.add_argument('--max-track-rad', type=float, default=0.15)
+    # THRESHOLDS MEASURED, not guessed (2026-08-28, full clean cycle at 5 %):
+    #   tracking error  0.32 - 2.9 deg     force deviation  27.8 - 151.8 N
+    # (clean peaks seen across runs: 1.31, 2.18, 2.27, 2.51, 2.9 deg)
+    # A hand push registered >= 8.6 deg of tracking error. So tracking error
+    # separates cleanly (1.31 vs 8.6) and force does not: on this CB3 the
+    # wrench is estimated from joint currents with no wrist sensor, and its
+    # normal-motion swing — measured up to 151.8 N with NOTHING touching the
+    # arm — buries any light push entirely. A 150 N threshold false-tripped a
+    # clean cycle. Any threshold high enough to be quiet is far less sensitive
+    # than the robot's own safety Force limit, so force is demoted to a gross
+    # -contact backstop at 300 N and the real ROS-side guard is tracking
+    # error. Sensitive contact detection on CB3 has to come from the pendant
+    # safety limits and a correct payload, not from this signal.
+    ap.add_argument('--max-track-rad', type=float, default=0.08,
+                    help='rad of tracking error that stops the arm (default 0.08 = 4.6 '
+                         'deg: 1.6x the measured clean maximum of 2.9 deg, about half '
+                         'the >=8.6 deg a hand push produces). 0.05 was tried and '
+                         'false-tripped a clean cycle.')
+    ap.add_argument('--max-force-n', type=float, default=300.0,
+                    help='N of force deviation from the rolling baseline — GROSS contact '
+                         'backstop only (clean motion already reaches 152 N on this CB3); '
+                         '0 disables it. See class Force.')
     ap.add_argument('--settle', type=float, default=1.0)
     ap.add_argument('--grace', type=float, default=1.0,
                     help='s at the start of a leg before tracking is judged (the '
@@ -162,6 +236,7 @@ def main():
     os.makedirs(os.path.dirname(a.stop_file), exist_ok=True)
 
     rclpy.init(); n = Exec()
+    force = Force(n)
     if not n.wait_state():
         sys.exit('no /joint_states — driver down?')
     if not n.fjt.wait_for_server(timeout_sec=15.0):
@@ -171,7 +246,7 @@ def main():
           f'fresh.\nstop with:  touch {a.stop_file}', flush=True)
 
     print('\n[return] moving to HOME before starting the loop', flush=True)
-    ok, msg = run_leg(n, 'return->home', HOME, lo, hi, a)
+    ok, msg = run_leg(n, 'return->home', HOME, lo, hi, a, force)
     print(f'  [return->home] {msg}', flush=True)
     if not ok:
         print('ABORTED before the loop started'); n.destroy_node(); rclpy.shutdown(); return 1
@@ -194,7 +269,7 @@ def main():
                 print(f'  STOP file seen — not starting {name}', flush=True)
                 cyc -= 1
                 break
-            ok, msg = run_leg(n, name, goal, lo, hi, a)
+            ok, msg = run_leg(n, name, goal, lo, hi, a, force)
             print(f'  [{name}] {msg}', flush=True)
             if not ok:
                 print(f'\nANOMALY on {name}: {msg}\nSTOPPING. Arm holds position.',
