@@ -137,6 +137,17 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
+      Name: LIVE AVOID (obstacle + status)
+      Namespaces: {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /cellmap/live_avoid
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
       Name: planned path (plan-only)
       Namespaces: {}
       Topic:
