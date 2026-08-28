@@ -72,86 +72,121 @@ def tf_to_T(t):
 
 
 class NearGuard:
-    """Near-field obstacle guard that is safe against the D435i BLIND ZONE.
+    """Near-field guard that compares the live depth against the STATIC BASE
+    MAP rendered from the camera's CURRENT pose.
 
-    MEASURED on this camera (2026-08-28, 1280x720 aligned depth): the closest
-    valid return is 240 mm; the 0.1st percentile is 243 mm; nothing valid
-    exists below that. So anything nearer than ~0.24 m simply VANISHES from
-    the depth image. The old path-point classifier called that UNOBSERVED,
-    and UNOBSERVED never blocked — meaning a hand that came close enough
-    would have gone INVISIBLE and the arm would have kept moving. That is the
-    hole this class closes.
+    Why not a rolling temporal background (the first attempt): this camera is
+    on the wrist and MOVES. A temporal background assumes a static viewpoint,
+    so ego-motion shifts the whole scene between frames and reads as "new
+    objects everywhere". Measured: 1445 px of novelty with the arm at rest,
+    but 4252-4949 px while simply driving between A and B — enough to trip
+    any threshold tight enough to be useful, and the arm stopped every few
+    seconds on the empty table. The block has to fire on what is NEW RELATIVE
+    TO THE KNOWN SCENE, not on the known scene arriving from a new angle.
 
-    Three rules, all on the RAW depth with arm pixels excluded via the
-    segmenter's mask (so the arm never triggers on itself):
+    So the expectation comes from the saved map: its points are transformed
+    into the current optical frame each cycle and z-buffered into a coarse
+    grid, giving "how far away the world should be down this cell". Then
 
-    1. STOP EARLY. Something NEW and nearer than --stop-range (default
-       0.45 m, i.e. ~0.21 m above the measured 0.24 m floor) stops the arm
-       while it is still comfortably inside the reliable sensing band. New
-       means "closer than the rolling background by --novelty", which is what
-       keeps the table — always ~0.34 m away and perfectly static — from
-       triggering.
-    2. DROPOUT IS AN OBSTACLE. Pixels that HAD valid near depth and now read
-       invalid are treated as a possible object that has entered the blind
-       zone, and stop the arm. Never the reverse: a dropout is never clear.
-       Baseline invalid fraction on this camera is 0.62 %, so a real dropout
-       stands well clear of the noise.
-    3. RESUME ONLY ON POSITIVE EVIDENCE. The near field must be actively
-       SEEN empty — enough valid pixels, no novelty, no dropout — for
-       --debounce seconds. Missing data is never taken as clearance.
+      live clearly CLOSER than the map expects, and < --stop-range
+                                              -> NOVEL   (stop)
+      map expects a surface within --dropout-range but live returns
+      NOTHING valid there                     -> DROPOUT (stop: something is
+                                                 likely inside the blind zone,
+                                                 hiding the known surface)
+      enough cells with valid live depth, no novel, no dropout
+                                              -> CLEAR   (may resume)
+      otherwise                               -> NODATA  (never resumes)
+
+    Everything is computed in the camera's current pose, so moving the arm
+    does not by itself create novelty. The blind-zone reasoning is unchanged:
+    the measured minimum valid return on this D435i is 240 mm, so --stop-range
+    sits at 0.45 m to halt an approaching object while it is still visible,
+    and vanished data is always treated as a possible obstacle.
     """
 
-    def __init__(self, node, a):
+    def __init__(self, node, a, eyes, static_pts):
         self.a = a
+        self.eyes = eyes
+        self.pts = static_pts
         self.raw = None
         self.mask = None
-        self.hist = []
+        self.K = None
         q = QoSProfile(depth=1)
         q.reliability = ReliabilityPolicy.BEST_EFFORT
         node.create_subscription(Image, a.raw_depth, self._raw, q)
         node.create_subscription(Image, a.mask_topic, self._mask, q)
+        node.create_subscription(CameraInfo, a.depth_info, self._info, 5)
+
+    def _info(self, m):
+        if self.K is None:
+            self.K = np.array(m.k, np.float64).reshape(3, 3)
+            self.w, self.h = m.width, m.height
 
     def _raw(self, m):
         if m.encoding in ('16UC1', 'mono16'):
             self.raw = np.frombuffer(m.data, np.uint16).reshape(m.height, m.width)
-            self.hist.append(self.raw)
-            if len(self.hist) > self.a.bg_frames:
-                self.hist.pop(0)
 
     def _mask(self, m):
         if m.encoding in ('16UC1', 'mono16'):
             self.mask = np.frombuffer(m.data, np.uint16).reshape(m.height, m.width)
 
     def ready(self):
-        return self.raw is not None and len(self.hist) >= max(4, self.a.bg_frames // 2)
+        return self.raw is not None and self.K is not None and len(self.pts) > 0
+
+    def _cells(self, u, v, z, nu, nv):
+        """min-z per coarse cell"""
+        g = np.full(nu * nv, np.inf)
+        cu = np.clip((u / self.w * nu).astype(int), 0, nu - 1)
+        cv = np.clip((v / self.h * nv).astype(int), 0, nv - 1)
+        np.minimum.at(g, cv * nu + cu, z)
+        return g.reshape(nv, nu)
 
     def assess(self):
         """-> (verdict, detail) with verdict in {'CLEAR','NOVEL','DROPOUT','NODATA'}."""
         if not self.ready():
             return 'NODATA', 'no depth yet'
-        cur = self.hist[-1].astype(np.int32)
-        bg = np.median(np.stack(self.hist[:max(2, len(self.hist) // 2)]), axis=0).astype(np.int32)
-        # The segmenter's mask marks KEEP with 65535 and the arm with 0 —
-        # the opposite of the obvious reading. Getting this backwards marks
-        # the whole image as "arm", leaves zero pixels to judge, and the guard
-        # silently reports NODATA forever (i.e. it never stops anything).
+        T = self.eyes.T_base_opt()
+        if T is None:
+            return 'NODATA', 'no TF to the camera'
+        cur = self.raw.astype(np.float32) / 1000.0
         keep = (self.mask > 0) if (self.mask is not None
-                                   and self.mask.shape == cur.shape) else np.ones_like(cur, bool)
-        sel = keep
-        stop_mm = int(self.a.stop_range * 1000)
-        novel = sel & (cur > 0) & (bg > 0) & (cur < bg - self.a.novelty_mm) & (cur < stop_mm)
-        n_novel = int(novel.sum())
-        drop = sel & (cur == 0) & (bg > 0) & (bg < int(self.a.dropout_range * 1000))
-        n_drop = int(drop.sum())
-        near_valid = int((sel & (cur > 0) & (cur < stop_mm)).sum())
-        if n_novel >= self.a.min_px:
-            return 'NOVEL', f'{n_novel} px newly closer than {self.a.stop_range:.2f} m'
-        if n_drop >= self.a.min_drop_px:
-            return 'DROPOUT', (f'{n_drop} px lost valid near depth — possible object inside '
-                               f'the {self.a.min_range:.2f} m blind zone')
-        if near_valid < self.a.min_valid_px:
-            return 'NODATA', f'only {near_valid} valid near pixels — cannot call it clear'
-        return 'CLEAR', f'{near_valid} valid near px, no novelty, no dropout'
+                                   and self.mask.shape == cur.shape) else np.ones(cur.shape, bool)
+        nu, nv = self.a.cells_u, self.a.cells_v
+
+        # expected range per cell, from the STATIC MAP in this camera pose
+        Ti = np.linalg.inv(T)
+        P = (Ti @ np.c_[self.pts, np.ones(len(self.pts))].T).T[:, :3]
+        z = P[:, 2]
+        fx, fy = self.K[0, 0], self.K[1, 1]
+        cx, cy = self.K[0, 2], self.K[1, 2]
+        good = z > 0.05
+        u = fx * P[good, 0] / z[good] + cx
+        v = fy * P[good, 1] / z[good] + cy
+        zz = z[good]
+        inim = (u >= 0) & (v >= 0) & (u < self.w) & (v < self.h)
+        exp = self._cells(u[inim], v[inim], zz[inim], nu, nv)
+
+        # live minimum range per cell (arm pixels excluded)
+        vy, vx = np.nonzero(keep & (cur > 0.05))
+        live = self._cells(vx.astype(float), vy.astype(float), cur[vy, vx], nu, nv)
+
+        have_live = np.isfinite(live)
+        have_exp = np.isfinite(exp)
+        novel = have_live & (live < self.a.stop_range) & (
+            (have_exp & (live < exp - self.a.novelty)) | (~have_exp))
+        drop = have_exp & (exp < self.a.dropout_range) & (~have_live)
+        n_novel, n_drop, n_live = int(novel.sum()), int(drop.sum()), int(have_live.sum())
+        if n_novel >= self.a.min_cells:
+            return 'NOVEL', (f'{n_novel} cells closer than the map expects and inside '
+                             f'{self.a.stop_range:.2f} m')
+        if n_drop >= self.a.min_drop_cells:
+            return 'DROPOUT', (f'{n_drop} cells where the map expects a surface but the '
+                               f'camera returns nothing — possible object inside the '
+                               f'{self.a.min_range:.2f} m blind zone')
+        if n_live < self.a.min_live_cells:
+            return 'NODATA', f'only {n_live} cells with live depth — cannot call it clear'
+        return 'CLEAR', f'{n_live} live cells, {n_novel} novel, {n_drop} dropout'
 
 
 class Eyes:
@@ -290,24 +325,17 @@ def main():
                          'above --min-range so the obstacle is still clearly visible')
     ap.add_argument('--dropout-range', type=float, default=0.60,
                     help='m: background nearer than this, now invalid, counts as a dropout')
-    ap.add_argument('--novelty', dest='novelty_mm', type=int, default=60,
-                    help='mm a pixel must close vs the background to count as new')
-    # NOISE FLOOR MEASURED on a static scene, 433 samples over 25 s:
-    #   novelty  median 137  p95 431   max 1445 px
-    #   dropout  median 1459 p95 3397  max 6481 px
-    # Thresholds sit well above those maxima. For scale, a ~15 cm hand at
-    # 0.40 m subtends roughly 68,000 px at this resolution and far more once
-    # it reaches the blind zone, so these are still extremely sensitive to a
-    # real hand while immune to speckle.
-    ap.add_argument('--min-px', type=int, default=4000,
-                    help='pixels of NOVELTY needed to stop (noise max was 1445)')
-    ap.add_argument('--min-drop-px', type=int, default=20000,
-                    help='pixels of near-field DROPOUT needed to stop (noise max was '
-                         '6481; a hand in the blind zone blacks out far more)')
-    ap.add_argument('--min-valid-px', type=int, default=2000,
-                    help='valid near pixels required before the near field may be called '
-                         'clear — positive evidence, not absence of evidence')
-    ap.add_argument('--bg-frames', type=int, default=12)
+    ap.add_argument('--novelty', type=float, default=0.10,
+                    help='m a cell must be closer than the static map expects to count new')
+    ap.add_argument('--cells-u', type=int, default=64)
+    ap.add_argument('--cells-v', type=int, default=36)
+    ap.add_argument('--min-cells', type=int, default=12,
+                    help='novel cells needed to stop (a 15 cm hand at 0.4 m spans ~200)')
+    ap.add_argument('--min-drop-cells', type=int, default=25)
+    ap.add_argument('--min-live-cells', type=int, default=200,
+                    help='cells with live depth required before calling it clear')
+    ap.add_argument('--static-ply',
+                    default='/home/manishsaini/ur10/cumotion/maps/cell-2026-08-28.ply')
     ap.add_argument('--stop-file', default='/tmp/fm-cell-map-v1/STOP')
     ap.add_argument('--go-file', default='/tmp/fm-cell-map-v1/GO',
                     help='the arm does not move until this file exists. Auto-resume is a '
@@ -329,7 +357,19 @@ def main():
     rclpy.init()
     n = Exec()
     eyes = Eyes(n, a)
-    near = NearGuard(n, a)
+    import itertools as _it
+    _f = open(a.static_ply)
+    _nv = None
+    for _l in _f:
+        _l = _l.strip()
+        if _l.startswith('element vertex'):
+            _nv = int(_l.split()[-1])
+        if _l == 'end_header':
+            break
+    static_pts = np.loadtxt(_it.islice(_f, _nv), usecols=(0, 1, 2))
+    print(f'static base for novelty comparison: {len(static_pts)} points from '
+          f'{os.path.basename(a.static_ply)}', flush=True)
+    near = NearGuard(n, a, eyes, static_pts)
     pub = n.create_publisher(MarkerArray, '/cellmap/live_avoid', 2)
     if not n.wait_state():
         sys.exit('no /joint_states')
