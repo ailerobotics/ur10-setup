@@ -1,6 +1,7 @@
 # Reduced joint limits for the pneumatic-line wire strap (PROPOSED 2026-08-28).
 #
-# STATUS: **UNCONFIRMED — awaiting captain sign-off.** Nothing in this repo,
+# STATUS: shoulder_pan +-120 deg is CAPTAIN-CONFIRMED (2026-08-28). The other
+# five windows remain a conservative proposal awaiting sign-off. Nothing in this repo,
 # RUNBOOK.md, the URDF/XRDF or ~/ur10 documents a pneumatic-line or wire-strap
 # restriction; the stock UR10 limits are +-360 deg on pan/lift/wrists and
 # +-180 deg on the elbow, i.e. no restriction at all. These numbers are a
@@ -36,7 +37,7 @@ reference_pose_rad:        # live /joint_states, 2026-08-28, arm parked after th
   wrist_3_joint:       -1.5911   #  -91.2 deg
 
 window_deg:                # +- around the reference pose
-  shoulder_pan_joint:  30   # winds the whole bundle at the base
+  shoulder_pan_joint:  120  # CAPTAIN-CONFIRMED 2026-08-28 (was a 30 deg guess)
   shoulder_lift_joint: 45   # swings, does not twist
   elbow_joint:         45   # swings, does not twist
   wrist_1_joint:       45

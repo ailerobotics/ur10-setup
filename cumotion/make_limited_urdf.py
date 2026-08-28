@@ -24,6 +24,7 @@ import sys
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+WORLD_COLLISION_EXCLUDE = ['shoulder_link', 'upper_arm_link']
 JOINTS = ['shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint',
           'wrist_1_joint', 'wrist_2_joint', 'wrist_3_joint']
 
@@ -74,6 +75,17 @@ def main():
     for j in JOINTS:
         half = math.radians(win[j])
         lo, hi = ref[j] - half, ref[j] + half
+        # CLAMP to the robot's real limits. A window can extend past the
+        # mechanical range (+-120 deg around a pan of -246.8 deg reaches
+        # -366.8 deg, outside the UR10's +-360), and a URDF that claims a
+        # joint can go further than it can is a worse lie than the wide
+        # limits we started from.
+        m0 = re.search(r'<joint name="' + re.escape(j) + r'" type="revolute">.*?'
+                       r'<limit[^>]*lower="([-\d.eE+]+)"[^>]*upper="([-\d.eE+]+)"',
+                       s, re.S)
+        if m0:
+            stock_lo, stock_hi = float(m0.group(1)), float(m0.group(2))
+            lo, hi = max(lo, stock_lo), min(hi, stock_hi)
         applied[j] = (lo, hi)
         pat = re.compile(r'(<joint name="' + re.escape(j) + r'" type="revolute">.*?<limit[^>]*?)'
                          r'lower="[-\d.eE+]+"([^>]*?)upper="[-\d.eE+]+"', re.S)
@@ -102,29 +114,48 @@ def main():
         xr, n = pat.subn(lambda m: f'{m.group(1)}{ref[j]:.4f}', xr, count=1)
         if n != 1:
             sys.exit(f'could not rewrite default_joint_positions for {j}')
-    # BASE-LINK WORLD BUFFER 0.02 -> 0.01, shoulder_link and upper_arm_link only.
-    # The map legitimately contains the robot's own MOUNTING PEDESTAL — the
-    # camera saw it, it is a real static structure, and it belongs in the map.
-    # But the upper arm's root sphere lives inside it: measured on
-    # cell-2026-08-28, that sphere (r+buffer 0.110) sees an ESDF distance of
-    # 0.108, i.e. -2 mm, so the arm's PARKED pose is 'in collision' and every
-    # plan fails with INVALID_INITIAL_CSPACE_POSITION before it starts. The
-    # robot cannot meaningfully collide with the pedestal it is bolted to, the
-    # overlap is 2 mm against a map whose own error is 1-2 cm, and these two
-    # links never leave the base region. Every other sphere clears by >= 40 mm.
-    # This narrows the buffer ONLY for those two links and ONLY in the
-    # pneumatic XRDF; ur10_map.xrdf and ur10.xrdf are untouched.
-    for link in ('shoulder_link', 'upper_arm_link'):
-        pat = re.compile(r'(^collision:.*?buffer_distance:.*?^\s*' + link + r':\s*)0\.02',
-                         re.S | re.M)
-        xr, n = pat.subn(lambda m: f'{m.group(1)}0.01', xr, count=1)
-        if n != 1:
-            sys.exit(f'could not narrow the world buffer for {link} (matched {n})')
+    # WORLD-COLLISION EXCLUSION for shoulder_link and upper_arm_link
+    # (captain-approved 2026-08-28). The map legitimately contains the robot's
+    # own MOUNTING PEDESTAL, and the upper arm's root sphere lives inside it
+    # (measured -2 mm on cell-2026-08-28), so the arm's own parked pose reads
+    # as "in collision" and every plan dies with
+    # INVALID_INITIAL_CSPACE_POSITION before it starts. The robot cannot
+    # meaningfully collide with the structure it is bolted to.
+    #
+    # SCOPE, deliberately narrow: WORLD collision only, those two links only.
+    # `collision:` and `self_collision:` share one sphere set in the stock
+    # XRDF, so a separate world-only geometry set is built here that omits
+    # those two links; self_collision keeps pointing at the FULL set, so the
+    # arm is still checked against itself everywhere. Every other link keeps
+    # world collision on with its normal buffer.
+    xd = yaml.safe_load(xr)
+    full = xd['collision']['geometry']
+    world_set = full + '_world_only'
+    spheres = {k: v for k, v in xd['geometry'][full]['spheres'].items()
+               if k not in WORLD_COLLISION_EXCLUDE}
+    dropped = [k for k in xd['geometry'][full]['spheres'] if k in WORLD_COLLISION_EXCLUDE]
+    if sorted(dropped) != sorted(WORLD_COLLISION_EXCLUDE):
+        sys.exit(f'expected to drop {WORLD_COLLISION_EXCLUDE}, dropped {dropped}')
+    xd['geometry'][world_set] = {'spheres': spheres}
+    xd['collision']['geometry'] = world_set
+    xd['collision']['buffer_distance'] = {
+        k: v for k, v in xd['collision']['buffer_distance'].items()
+        if k not in WORLD_COLLISION_EXCLUDE}
+    assert xd['self_collision']['geometry'] == full, 'self-collision must keep the FULL sphere set'
+    for j in JOINTS:
+        xd['default_joint_positions'][j] = round(float(ref[j]), 4)
+    xr = yaml.safe_dump(xd, sort_keys=False, default_flow_style=None)
+    xr = (f'# GENERATED {dt.datetime.now().isoformat(timespec="seconds")} by '
+          f'make_limited_urdf.py from {os.path.basename(a.xrdf_in)}.\n'
+          f'# - default_joint_positions moved to the pneumatic reference pose\n'
+          f'#   (the stock retract config is outside the windows and cuMotion\n'
+          f'#   rejects it as an invalid RobotDescription).\n'
+          f'# - {", ".join(WORLD_COLLISION_EXCLUDE)} excluded from WORLD collision only,\n'
+          f'#   via the generated "{world_set}" sphere set: the map contains the\n'
+          f'#   robot\'s own mounting pedestal. SELF-collision still uses the full\n'
+          f'#   set, so the arm is checked against itself everywhere.\n'
+          f'# Do not edit by hand.\n') + xr
 
-    xr = xr.replace('\ndefault_joint_positions:',
-                    '\n# default_joint_positions REWRITTEN to the pneumatic reference pose by\n'
-                    '# make_limited_urdf.py — the stock retract config is outside the windows\n'
-                    '# and cuMotion refuses it as an invalid RobotDescription.\ndefault_joint_positions:', 1)
     open(a.xrdf_out, 'w').write(xr)
 
     print(f'wrote {a.out}')
