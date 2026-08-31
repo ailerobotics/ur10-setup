@@ -89,9 +89,15 @@ ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 \
 # Bring cameras up incrementally as they are plugged in / mounted:
 ros2 launch cams/rig_multicam.launch.py cams:=wrist
 
-# RViz: three RGB feeds + per-camera depth + pointcloud + UR10 model
+# RViz: 3D context (UR10 model + TF + pointclouds after Step-2 extrinsics)
 ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 DISPLAY=:0 \
   rviz2 -d cams/rig_multicam.rviz
+
+# Captain-facing "are the cameras live?" view: all 3 colour feeds in ONE
+# window, side by side, labelled, live. Prefer this over RViz for eyeballing
+# feeds (see the RViz-tabbing trap below).
+ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 DISPLAY=:0 \
+  python3 cams/tools/rig_feed_montage.py
 ```
 
 Per-camera topics: `/<role>/color/image_raw`, `/<role>/aligned_depth/image`
@@ -139,6 +145,16 @@ D415s; hand-eye re-calibration for the repositioned wrist, whose
   pointcloud claim one frame. Set `camera_name:=<role>` per camera (done in the
   launch) → `wrist_/shelf_/table_*` frames. Note `camera_name` sets the TF
   prefix only; topic names come from node namespace+name.
+- **RViz tabs multiple Image panels behind Displays**: with three Image
+  displays and no saved dock-state blob, RViz2 stacks all three image panels as
+  tabs behind the Displays panel on load — the feeds publish fine but are
+  hidden, and there is no headless way to un-tab them (no wmctrl/xdotool here,
+  and hand-writing the QMainWindow-state blob is impractical). For a reliable
+  captain-facing feed check use `cams/tools/rig_feed_montage.py` (one OpenCV
+  window, three colour feeds tiled + labelled + live-dot). Also: a killed rig
+  bring-up can leave a stale RViz **in a docker container** (cell-map ran
+  `ur10-cellmap-rviz-*`) on :0 showing a dead view — `docker ps | grep rviz`
+  and stop it, don't just hunt host `rviz2` PIDs.
 
 ## Next (from the placement report)
 
