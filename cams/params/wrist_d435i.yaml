@@ -1,0 +1,18 @@
+# WRIST camera — Intel RealSense D435i on the UR10 tool flange (eye-in-hand).
+#
+# Pins the realsense2_camera node to the wrist D435i BY SERIAL. Multi-camera rig:
+# without a pinned serial the "first device" default can open the wrong camera
+# (three RealSense enumerate on this host — see cams/README.md).
+#
+# WHY a hand-written, quoted params FILE and not a `serial:=` launch arg:
+#   `serial_no` degrades to a double through EVERY launch-argument path — rcl
+#   types the bare digits `018322070619` as a number and the node refuses it,
+#   and ParameterValue(value_type=str) does not survive launch_ros' YAML
+#   round-trip either (cams/README.md "Traps"). A --params-file is passed
+#   straight through with no re-serialisation, so the quotes below survive.
+#
+# The key MUST be the node's fully-qualified name. rig_multicam.launch.py runs
+# this camera as name=camera, namespace=/wrist  ->  FQN /wrist/camera.
+/wrist/camera:
+  ros__parameters:
+    serial_no: "018322070619"   # D435i, tool-flange unit (rs-enumerate-devices -s)

@@ -1,0 +1,18 @@
+# TABLE camera — Intel RealSense D415 on the table, wide view of the workspace.
+#
+# Role (placement-report.html MAIN): side view ~(-0.70, -0.25, 2.2), ~50 deg
+# down; must see the table(s) + the arm + the empty space the robot moves
+# through (shelf + table + transit volume). The extrinsic (world/base_link ->
+# table camera) is set in Step 2 by AprilTag world-alignment; this file only
+# pins the device by serial.
+#
+# WHY a quoted params FILE (not serial:=): see cams/params/wrist_d435i.yaml —
+# the serial_no-degrades-to-double trap. Key = node FQN: name=camera,
+# namespace=/table -> /table/camera.
+#
+# SERIAL: fill from `rs-enumerate-devices -s` once all three cameras are
+# connected (the two D415s are interchangeable; SHELF vs TABLE is fixed at mount
+# time). Known D415 on this host: 024122061936; the second D415 serial is TBD.
+/table/camera:
+  ros__parameters:
+    serial_no: "FILL_TABLE_D415_SERIAL"   # <- known D415 candidates: 024122061936 + (2nd, TBD on enumerate)

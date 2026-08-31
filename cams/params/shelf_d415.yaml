@@ -1,0 +1,19 @@
+# SHELF camera — Intel RealSense D415, mounted high looking at the gondola shelf.
+#
+# Role (placement-report.html): near-frontal shelf view ~(0.30, -0.90, 2.6),
+# ~57 deg pitch, ~15 deg off the shelf normal; must see all four board front
+# edges. The extrinsic (world/base_link -> shelf camera) is set in Step 2 by
+# AprilTag world-alignment; this file only pins the device by serial.
+#
+# WHY a quoted params FILE (not serial:=): see cams/params/wrist_d435i.yaml —
+# the serial_no-degrades-to-double trap. Key = node FQN: name=camera,
+# namespace=/shelf -> /shelf/camera.
+#
+# SERIAL: one D415 already documented on this host is 024122061936 (plugged
+# 2026-08-27, cams/cellmap/d435i_wrist_serial.yaml). The two D415s are physically
+# interchangeable, so WHICH serial becomes SHELF vs TABLE is fixed at mount time.
+# Confirm with `rs-enumerate-devices -s` once all three cameras are connected,
+# then replace the placeholder below with the serial of the unit mounted high.
+/shelf/camera:
+  ros__parameters:
+    serial_no: "FILL_SHELF_D415_SERIAL"   # <- known D415 candidates: 024122061936 + (2nd, TBD on enumerate)
