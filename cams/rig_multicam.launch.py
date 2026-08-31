@@ -85,10 +85,27 @@ def _nodes_for(role, imu_on, color_profile, depth_profile):
 
     imu = imu_on and is_d435i   # only the D435i has an IMU
     stream = {
+        # camera_name is the realsense TF PREFIX (not the topic namespace, which
+        # comes from node namespace+name). Without a unique prefix all three
+        # cameras publish the SAME frames (camera_link, camera_color_optical_
+        # frame, ...) — a TF collision that scrambles RViz's TF view and makes
+        # every pointcloud claim one frame. Prefix per role -> wrist_link,
+        # shelf_color_optical_frame, table_depth_optical_frame, etc. Step-2
+        # extrinsics then attach to distinct, unambiguous frames.
+        'camera_name': role,
         'align_depth.enable': True,
         'pointcloud.enable': True,          # organised coloured cloud for RViz 3D
         'depth_module.depth_profile': depth_profile,
         'rgb_camera.color_profile': color_profile,
+        # Disable the two infrared streams. The node opens them by default at
+        # the depth_module's native profile (1280x720x30 Y8 on the D415) — two
+        # extra streams we never use (we only need colour + aligned depth +
+        # pointcloud). Left on, they ~double each camera's USB payload and, with
+        # both D415s sharing one USB3 controller (bus 004 here), starve it:
+        # "Incomplete video frame detected" + colour dropping to ~25 Hz
+        # (measured 2026-08-31). Off, all three hold ~30 Hz.
+        'enable_infra1': False,
+        'enable_infra2': False,
         'enable_gyro': imu,
         'enable_accel': imu,
     }

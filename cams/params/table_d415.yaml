@@ -10,9 +10,11 @@
 # the serial_no-degrades-to-double trap. Key = node FQN: name=camera,
 # namespace=/table -> /table/camera.
 #
-# SERIAL: fill from `rs-enumerate-devices -s` once all three cameras are
-# connected (the two D415s are interchangeable; SHELF vs TABLE is fixed at mount
-# time). Known D415 on this host: 024122061936; the second D415 serial is TBD.
+# SERIAL: both D415s enumerated 2026-08-31 (rs-enumerate-devices -s):
+# 024122061936 and 025522060953 (both fw 5.12.6). The two D415s are physically
+# interchangeable, so WHICH serial is SHELF vs TABLE is a PROVISIONAL assignment
+# until the captain mounts them (Step 2) — swap the two YAMLs if the physical
+# units end up the other way round.
 /table/camera:
   ros__parameters:
-    serial_no: "FILL_TABLE_D415_SERIAL"   # <- known D415 candidates: 024122061936 + (2nd, TBD on enumerate)
+    serial_no: "025522060953"   # D415, provisionally the TABLE (workspace) unit

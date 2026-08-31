@@ -16,7 +16,18 @@ Visualization Manager:
       Enabled: true
       Cell Size: 0.5
       Plane Cell Count: 12
-      Reference Frame: world
+      Reference Frame: base_link
+    - Class: rviz_default_plugins/RobotModel
+      Name: UR10
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+        Depth: 5
+        Durability Policy: Transient Local
+        Reliability Policy: Reliable
+      Visual Enabled: true
+      Collision Enabled: false
     - Class: rviz_default_plugins/TF
       Name: TF
       Enabled: true
@@ -132,7 +143,7 @@ Visualization Manager:
       Decay Time: 0
   Global Options:
     Background Color: 33; 33; 38
-    Fixed Frame: world
+    Fixed Frame: base_link
     Frame Rate: 30
   Views:
     Current:
