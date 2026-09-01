@@ -1,0 +1,17 @@
+# Pins cam415a to RealSense serial 024122061936.
+# A params FILE, not a launch argument: serial_no degrades to a double through
+# every launch-argument path (cams/README.md trap) because launch_ros
+# re-serialises the parameter dict through YAML unquoted and rcl types a
+# leading-zero serial as a number. A file is passed straight to --params-file
+# with the quotes intact.
+/cam415a/camera:
+  ros__parameters:
+    serial_no: "024122061936"
+    enable_color: true
+    enable_depth: false
+    enable_infra1: false
+    enable_infra2: false
+    enable_gyro: false
+    enable_accel: false
+    pointcloud.enable: false
+    rgb_camera.color_profile: "640x480x30"
