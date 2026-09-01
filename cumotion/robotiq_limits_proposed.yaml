@@ -1,0 +1,31 @@
+# PROPOSED joint limits for the ROBOTIQ tooling (2026-09-01) — NOT APPLIED.
+#
+# Supersedes the pneumatic windows IF the captain confirms the pneumatic
+# tubing left with the old gripper. Those windows were never measured: they
+# were a conservative guess centred on the 2026-08-27 pose, and the captain
+# has now confirmed wrist_1 = 316 deg (pendant -44 deg) is the arm's NORMAL
+# configuration — so the window was the artefact, not the pose.
+#
+# What actually constrains the wrist now is the Robotiq power/RS-485 cable.
+# It runs to the coupling and is twisted principally by WRIST_3 (the final
+# roll). WRIST_1 pitches the wrist, bending the cable rather than winding it,
+# which cable of this type tolerates far better. So wrist_1 earns a wide
+# range and wrist_3 keeps a real one.
+#
+# Mechanical headroom measured from the live pose against ur10_calibrated.urdf:
+#   wrist_1 at 316.06 deg, 43.9 deg from the +360 stop -> the upper bound is
+#   held 10 deg clear of that stop so a plan can never drive into it.
+limits_deg:
+  wrist_1_joint:   [190.0, 350.0]    # admits the normal 316.06; >=10 deg off the stop
+  wrist_3_joint:   [-180.0, 180.0]   # Robotiq cable twist — the one that matters
+  shoulder_pan_joint:  [-360.0, 360.0]
+  shoulder_lift_joint: [-360.0, 360.0]
+  elbow_joint:         [-180.0, 180.0]
+  wrist_2_joint:       [-360.0, 360.0]
+#
+# NOTE for the captain: reaching the tag0/tag1 standoffs from the current pose
+# needs elbow +145 deg and shoulder_pan +52 deg of travel, so those joints must
+# also leave their old pneumatic windows. Those windows are relaxed to the
+# robot's mechanical range here on the same reasoning (the tubing is gone), but
+# that is a bigger relaxation than the wrist_1 question and is called out
+# explicitly rather than slipped in.
