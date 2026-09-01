@@ -186,7 +186,19 @@ def _setup(context, *args, **kwargs):
         ],
     )
 
-    nodes = [camera, convert, mount_tf]
+    # mount_tf:=false publishes NO tool0 -> camera_link at all. Use it when the
+    # camera has been physically moved and the stored calibration is stale:
+    # the 2-D image is still perfectly good, but a stale mount transform makes
+    # every 3-D use of it — depth integration, point clouds, projecting map
+    # geometry into the image — silently wrong while looking plausible.
+    # Publishing nothing is safer than publishing a transform we know is
+    # out of date, because downstream nodes cannot tell the difference.
+    publish_mount = LaunchConfiguration('mount_tf').perform(context).lower() == 'true'
+    if not publish_mount:
+        print('[wrist_rig] mount_tf:=false — NOT publishing tool0->camera_link. '
+              '2-D image only; anything needing the camera pose will correctly '
+              'find no transform instead of a stale one.')
+    nodes = [camera, convert] + ([mount_tf] if publish_mount else [])
 
     if lookat:
         # Off-arm fallback only. In eye-in-hand mode a fixed world pose for
@@ -246,6 +258,12 @@ def generate_launch_description():
                                           'wrist D435i by serial when a second '
                                           'RealSense is connected. Empty '
                                           '(default) = first device, unchanged.'),
+        DeclareLaunchArgument('mount_tf', default_value='true',
+                              description='Publish the static tool0->camera_link. Set '
+                                          'false when the camera has been physically '
+                                          'moved and the stored calibration is stale — '
+                                          'the 2-D image stays valid, 3-D use must not '
+                                          'silently rely on an out-of-date transform.'),
         DeclareLaunchArgument('lookat_tf', default_value='false',
                               description='Publish the table-rig world->PerceptionCamera '
                                           'look-at TF. MUST stay false in eye-in-hand '
