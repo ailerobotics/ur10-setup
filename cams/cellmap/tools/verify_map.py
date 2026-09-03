@@ -78,6 +78,9 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('ply')
     ap.add_argument('--no-tf', action='store_true')
+    ap.add_argument('--tag', dest='tags', action='append', default=[],
+                    help='NAME=x,y,z of a landmark measured independently (base_link, m); '
+                         'repeatable. Tag centres come from the hand-eye validation.')
     ap.add_argument('--tag-z', type=float, default=-0.0535,
                     help='independently measured tag-board height, m')
     ap.add_argument('--shelf-y', type=float, default=1.516,
@@ -128,6 +131,28 @@ def main():
             print('    (the densest bins further out are the wall behind the shelf)')
     else:
         print('\n(b) shelf front  : nothing mapped beyond y 0.8 (not swept that far)')
+
+    # (d) TAG ANCHORS - the strongest check available, and free.
+    # The tag centres were measured by the camera during hand-eye calibration,
+    # in base_link, WITHOUT using the map. If the map puts real surface where
+    # those measurements say the boards are, the whole chain - joint states,
+    # mount extrinsic, depth, integration - is right end to end. A wrong mount
+    # moves the map bodily and this check fails immediately, whereas the table
+    # height alone can survive a rotation about the vertical.
+    if a.tags:
+        print('\n(d) tag anchors  : mapped surface at the calibration-measured tag centres')
+        for spec in a.tags:
+            name, _, rest = spec.partition('=')
+            c = np.array([float(v) for v in rest.split(',')])
+            dist = np.linalg.norm(P - c, axis=1)
+            near = P[dist < 0.10]
+            line = f'      {name:6s} [{c[0]:+.3f} {c[1]:+.3f} {c[2]:+.3f}]  nearest {dist.min()*1000:5.1f} mm'
+            if len(near):
+                line += (f', {len(near)} pts within 100 mm, median z {np.median(near[:,2]):+.4f} '
+                         f'(dz {abs(np.median(near[:,2]) - c[2])*1000:.0f} mm)')
+            print(line)
+        print('    (a board is ~3 mm thick and a voxel is 20 mm, so ~10 mm is agreement;')
+        print('     tens of mm means the mount extrinsic is wrong - do NOT ship the map)')
 
     # (c) arm absence
     if not a.no_tf:
