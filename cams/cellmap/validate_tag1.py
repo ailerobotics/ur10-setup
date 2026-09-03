@@ -53,6 +53,11 @@ import tf2_ros
 import yaml
 from sensor_msgs.msg import CameraInfo, Image
 
+# DEFAULTS ONLY - main() rebinds these from --base/--tool/--optical. The optical
+# frame must match the stream given by --image: the wrist D435i is mounted upside
+# down and the map consumes the 180deg-corrected upright stream, whose frame is
+# wrist_color_upright_optical_frame. Validating the upright stream through the raw
+# frame would report a large, confusing error for a perfectly good calibration.
 BASE, TOOL, OPTICAL = 'base_link', 'tool0', 'camera_color_optical_frame'
 
 
@@ -431,8 +436,13 @@ class Offline:
 
 
 def main():
+    global BASE, TOOL, OPTICAL
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('--base', default=BASE)
+    ap.add_argument('--tool', default=TOOL)
+    ap.add_argument('--optical', default=OPTICAL,
+                    help='optical frame OF THE STREAM GIVEN BY --image')
     ap.add_argument('--image', default='/camera/rgb')
     ap.add_argument('--info', default='/camera/camera/color/camera_info')
     ap.add_argument('--tags', type=int, nargs='+', default=[0, 1])
@@ -463,6 +473,7 @@ def main():
                     help='re-analyse a raw jsonl offline (no ROS, no arm) — e.g. to '
                          'apply a different gate without asking for another sweep')
     a = ap.parse_args()
+    BASE, TOOL, OPTICAL = a.base, a.tool, a.optical
     if a.raw is None:
         a.raw = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'calib',
                              f'validate-raw-{dt.date.today().isoformat()}.jsonl')
