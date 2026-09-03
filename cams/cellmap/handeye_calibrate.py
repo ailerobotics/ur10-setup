@@ -53,6 +53,12 @@ import yaml
 from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import CameraInfo, Image, Imu, JointState
 
+# Frame names are DEFAULTS ONLY - main() rebinds them from --base/--tool/--cam-link/
+# --optical. They must be overridable because the wrist D435i is mounted UPSIDE DOWN
+# and the stream the map actually consumes is the 180deg-rotated /wrist/color_upright/*,
+# whose optical frame is wrist_color_upright_optical_frame, not the driver's own.
+# Calibrating against the raw frame and using the upright one would bake in a silent
+# 180deg error that no residual in this tool would reveal.
 BASE, TOOL = 'base_link', 'tool0'
 CAM_LINK, OPTICAL = 'camera_link', 'camera_color_optical_frame'
 METHODS = {'park': cv2.CALIB_HAND_EYE_PARK, 'daniilidis': cv2.CALIB_HAND_EYE_DANIILIDIS,
@@ -198,7 +204,8 @@ class HandEye(Node):
         self.last_print = 0
         self.n_img = 0
         self.T_cl_opt = None              # camera_link -> optical from the driver
-        self.guess = None                 # tool0 -> optical, current launch guess
+        self.guess = None                 # tool0 -> optical, current launch guess (may stay None)
+        self._guess_reported = False
         self.stamp_offset = None
 
     # -- inputs
@@ -226,16 +233,30 @@ class HandEye(Node):
         self.gyro = [g for g in self.gyro if time.time() - g[0] < 1.0]
 
     def lookup_static(self):
+        # TWO INDEPENDENT lookups, deliberately not in one try block.
+        # T_cl_opt (camera body -> optical) comes from the RealSense driver and is
+        # always available. The guess (tool0 -> optical) is the OLD mount transform and
+        # is expected to be MISSING during a recalibration: wrist_rig runs mount_tf:=false
+        # precisely so a known-stale mount is never published. Missing guess is normal,
+        # missing T_cl_opt means the camera driver is down.
         if self.T_cl_opt is None:
             try:
                 self.T_cl_opt = tf_to_T(self.tfb.lookup_transform(CAM_LINK, OPTICAL, Time()))
+                print(f'driver static {CAM_LINK}->{OPTICAL}: t={np.round(self.T_cl_opt[:3, 3], 4)} '
+                      f'rpy={np.round(R.from_matrix(self.T_cl_opt[:3, :3]).as_euler("xyz", degrees=True), 1)}')
+            except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                    tf2_ros.ExtrapolationException):
+                return
+        if self.guess is None and not self._guess_reported:
+            try:
                 self.guess = tf_to_T(self.tfb.lookup_transform(TOOL, OPTICAL, Time()))
-                print(f'driver static {CAM_LINK}->{OPTICAL}: t={np.round(self.T_cl_opt[:3, 3], 4)}; '
-                      f'current launch guess {TOOL}->{OPTICAL}: t={np.round(self.guess[:3, 3], 4)} '
+                print(f'current mount guess {TOOL}->{OPTICAL}: t={np.round(self.guess[:3, 3], 4)} '
                       f'rpy={np.round(R.from_matrix(self.guess[:3, :3]).as_euler("xyz", degrees=True), 1)}')
             except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
                     tf2_ros.ExtrapolationException):
-                pass
+                print(f'no {TOOL}->{OPTICAL} in TF - no prior mount to compare against '
+                      '(expected when recalibrating with mount_tf:=false)')
+            self._guess_reported = True
 
     # -- gating helpers
     def status(self, s, force=False):
@@ -378,6 +399,16 @@ def write_result(a, samples, results, T_cl_opt, guess, out_dir):
     d = {'calibrated': dt.datetime.now().isoformat(timespec='seconds'),
          'method': a.method, 'samples': len(samples), 'tag_id': a.tag_id,
          'tag_size_m': a.tag_size,
+         # WHICH STREAM this extrinsic belongs to. An extrinsic is meaningless without
+         # it: the raw and upright streams differ by a 180 deg roll and mirrored cx/cy,
+         # so using one number with the other stream is a silent, plausible-looking error.
+         'source': {'image_topic': a.image, 'camera_info_topic': a.info,
+                    'optical_frame': OPTICAL, 'camera_link_frame': CAM_LINK,
+                    'base_frame': BASE, 'tool_frame': TOOL},
+         # STABLE KEY NAMES. wrist_rig.launch.py reads 'tool0_to_camera_link'; making
+         # the key follow the frame name would rename the contract every time the
+         # camera bring-up changes its frame prefix. The frames these refer to are in
+         # 'parent'/'child' and in 'source' above - read those, not the key.
          'tool0_to_camera_link': {
              'parent': TOOL, 'child': CAM_LINK,
              'xyz': [float(v) for v in X_link[:3, 3]],
@@ -404,10 +435,14 @@ def write_result(a, samples, results, T_cl_opt, guess, out_dir):
                                   'rotation_deg': rot_deg(D[:3, :3]),
                                   'guess_tool0_to_optical_xyz': guess[:3, 3].tolist()}
     os.makedirs(out_dir, exist_ok=True)
-    path = os.path.join(out_dir, f'tool0_to_camera_{dt.date.today().isoformat()}.yaml')
+    # Per-tag filename: the two-tag procedure solves each tag INDEPENDENTLY and the
+    # agreement between the two solutions is the honest accuracy figure. One shared
+    # filename would silently overwrite the first tag's answer with the second's.
+    path = os.path.join(out_dir,
+                        f'tool0_to_camera_{dt.date.today().isoformat()}-tag{a.tag_id}.yaml')
     with open(path, 'w') as f:
         yaml.safe_dump(d, f, sort_keys=False)
-    print(f'\n>>> {path}\n    tool0 -> camera_link: xyz {np.round(X_link[:3, 3], 4)} '
+    print(f'\n>>> {path}\n    {TOOL} -> {CAM_LINK}: xyz {np.round(X_link[:3, 3], 4)} '
           f'rpy {np.round(d["tool0_to_camera_link"]["rpy_deg"], 2)} deg\n'
           f'    residual (tag spread through X): {res["tag_spread_rms_mm"]:.1f} mm rms / '
           f'{res["tag_rot_rms_deg"]:.2f} deg rms  -> target {"MET" if d["meets_target"] else "NOT met"}')
@@ -445,12 +480,20 @@ def plot(samples, results, method, out):
 
 
 def main():
+    global BASE, TOOL, CAM_LINK, OPTICAL
     sys.stdout.reconfigure(line_buffering=True)     # status lines through pipes/tee
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--image', default='/camera/rgb')
     ap.add_argument('--info', default='/camera/camera/color/camera_info')
     ap.add_argument('--imu', default='/camera/imu')
+    ap.add_argument('--base', default=BASE)
+    ap.add_argument('--tool', default=TOOL)
+    ap.add_argument('--cam-link', default=CAM_LINK,
+                    help='camera body frame the driver roots its optical frames on')
+    ap.add_argument('--optical', default=OPTICAL,
+                    help='optical frame OF THE STREAM GIVEN BY --image; for the upright '
+                         'wrist stream this is wrist_color_upright_optical_frame')
     ap.add_argument('--tag-id', type=int, default=0)
     ap.add_argument('--tag-size', type=float, default=0.120, help='printed black square, m')
     ap.add_argument('--target', type=int, default=18, help='stop after this many samples')
@@ -466,8 +509,13 @@ def main():
     ap.add_argument('--out', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'calib'))
     ap.add_argument('--solve-only', help='samples yaml: re-solve offline, no ROS')
     a = ap.parse_args()
+    # Rebind the module-level frame names once, before any node is built: every helper
+    # below reads them as globals at call time, so this is the single point of truth.
+    BASE, TOOL, CAM_LINK, OPTICAL = a.base, a.tool, a.cam_link, a.optical
     os.makedirs(a.out, exist_ok=True)
-    a.samples_file = os.path.join(a.out, f'samples-{dt.date.today().isoformat()}.yaml')
+    stamp = dt.date.today().isoformat()
+    tagsuf = f'-tag{a.tag_id}'
+    a.samples_file = os.path.join(a.out, f'samples-{stamp}{tagsuf}.yaml')
 
     if a.solve_only:
         d = yaml.safe_load(open(a.solve_only))
