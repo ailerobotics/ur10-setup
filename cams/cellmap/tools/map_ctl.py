@@ -80,13 +80,30 @@ def main():
                 shape = [s for _, s in dims]
                 grid = data.reshape(shape)
                 dist = grid[..., 0] if grid.ndim == 4 else grid
-                unobs = dist < -999          # nvblox sentinel -1000 = never observed
-                known = dist[~unobs]
-                print(f'  voxels {dist.size}: unobserved {unobs.sum()} '
-                      f'({unobs.mean()*100:.0f} %), observed {known.size}, '
-                      f'occupied(<=0) {(known <= 0).sum()}, '
-                      f'observed distance range {known.min():.3f}..{known.max():.3f} m'
-                      if known.size else f'  all {dist.size} voxels unobserved')
+                # COVERAGE CANNOT BE COUNTED HERE ANY MORE, and pretending it can is
+                # dangerous. This used to test dist < -999 for nvblox's -1000
+                # "never observed" sentinel, but nvblox_cell.yaml deliberately sets
+                # esdf_and_gradients_unobserved_value: 2.0 so unseen space reads as
+                # FREE to cuMotion (otherwise the arm's own unobservable base makes
+                # every start state invalid). Unobserved voxels therefore come back
+                # as +2.0 - and so does every genuinely clear voxel, because
+                # esdf_integrator_max_distance_m is also 2.0. The two are
+                # indistinguishable in this query.
+                #
+                # The old test silently reported "unobserved 0 (0 %)", which reads as
+                # "the whole cell is mapped". That is the worst possible direction to
+                # be wrong in: unobserved is treated as free, so a reader would trust
+                # a map to protect them in space the camera never saw.
+                unobs_val = 2.0
+                at_max = np.isclose(dist, unobs_val)
+                occupied = (dist <= 0).sum()
+                print(f'  voxels {dist.size}: occupied(<=0) {occupied}, '
+                      f'at the +{unobs_val:g} ceiling {at_max.sum()} '
+                      f'({at_max.mean()*100:.0f} %) = unobserved OR >= {unobs_val:g} m clear '
+                      f'(indistinguishable - see the comment in map_ctl.py), '
+                      f'distance range {dist.min():.3f}..{dist.max():.3f} m')
+                print('  NOTE: coverage is not measurable from this query; judge it from the '
+                      'mesh (tools/verify_map.py) and remember unobserved = FREE to the planner.')
                 o = np.array([res.origin_m.x, res.origin_m.y, res.origin_m.z])
                 vs = res.voxel_size_m
                 if a.spheres:
