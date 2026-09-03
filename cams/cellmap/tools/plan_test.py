@@ -322,6 +322,9 @@ def main():
     ap.add_argument('--recheck', nargs='*', help='labels to re-evaluate with --check-box')
     ap.add_argument('--box', help='xmin,xmax,ymin,ymax,zmin,zmax obstacle outline for the plot')
     ap.add_argument('--plot-out', default=None)
+    ap.add_argument('--joint-limits', default=None,
+                    help='pneumatic_limits.yaml: refuse any plan whose waypoints leave '
+                         'the per-joint windows (independent of the planner\'s own limits)')
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
@@ -407,6 +410,47 @@ def main():
                   f'{dj.max():.0f} deg (> {MAX_JOINT_DELTA_DEG:.0f}) — distant IK branch')
             rec['error_code'] = -170
             pts = []
+    if res.error_code.val == 1 and pts and a.joint_limits:
+        # SECOND, INDEPENDENT GUARD on the pneumatic-line windows. The planner
+        # already cannot exceed them (cuMotion reads the reduced limits from
+        # ur10_pneumatic.urdf), but "the config we think we launched" and "the
+        # config the planner actually used" are different claims, and on a real
+        # arm the difference is the whole point. This re-checks EVERY waypoint
+        # against the yaml and refuses the plan on any violation.
+        import yaml as _y
+        _lim = _y.safe_load(open(a.joint_limits))
+        _ref, _win = _lim['reference_pose_rad'], _lim['window_deg']
+        viol = []
+        for k, wp in enumerate(pts):
+            for jn, v in zip(traj.joint_names, wp):
+                if jn not in _ref:
+                    continue
+                half = np.radians(_win[jn])
+                lo, hi = _ref[jn] - half, _ref[jn] + half
+                if not (lo <= v <= hi):
+                    viol.append((k, jn, v, lo, hi))
+        if viol:
+            k, jn, v, lo, hi = viol[0]
+            print(f'  REFUSED: waypoint {k} has {jn} = {v:.4f} rad outside the '
+                  f'pneumatic window [{lo:.4f}, {hi:.4f}] ({len(viol)} violations)')
+            rec['error_code'] = -171
+            rec['limit_violations'] = len(viol)
+            pts = []
+        else:
+            margins = {}
+            for jn in traj.joint_names:
+                if jn not in _ref:
+                    continue
+                col = [wp[list(traj.joint_names).index(jn)] for wp in pts]
+                half = np.radians(_win[jn])
+                lo, hi = _ref[jn] - half, _ref[jn] + half
+                margins[jn] = float(np.degrees(min(min(c - lo for c in col),
+                                                   min(hi - c for c in col))))
+            rec['pneumatic_margin_deg'] = margins
+            worst = min(margins, key=margins.get)
+            print(f'  pneumatic limits OK: every waypoint inside; tightest margin '
+                  f'{worst} {margins[worst]:.1f} deg from its window edge')
+
     if res.error_code.val == 1 and pts:
         path = node.fk_points(traj.joint_names, pts)
         seg = np.linalg.norm(np.diff(path, axis=0), axis=1)

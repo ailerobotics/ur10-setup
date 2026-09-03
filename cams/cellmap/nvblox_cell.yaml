@@ -32,6 +32,26 @@
     map_clearing_radius_m: -1.0
     clear_map_outside_radius_rate_hz: 0.0
 
+    # UNOBSERVED VOXELS READ AS FREE, not as obstacles. nvblox fills the ESDF
+    # it serves to cuMotion with this value wherever nothing was ever seen.
+    # The stock -1000.0 reads to cuMotion as "deeply inside an obstacle", so
+    # ANY collision sphere sitting in unscanned space makes the state invalid.
+    # Measured on cell-2026-08-28: the arm's own base sphere at (0, 0, 0.128)
+    # is unobserved — the camera can never see the robot's base past the robot
+    # — so every plan died with INVALID_INITIAL_CSPACE_POSITION before it
+    # started, from the arm's own parked pose.
+    #
+    # SAFETY NOTE, read this before trusting a plan: +1000 means the planner
+    # treats everything it has never seen as EMPTY. With the camera detached
+    # the robot is blind, so it avoids ONLY what is in the saved map (25 % of
+    # the workspace box of this map is unobserved). The cell must be physically
+    # clear of anything not scanned. This is the same "unobserved = free"
+    # semantics the bench rehearsal relied on, made explicit.
+    #
+    # Read once at startup to build the ESDF server: setting it with
+    # `ros2 param set` at runtime does nothing (verified 2026-08-28).
+    esdf_and_gradients_unobserved_value: 2.0
+
     # 3-D ESDF, computed only when cuMotion asks (get_esdf_and_gradient with
     # update_esdf=true). Continuous ESDF updates would burn GPU during the
     # scan for nothing.
@@ -44,6 +64,18 @@
     # The manipulator config turns meshing off because it costs GPU; for a
     # one-off scan the feedback is worth more. planner.launch.py sets it to 0.
     update_mesh_rate_hz: 2.0
+
+    # ...AND publish it. update_mesh_rate_hz only COMPUTES the mesh;
+    # publish_layer_rate_hz is what puts mesh/ESDF/occupancy layers on ROS
+    # topics, and NVIDIA's manipulator config sets it to 0.0 because a
+    # manipulator feeds cuMotion directly and never needs to draw anything.
+    # Missing this cost a live scan session (2026-08-28): nvblox integrated
+    # perfectly — the saved map grew 0.6 -> 12.5 MB while the captain swept —
+    # but /nvblox_node/mesh never published, so RViz stayed empty and it
+    # looked like nothing was being mapped. The rate is read once at startup
+    # to create the publish timer, so setting it at runtime does nothing;
+    # it has to be here. planner.launch.py leaves it at 0 (no viewer).
+    publish_layer_rate_hz: 2.0
     use_color: true
     integrate_color_rate_hz: 5.0
 

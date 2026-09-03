@@ -1,0 +1,93 @@
+# GENERATED 2026-09-01, VALIDATION ONLY. Built from ur10_pneumatic.xrdf so it
+# KEEPS the captain-approved world-collision exclusion for shoulder_link and
+# upper_arm_link (the map contains the robot's own mounting pedestal).
+# tool0 carries a NOMINAL Robotiq 2F-85 envelope: 4 spheres r=0.073 m to
+# 0.163 m. Still a stand-in — the real part has not been measured.
+format: xrdf
+format_version: 1.0
+modifiers:
+- {set_base_frame: base_link}
+default_joint_positions: {shoulder_pan_joint: -4.3076, shoulder_lift_joint: -1.3338,
+  elbow_joint: 1.5676, wrist_1_joint: 3.3661, wrist_2_joint: 4.367, wrist_3_joint: -1.5911}
+cspace:
+  joint_names: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint,
+    wrist_2_joint, wrist_3_joint]
+  acceleration_limits: [12.0, 12.0, 12.0, 12.0, 12.0, 12.0]
+  jerk_limits: [500.0, 500.0, 500.0, 500.0, 500.0, 500.0]
+tool_frames: [tool0]
+collision:
+  geometry: ur10e_collision_spheres_world_only
+  buffer_distance: {forearm_link: 0.04, wrist_1_link: 0.04, wrist_2_link: 0.04, wrist_3_link: 0.04,
+    tool0: 0.04}
+self_collision:
+  geometry: ur10e_collision_spheres
+  buffer_distance: {shoulder_link: 0.07, tool0: 0.05}
+  ignore:
+    upper_arm_link: [forearm_link, shoulder_link]
+    forearm_link: [wrist_1_link]
+    wrist_1_link: [wrist_2_link, wrist_3_link]
+    wrist_2_link: [wrist_3_link, tool0]
+    wrist_3_link: [tool0]
+geometry:
+  ur10e_collision_spheres:
+    spheres:
+      shoulder_link:
+      - center: [0, 0, 0]
+        radius: 0.05
+      upper_arm_link:
+      - center: [0, 0, 0.18]
+        radius: 0.09
+      - center: [-0.102167, 0, 0.18]
+        radius: 0.05
+      - center: [-0.204333, 0, 0.18]
+        radius: 0.05
+      - center: [-0.3065, 0, 0.18]
+        radius: 0.05
+      - center: [-0.408667, 0, 0.18]
+        radius: 0.05
+      - center: [-0.510833, 0, 0.18]
+        radius: 0.05
+      - center: [-0.613, 0, 0.18]
+        radius: 0.07
+      forearm_link: &id001
+      - center: [0, 0, 0.03]
+        radius: 0.05
+      - center: [-0.0951667, 0, 0.03]
+        radius: 0.05
+      - center: [-0.190333, 0, 0.03]
+        radius: 0.05
+      - center: [-0.2855, 0, 0.03]
+        radius: 0.05
+      - center: [-0.380667, 0, 0.03]
+        radius: 0.05
+      - center: [-0.475833, 0, 0.03]
+        radius: 0.05
+      - center: [-0.571, -1.19904e-17, 0.03]
+        radius: 0.05
+      wrist_1_link: &id002
+      - center: [0, 0, 0]
+        radius: 0.05
+      wrist_2_link: &id003
+      - center: [0, 0, 0]
+        radius: 0.05
+      wrist_3_link: &id004
+      - center: [0, 0, 0]
+        radius: 0.05
+      - center: [0, 0, 0.06]
+        radius: 0.07
+      tool0: &id005
+      - center: [0.0, 0.0, 0.04]
+        radius: 0.073
+      - center: [0.0, 0.0, 0.08]
+        radius: 0.073
+      - center: [0.0, 0.0, 0.12]
+        radius: 0.073
+      - center: [0.0, 0.0, 0.163]
+        radius: 0.073
+  ur10e_collision_spheres_world_only:
+    spheres:
+      forearm_link: *id001
+      wrist_1_link: *id002
+      wrist_2_link: *id003
+      wrist_3_link: *id004
+      tool0: *id005

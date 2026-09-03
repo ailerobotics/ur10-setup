@@ -1,3 +1,9 @@
 driver.log
 __pycache__/
 *.pyc
+
+# nvblox cell maps: committed only when under ~50 MB (see cumotion/maps/README.md).
+# The 2026-08-28 scan is 74.9 MB, so it lives on the host at
+# ~/ur10/cumotion/maps/ instead; start_cumotion_map.sh searches there too.
+*.nvblx
+*.ply

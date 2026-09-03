@@ -93,7 +93,7 @@ def _setup(ctx, *args, **kwargs):
             'cumotion_action_server.read_esdf_world': 'true',
             'cumotion_action_server.update_esdf_on_request': 'true',
             'cumotion_action_server.esdf_service_name': '/nvblox_node/get_esdf_and_gradient',
-            'cumotion_action_server.add_ground_plane': 'true',    # keep the free guard
+            'cumotion_action_server.add_ground_plane': lc('ground_plane'),
             'cumotion_action_server.publish_cumotion_world_as_voxels': lc('voxels'),
             'cumotion_action_server.publish_voxel_size': '0.02',
             'cumotion_action_server.max_publish_voxels': '500000',
@@ -123,5 +123,9 @@ def generate_launch_description():
         DeclareLaunchArgument('voxels', default_value='true'),
         DeclareLaunchArgument('time_dilation', default_value='0.5'),
         DeclareLaunchArgument('nvblox_config', default_value='/cellmap/nvblox_cell.yaml'),
+        DeclareLaunchArgument('ground_plane', default_value='true',
+                              description='cuMotion ground plane at base height. Keep TRUE '
+                                          'normally: it is the free guard under the arm. '
+                                          'Set false only to diagnose an invalid start state.'),
         OpaqueFunction(function=_setup),
     ])
