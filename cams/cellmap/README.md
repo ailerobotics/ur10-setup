@@ -63,6 +63,92 @@ world → base_link → tool0 → camera_link → camera_color_optical_frame
   ~0.5 m off the flange. `tag_corners.py` therefore reads TF; `--pendant`
   converts pendant readings through the same live TF.
 
+### Recalibration for the UPSIDE-DOWN mount (2026-09-03)
+
+The wrist D435i is physically mounted **upside down**. A flip node publishes a
+180deg-corrected stream alongside the raw one:
+
+```
+/wrist/color_upright/image_raw          /wrist/aligned_depth_upright/image
+/wrist/color_upright/camera_info        /wrist/aligned_depth_upright/camera_info
+        frame: wrist_color_upright_optical_frame
+```
+
+The correction is a real 180deg z-rotation in TF **plus mirrored principal
+point** (cx 430.45 -> 416.55, cy 230.17 -> 248.83 on 848x480; fx/fy unchanged).
+Verified 2026-09-03: `cx_upright = (width-1) - cx_raw` exactly, likewise cy.
+
+**Calibrate against the stream the map consumes — the upright one.** Solving on
+the raw stream and applying the answer to the upright stream is a 180deg roll
+error, and no residual in `handeye_calibrate.py` would reveal it: the residual
+is the spread of the tag through the *same* stream it was fitted on, so it
+stays small while the whole map is bodily rotated. Every result file therefore
+carries a `source:` block naming the image topic, the camera_info topic and the
+four frames it refers to. **An extrinsic without its stream is not
+interpretable** — quote the stream whenever you quote the numbers.
+
+The upright **depth** stream shares the upright colour frame and intrinsics
+exactly (verified 2026-09-03: same `wrist_color_upright_optical_frame`, same
+fx/cx/cy), which is what makes a colour-solved extrinsic valid for the depth
+that nvblox integrates.
+
+Frames on the multi-camera bring-up are `wrist_link` (camera body) and
+`wrist_color_upright_optical_frame`, not `camera_link` /
+`camera_color_optical_frame`, so the tools take them as arguments
+(`--cam-link/--optical`) and `wrist_rig.launch.py` publishes the child frame
+**named in the file** rather than assuming `camera_link`.
+
+### Why two tags
+
+One tag reports a flattering residual: it is fitted and scored on the same
+poses. A second tag elsewhere in the cell, captured from different poses, is an
+**independent** estimate of the same fixed mount, and the disagreement between
+the two is the honest accuracy figure.
+
+The two sets are solved **separately**. Concatenating them into one
+`cv2.calibrateHandEye` call is the tempting mistake: that solver assumes one
+target rigidly fixed in the base frame and cancels it through relative motions,
+so every cross-tag motion pair silently encodes the tag-to-tag offset as camera
+motion. It does not error — it returns a wrong extrinsic with a plausible
+residual. `tools/combine_tags.py` therefore solves per tag, reports the
+agreement, averages rotation as a quaternion mean, and **refuses to write** a
+combined mount when the tags disagree beyond tolerance.
+
+### Freedrive from the workstation
+
+`tools/freedrive.py on|off`. The pendant's own freedrive button cannot be used
+for this: holding it **kills the external-control program** (RUNBOOK 4), which
+drops the `/joint_states` the calibration depends on. Driving freedrive through
+the ROS `freedrive_mode_controller` keeps the driver's connections up.
+
+Two traps are encoded as refusals, both observed live on 2026-09-03:
+
+* **Robot state is read from the dashboard (TCP 29999), never from
+  `/io_and_status_controller/robot_mode` or `/safety_mode`.** Those topics are
+  *latched-only* — 0 messages in 8 s of live subscription — so `ros2 topic echo
+  --once` replays a historical sample to each new subscriber. They read
+  `POWER_OFF` / `ROBOT_EMERGENCY_STOP` while the robot was genuinely
+  `IDLE` / `NORMAL`.
+* **The joint feed is checked for encoder JITTER, not for rate.** A dropped
+  RTDE link keeps republishing the last packet at a perfect 125 Hz. Twice now
+  a "healthy" 125 Hz feed has been frozen: 0.000 mdeg range across hundreds of
+  samples, with a true pose completely different from the displayed one. Live
+  looks like 4-9 mdeg of jitter.
+
+`freedrive_mode_controller` must be activated in the **same**
+`switch_controller` call that deactivates `scaled_joint_trajectory_controller`,
+and `enable_freedrive_mode` is a **deadman**, not a latch — it is republished
+at 4 Hz for as long as freedrive is wanted.
+
+**This CB3 never reports BACKDRIVE for ROS freedrive, and that is correct.**
+On PolyScope 3.15.8, mode 6 `BACKDRIVE` is the pendant's own brake-release
+hand-guide state; ROS freedrive runs as URScript `freedrive_mode()` *inside*
+the still-running external-control program, so the robot stays in mode 7
+`RUNNING` throughout. There is also no Local/Remote toggle to check here — the
+dashboard rejects `is in remote control` and `get operational mode` as unknown
+commands (both e-Series features). The only real proof that freedrive engaged
+is that **the arm actually moves** when pushed.
+
 ## Design decisions (dated 2026-08-26 unless noted)
 
 **Hand-eye calibration is the gate, not an option.** The mount transform in
@@ -263,6 +349,35 @@ calibration target); tag 1 ~0.5 m away, also flat, in reach (validation).
 Both stay put for the whole session. Keep `wrist_rig.launch.py` running.
 
 ### 1. Hand-eye calibration
+
+**Current form (2026-09-03 onward): upright stream, two tags, freedrive from
+the workstation.** Cameras are usually already up and owned by another session
+— verify by frame stamps, do not restart them.
+
+```bash
+export ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+
+# freedrive, held by a 4 Hz deadman; leave this running, Ctrl-C releases it
+python3 cams/cellmap/tools/freedrive.py on
+
+# one capture per tag, --tag-id 0 then --tag-id 1
+python3 -u cams/cellmap/handeye_calibrate.py \
+    --image /wrist/color_upright/image_raw \
+    --info  /wrist/color_upright/camera_info \
+    --cam-link wrist_link --optical wrist_color_upright_optical_frame \
+    --tag-id 0 --tag-size 0.120 --vmax 0.03 --target 18
+
+# combine; REFUSES if the two tags disagree beyond 10 mm / 2 deg
+python3 cams/cellmap/tools/combine_tags.py \
+    calib/tool0_to_camera_<date>-tag0.yaml calib/tool0_to_camera_<date>-tag1.yaml
+```
+
+`--vmax 0.03` (rad/s) is the stillness gate: a hand resting on a freedriven arm
+never gets to 0.01. Only the combined, date-only file is picked up by
+`calib:=auto`; the per-tag files are intermediates and are deliberately
+excluded from that glob.
+
+Original single-tag form (raw stream, standalone rig):
 ```bash
 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/handeye_calibrate.py --target 18
 ```
