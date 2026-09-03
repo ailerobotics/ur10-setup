@@ -72,6 +72,41 @@ IMU on, detector bridge + plan-confirm-execute approach script. Own README.
 In that mode the world->PerceptionCamera look-at TF below MUST NOT be
 published (it is gated off in `approach/wrist_rig.launch.py`).
 
+## Multi-camera rig (v2, 2026-08-31)
+
+The rig grew from one camera to three: the wrist **D435i** (`018322070619`,
+repositioned on the flange) plus two static **D415**s — `024122061936`
+(SHELF, high/frontal) and `025522060953` (TABLE, workspace side view). The
+two D415s are interchangeable, so the SHELF/TABLE serial assignment is
+provisional until mounted (Step 2); swap the two params YAMLs if reversed.
+
+```
+# All three on domain 0 (local RViz), each pinned by a quoted params YAML:
+ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 \
+  ros2 launch cams/rig_multicam.launch.py \
+    cams:=wrist,shelf,table color_profile:=848x480x30 depth_profile:=848x480x30
+
+# Bring cameras up incrementally as they are plugged in / mounted:
+ros2 launch cams/rig_multicam.launch.py cams:=wrist
+
+# RViz: 3D context (UR10 model + TF + pointclouds after Step-2 extrinsics)
+ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 DISPLAY=:0 \
+  rviz2 -d cams/rig_multicam.rviz
+
+# Captain-facing "are the cameras live?" view: all 3 colour feeds in ONE
+# window, side by side, labelled, live. Prefer this over RViz for eyeballing
+# feeds (see the RViz-tabbing trap below).
+ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 DISPLAY=:0 \
+  python3 cams/tools/rig_feed_montage.py
+```
+
+Per-camera topics: `/<role>/color/image_raw`, `/<role>/aligned_depth/image`
+(metres) + `/image_mm` (raw), `/<role>/points`. Each camera runs its own node
+in namespace `/wrist|/shelf|/table` pinned by `cams/params/<role>_*.yaml`.
+Extrinsics are NOT set here — that is Step 2 (AprilTag world-alignment for the
+D415s; hand-eye re-calibration for the repositioned wrist, whose
+`cams/cellmap/calib/tool0_to_camera_2026-08-27.yaml` is now STALE).
+
 ## Traps hit on 2026-08-17 (each cost real time)
 
 - **`serial_no` degrades to a double** through every launch path — CLI nested
@@ -92,6 +127,34 @@ published (it is gated off in `approach/wrist_rig.launch.py`).
   detector, so YOLO was never loaded.
 - **Stale `ros2` CLI daemon** can report a live topic as unpublished after
   containers/nodes restart; `ros2 daemon stop` and retry before debugging.
+
+## Traps hit on 2026-08-31 (multi-camera rig)
+
+- **Infrared streams starve a shared USB bus**: realsense2_camera opens the two
+  IR streams by default at the depth module's native profile (1280x720x30 Y8 on
+  the D415) — streams we never use (we need only colour + aligned depth +
+  pointcloud). With both D415s on ONE USB3 controller (they enumerated on bus
+  004 here; the D435i was alone on bus 006), the extra IR payload triggered
+  continuous `Incomplete video frame detected` and dropped colour to ~25 Hz.
+  Fix: `enable_infra1:=false enable_infra2:=false` (baked into
+  rig_multicam.launch.py) — all three then hold ~30 Hz, zero incomplete frames.
+- **All cameras share one TF frame tree unless prefixed**: the realsense frame
+  ids (`camera_link`, `camera_color_optical_frame`, ...) come from the
+  `camera_name` PARAMETER, not the node namespace — so three nodes all publish
+  the SAME frames, a collision that scrambles RViz's TF view and makes every
+  pointcloud claim one frame. Set `camera_name:=<role>` per camera (done in the
+  launch) → `wrist_/shelf_/table_*` frames. Note `camera_name` sets the TF
+  prefix only; topic names come from node namespace+name.
+- **RViz tabs multiple Image panels behind Displays**: with three Image
+  displays and no saved dock-state blob, RViz2 stacks all three image panels as
+  tabs behind the Displays panel on load — the feeds publish fine but are
+  hidden, and there is no headless way to un-tab them (no wmctrl/xdotool here,
+  and hand-writing the QMainWindow-state blob is impractical). For a reliable
+  captain-facing feed check use `cams/tools/rig_feed_montage.py` (one OpenCV
+  window, three colour feeds tiled + labelled + live-dot). Also: a killed rig
+  bring-up can leave a stale RViz **in a docker container** (cell-map ran
+  `ur10-cellmap-rviz-*`) on :0 showing a dead view — `docker ps | grep rviz`
+  and stop it, don't just hunt host `rviz2` PIDs.
 
 ## Next (from the placement report)
 
