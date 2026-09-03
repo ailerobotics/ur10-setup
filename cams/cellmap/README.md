@@ -415,6 +415,55 @@ sweep survives any crash and can be re-analysed offline with
 without asking the captain for another one.
 
 ### 3. Scan and save
+
+**Current form (2026-09-03 onward): the UPRIGHT stream.** The camera is mounted
+upside down and the map must be built on the same stream the calibration was
+solved against, or the whole map is rotated 180 deg about the optical axis.
+
+```bash
+export ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+
+# 0. the pipeline's depth contract is 16UC1 MILLIMETRES, and only the RAW
+#    orientation has such a topic - bridge the upright one (additive; starts
+#    no camera, touches nothing in zz_rigcams)
+python3 cams/cellmap/tools/depth_to_mm.py
+
+# 1. the mount TF, straight from the calibration file. wrist_rig normally
+#    publishes it; the multi-camera bring-up deliberately does not.
+python3 cams/cellmap/tools/publish_mount.py \
+    cams/cellmap/calib/tool0_to_camera_<date>.yaml
+
+# 2. segmenter + nvblox, on the upright topics
+cams/cellmap/run_scan.sh \
+    color_image:=/wrist/color_upright/image_raw \
+    color_info:=/wrist/color_upright/camera_info \
+    depth_image:=/wrist/aligned_depth_upright/image_mm \
+    depth_info:=/wrist/aligned_depth_upright/camera_info
+
+# 3. the viewer, and freedrive for the captain
+DISPLAY=:0 XAUTHORITY=$(ls -t /tmp/xauth_* | head -1) \
+    cams/cellmap/run_rviz.sh cellmap_upright.rviz
+python3 cams/cellmap/tools/freedrive.py on
+
+# 4. sweep, then save + mesh
+cams/cellmap/scan_session.sh cell-$(date +%F)
+
+# 5. verify against geometry we already know
+python3 cams/cellmap/tools/verify_map.py ~/ur10/cumotion/maps/cell-<date>.ply
+```
+
+**Confirm the stack is really on the upright stream before the captain sweeps** —
+a wasted sweep is a wasted captain. The segmenter prints its intrinsics at
+startup: they must be the UPRIGHT ones (`cx=416.55, cy=248.83` at 848x480, i.e.
+mirrored), not the raw `cx=430.45, cy=230.17`. nvblox also names the frame in
+`/nvblox_node/back_projected_depth/wrist_color_upright_optical_frame`.
+
+**The screen may be locked.** RViz will be running behind an xscreensaver
+password prompt and only the captain can unlock it; `xscreensaver-command
+-deactivate` does not bypass the lock.
+
+Original single-stream form (standalone wrist rig, raw orientation):
+
 ```bash
 cams/cellmap/run_scan.sh            # segmenter + nvblox, refuses without a calib yaml
 cams/cellmap/run_rviz.sh            # map growing on the display (needs DISPLAY/XAUTHORITY of the session)
