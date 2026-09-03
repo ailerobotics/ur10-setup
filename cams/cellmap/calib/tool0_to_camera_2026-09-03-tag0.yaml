@@ -1,4 +1,4 @@
-calibrated: '2026-09-03T21:08:01'
+calibrated: '2026-09-03T21:09:36'
 method: park
 samples: 18
 tag_id: 0
@@ -10,7 +10,7 @@ source:
   camera_link_frame: wrist_link
   base_frame: base_link
   tool_frame: tool0
-tool0_to_wrist_link:
+tool0_to_camera_link:
   parent: tool0
   child: wrist_link
   xyz:
@@ -26,7 +26,7 @@ tool0_to_wrist_link:
   - 163.38718176407724
   - -89.29233642576034
   - 106.63475139516895
-tool0_to_wrist_color_upright_optical_frame:
+tool0_to_camera_color_optical_frame:
   parent: tool0
   child: wrist_color_upright_optical_frame
   xyz:

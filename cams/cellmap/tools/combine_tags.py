@@ -38,11 +38,24 @@ import yaml
 from scipy.spatial.transform import Rotation as R
 
 
+LINK_KEY = 'tool0_to_camera_link'
+OPT_KEY = 'tool0_to_camera_color_optical_frame'
+
+HINT = ('written by an older handeye_calibrate.py that keyed on the frame names; '
+        'regenerate it with `handeye_calibrate.py --solve-only <its samples yaml>` '
+        'and the same --cam-link/--optical - that reproduces the identical numbers '
+        'under the stable key names')
+
+
 def load(path):
+    # A raw KeyError here reads like a corrupt file when it is really version skew,
+    # so say which keys are missing and how to regenerate the file.
     d = yaml.safe_load(open(path))
-    link = d['tool0_to_camera_link']
-    opt = d['tool0_to_camera_color_optical_frame']
-    return d, link, opt
+    try:
+        return d, d[LINK_KEY], d[OPT_KEY]
+    except KeyError:
+        alt = [k for k in d if k.startswith('tool0_to_')]
+        sys.exit(f'{path}: missing {LINK_KEY!r}/{OPT_KEY!r}; found {alt} - {HINT}')
 
 
 def quat_mean(quats):
