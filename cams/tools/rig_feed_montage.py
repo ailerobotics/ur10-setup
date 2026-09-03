@@ -24,8 +24,9 @@ from sensor_msgs.msg import Image
 
 # (role, topic, label). Order = left-to-right in the montage.
 FEEDS = [
-    ('wrist', '/wrist/color/image_raw', 'WRIST  D435i 018322070619'),
-    ('shelf', '/shelf/color/image_raw', 'SHELF  D415 024122061936'),
+    # wrist: the camera is mounted upside down; show the upright twin (rot180).
+    ('wrist', '/wrist/color_upright/image_raw', 'WRIST  D435i 018322070619 (upright)'),
+    ('shelf', '/shelf/color/image_raw', 'SHELF  D415 021422061772'),
     ('table', '/table/color/image_raw', 'TABLE  D415 025522060953'),
 ]
 TILE_W = 620           # per-feed display width; height follows the aspect ratio
