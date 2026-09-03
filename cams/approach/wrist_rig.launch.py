@@ -106,20 +106,36 @@ def _setup(context, *args, **kwargs):
     qx, qy, qz, qw = mount_guess_quat(roll)
     calib = LaunchConfiguration('calib').perform(context).strip()
     calib_file = None
+    cam_link = 'camera_link'          # guess path keeps the historical child frame
     if calib == 'auto':
+        # DATE-ONLY names, deliberately: a two-tag calibration also drops per-tag
+        # intermediates (tool0_to_camera_<date>-tag0.yaml) next to the final answer,
+        # and those are single-tag solves that were never cross-checked. A plain
+        # tool0_to_camera_*.yaml glob would happily pick the highest-numbered TAG file
+        # as "newest" and publish an unvalidated mount. Only the date-only file - the
+        # one a human chose - is eligible here.
         found = sorted(glob.glob(str(pathlib.Path(__file__).resolve().parent.parent
-                                     / 'cellmap' / 'calib' / 'tool0_to_camera_*.yaml')))
+                                     / 'cellmap' / 'calib'
+                                     / 'tool0_to_camera_[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].yaml')))
         calib_file = found[-1] if found else None
     elif calib not in ('', 'guess'):
         calib_file = calib
     if calib_file:
         import yaml
         d = yaml.safe_load(open(calib_file))['tool0_to_camera_link']
-        assert d['parent'] == 'tool0' and d['child'] == 'camera_link', calib_file
+        # The CHILD frame comes from the file, it is not assumed. The camera bring-up
+        # decides its own frame prefix (camera_link on the old standalone rig,
+        # wrist_link on the multi-camera rig), and publishing a mount transform onto
+        # the wrong child name yields a TF tree that looks fine and is silently
+        # disconnected from the images.
+        assert d['parent'] == 'tool0', f'{calib_file}: parent is {d["parent"]}, not tool0'
+        cam_link = d['child']
         xyz = [float(v) for v in d['xyz']]
         qx, qy, qz, qw = (float(v) for v in d['quaternion_xyzw'])
-        print(f'[wrist_rig] tool0->camera_link from CALIBRATION {calib_file}: '
-              f'xyz {xyz} rpy {d.get("rpy_deg")}')
+        src = yaml.safe_load(open(calib_file)).get('source', {})
+        print(f'[wrist_rig] tool0->{cam_link} from CALIBRATION {calib_file}: '
+              f'xyz {xyz} rpy {d.get("rpy_deg")}'
+              + (f' [solved on {src["image_topic"]}]' if src.get('image_topic') else ''))
     else:
         print('[wrist_rig] tool0->camera_link = mount GUESS (no calibration file'
               + (' found)' if calib == 'auto' else ', calib:=guess)'))
@@ -182,7 +198,7 @@ def _setup(context, *args, **kwargs):
         arguments=[
             '--x', str(xyz[0]), '--y', str(xyz[1]), '--z', str(xyz[2]),
             '--qx', str(qx), '--qy', str(qy), '--qz', str(qz), '--qw', str(qw),
-            '--frame-id', 'tool0', '--child-frame-id', 'camera_link',
+            '--frame-id', 'tool0', '--child-frame-id', cam_link,
         ],
     )
 

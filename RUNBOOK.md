@@ -292,6 +292,54 @@ DISPLAY=:0 XAUTHORITY=$(ls -t /tmp/xauth_* | head -1) cams/cellmap/run_rviz.sh
 cams/cellmap/scan_session.sh cell-$(date +%F)
 ```
 
+### Hand-eye recalibration (captain hands-on, ~20 min)
+
+Needed whenever the camera is unstrapped/remounted or the arm re-calibrated —
+the mount transform changes and the whole map shifts with it. **Recalibrate
+before re-scanning, never after.**
+
+```bash
+export ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+
+# 0. robot on the wire (§1-§4). If the pendant shows IDLE the brakes are on:
+printf 'power on\nquit\n'      | nc -w5 192.168.0.1 29999
+printf 'brake release\nquit\n' | nc -w5 192.168.0.1 29999   # ~15 s to RUNNING
+systemctl --user restart ur10-driver        # MANDATORY: a mode change drops RTDE
+
+# 1. freedrive (leave running; Ctrl-C releases and restores the trajectory ctrl)
+python3 cams/cellmap/tools/freedrive.py on
+
+# 2. one capture per tag — see cams/cellmap/README.md for the full command
+python3 -u cams/cellmap/handeye_calibrate.py --tag-id 0 ... --target 18
+python3 -u cams/cellmap/handeye_calibrate.py --tag-id 1 ... --target 18
+
+# 3. combine (refuses if the two tags disagree) + validate
+python3 cams/cellmap/tools/combine_tags.py calib/...-tag0.yaml calib/...-tag1.yaml
+python3 cams/cellmap/validate_tag1.py --optical wrist_color_upright_optical_frame ...
+```
+
+**Two things that will fool you, both seen live on 2026-09-03:**
+
+* `ros2 topic echo --once /io_and_status_controller/robot_mode` (and
+  `safety_mode`) is **latched-only** — 0 messages in 8 s of live subscription.
+  It replays a stale sample to every new subscriber and read `POWER_OFF` /
+  `ROBOT_EMERGENCY_STOP` while the robot was `IDLE` / `NORMAL`. **Use the
+  dashboard** (`printf 'robotmode\nsafetystatus\nquit\n' | nc -w5 192.168.0.1 29999`).
+* `/joint_states` at a perfect 125 Hz is **not** proof the feed is live. A
+  dropped RTDE link republishes the last packet forever: 0.000 mdeg range with
+  a true pose completely different from the one displayed. Check **jitter**
+  (live = 4-9 mdeg); the fix is `systemctl --user restart ur10-driver`.
+
+This CB3 (PolyScope 3.15.8) stays in mode 7 `RUNNING` during ROS freedrive —
+mode 6 `BACKDRIVE` is the pendant's own hand-guide state and is *not* expected
+here. There is no Local/Remote toggle to flip either; the dashboard rejects
+`is in remote control` as an unknown command. The only proof freedrive engaged
+is that the arm moves when pushed.
+
+Calibrate against the stream the map consumes: `/wrist/color_upright/*`
+(the wrist D435i is mounted upside down). Every result records its stream in a
+`source:` block — quote the stream whenever you quote the numbers.
+
 ### Re-scan (captain, ~15 min incl. calibration check)
 
 ```bash

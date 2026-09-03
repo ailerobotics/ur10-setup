@@ -1,0 +1,66 @@
+calibrated: '2026-09-03T21:16:19'
+combined_from:
+- tool0_to_camera_2026-09-03-tag0.yaml
+- tool0_to_camera_2026-09-03-tag1.yaml
+tag_ids:
+- 0
+- 1
+method: mean of two independent per-tag solves (park)
+source:
+  image_topic: /wrist/color_upright/image_raw
+  camera_info_topic: /wrist/color_upright/camera_info
+  optical_frame: wrist_color_upright_optical_frame
+  camera_link_frame: wrist_link
+  base_frame: base_link
+  tool_frame: tool0
+tool0_to_camera_link:
+  parent: tool0
+  child: wrist_link
+  xyz:
+  - 0.018075029983356358
+  - 0.05970854058787207
+  - 0.06291488432373066
+  quaternion_xyzw:
+  - -0.49944738697575386
+  - -0.5028219269678345
+  - -0.4977674875617883
+  - 0.49994994322418956
+  rpy_deg:
+  - 165.48369357541782
+  - -89.73040070075061
+  - 104.83470011321158
+tool0_to_camera_color_optical_frame:
+  parent: tool0
+  child: wrist_color_upright_optical_frame
+  xyz:
+  - 0.033159589488971915
+  - 0.05996195607857962
+  - 0.06305244592782665
+  quaternion_xyzw:
+  - -0.0027773295901497735
+  - 0.001836979236708891
+  - 0.008299129698541241
+  - 0.9999600173976351
+cross_tag_agreement:
+  translation_mm: 8.380126570511857
+  rotation_deg: 1.0583156929047486
+  tolerance_mm: 10.0
+  tolerance_deg: 2.0
+  within_tolerance: true
+per_tag:
+  tag0:
+    samples: 18
+    xyz:
+    - 0.019648195160226742
+    - 0.05602653222741241
+    - 0.061680138967700804
+    residual_mm: 2.6547175331424877
+    residual_deg: 1.2598693709047823
+  tag1:
+    samples: 18
+    xyz:
+    - 0.016501864806485973
+    - 0.06339054894833172
+    - 0.0641496296797605
+    residual_mm: 2.2350272698593012
+    residual_deg: 1.0017197902655162
