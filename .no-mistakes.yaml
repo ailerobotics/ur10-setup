@@ -1,0 +1,5 @@
+# no-mistakes repo config (read from the trusted default branch).
+# This repository has no CI checks, so the pipeline CI step treats zero
+# registered checks as all checks passed instead of polling for 7 days
+# waiting for checks that will never register. Remove this when real CI is added.
+no_ci: true
