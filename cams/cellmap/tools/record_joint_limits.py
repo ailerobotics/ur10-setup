@@ -50,6 +50,7 @@ USAGE
 """
 import argparse
 import collections
+import copy
 import datetime as dt
 import math
 import os
@@ -187,6 +188,69 @@ def write_limits_file(path, limits):
         f.write(body)
 
 
+def normalize_joint(name):
+    """Accept 'shoulder_lift' or 'shoulder_lift_joint'; return the full name."""
+    name = name.strip()
+    if name in JOINTS:
+        return name
+    if name + '_joint' in JOINTS:
+        return name + '_joint'
+    raise ValueError(f'unknown joint {name!r} (expected one of {JOINTS})')
+
+
+def merge_limits(existing, session_mins, session_maxs, joints, jitter_note, date=None):
+    """Targeted re-sweep merge: EXTEND only `joints` to cover the new session
+    extremes, keep every other joint exactly as it was.
+
+    The re-swept joints' raw window becomes the UNION of the file's existing
+    measured extremes and this session's extremes (min of mins, max of maxs) —
+    a re-sweep only ever widens, so a partial re-sweep can never silently
+    narrow a joint that was already measured further. Windows are recomputed
+    from those merged extremes using the FILE's own margin, so all joints keep
+    one consistent margin. Untouched joints (reference, window, provenance) are
+    copied through byte-for-byte. The merge is recorded under
+    measured.resweeps so the history survives.
+
+    Raises ValueError on an unknown joint, a missing/foreign existing file, or a
+    merged range <= 2*margin (which would invert the window).
+    """
+    date = date or dt.date.today().isoformat()
+    if 'reference_pose_rad' not in existing or 'window_deg' not in existing \
+            or 'measured' not in existing:
+        raise ValueError('the file to merge into is not a measured-limits file '
+                         '(missing reference_pose_rad / window_deg / measured)')
+    margin = float(existing['measured']['margin_deg'])
+    out = copy.deepcopy(existing)
+    ex_rad = out['measured'].setdefault('extremes_rad', {})
+    ex_deg = out['measured'].setdefault('extremes_deg', {})
+    changed = {}
+    for j in joints:
+        i = JOINTS.index(j)
+        old_lo = float(ex_rad[j]['min'])
+        old_hi = float(ex_rad[j]['max'])
+        lo = min(old_lo, float(session_mins[i]))
+        hi = max(old_hi, float(session_maxs[i]))
+        half_deg = math.degrees(0.5 * (hi - lo))
+        w = half_deg - margin
+        if w <= 0.0:
+            raise ValueError(f'{j}: merged range {math.degrees(hi-lo):.1f} deg <= 2*margin '
+                             f'({2*margin:.1f}); the margin would invert the window')
+        out['reference_pose_rad'][j] = round(0.5 * (lo + hi), 6)
+        out['window_deg'][j] = round(w, 4)
+        ex_rad[j] = {'min': round(lo, 6), 'max': round(hi, 6)}
+        ex_deg[j] = {'min': round(math.degrees(lo), 3), 'max': round(math.degrees(hi), 3)}
+        changed[j] = {'old_deg': [round(math.degrees(old_lo), 3), round(math.degrees(old_hi), 3)],
+                      'new_deg': ex_deg[j]}
+    out['measured'].setdefault('resweeps', []).append({
+        'date': date,
+        'joints': list(joints),
+        'jitter_evidence': jitter_note,
+        'margin_deg': margin,
+        'changed': changed,
+    })
+    return out, changed
+
+
 class Recorder(Node):
     def __init__(self):
         super().__init__('record_joint_limits')
@@ -279,7 +343,41 @@ def main(argv=None):
     ap.add_argument('--check', action='store_true',
                     help='READ-ONLY: verify the feed is live, print current values, '
                          'write nothing, exit. For the arm-still dry run.')
+    ap.add_argument('--merge', action='store_true',
+                    help='TARGETED RE-SWEEP: merge this session into the EXISTING --out '
+                         'file, updating ONLY the joints named in --joints (their windows '
+                         'are EXTENDED to cover the new extremes; every other joint is kept '
+                         'byte-for-byte). Requires --joints.')
+    ap.add_argument('--joints', default='',
+                    help='merge mode only: comma-separated joints to update, short or full '
+                         'name (e.g. "shoulder_lift,shoulder_pan").')
     a = ap.parse_args(argv)
+
+    merge_joints = None
+    existing_for_merge = None
+    if a.merge:
+        if not a.joints.strip():
+            print('--merge requires --joints (which joints were re-swept)', file=sys.stderr)
+            return 2
+        try:
+            merge_joints = [normalize_joint(x) for x in a.joints.split(',') if x.strip()]
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 2
+        if not os.path.exists(a.out):
+            print(f'--merge target {a.out} does not exist; nothing to merge into',
+                  file=sys.stderr)
+            return 2
+        try:
+            existing_for_merge = yaml.safe_load(open(a.out))
+            for j in merge_joints:                       # prove it is a measured-limits file
+                existing_for_merge['measured']['extremes_rad'][j]
+        except Exception as e:                           # noqa: BLE001
+            print(f'--merge target {a.out} is not a valid measured-limits file: {e}',
+                  file=sys.stderr)
+            return 2
+        print(f'MERGE mode: re-sweeping {merge_joints}; every other joint in {a.out} '
+              'is kept exactly as-is.')
 
     rclpy.init()
     node = Recorder()
@@ -330,22 +428,35 @@ def main(argv=None):
             return 1
 
         jitter_note += f'; min recent jitter while recording: {worst_recent:.3f} mdeg'
-        try:
-            limits = build_limits(mins, maxs, a.margin_deg, jitter_note,
-                                  method='global per-joint [min,max] over the session')
-        except ValueError as e:
-            print(f'REFUSING to write: {e}', file=sys.stderr)
-            return 1
-        write_limits_file(a.out, limits)
-        print(f'wrote {a.out}')
-        print(f'{"joint":20s} {"min deg":>9} {"max deg":>9} {"->window lo":>12} '
-              f'{"window hi":>10}  (window = measured shrunk {a.margin_deg:.1f} deg/side)')
+        if a.merge:
+            try:
+                limits, changed = merge_limits(existing_for_merge, mins, maxs,
+                                               merge_joints, jitter_note)
+            except ValueError as e:
+                print(f'REFUSING to merge: {e}', file=sys.stderr)
+                return 1
+            write_limits_file(a.out, limits)
+            print(f'merged re-swept joints into {a.out}')
+            for j, c in changed.items():
+                print(f'  {j}: window extremes {c["old_deg"]} -> '
+                      f'[{c["new_deg"]["min"]}, {c["new_deg"]["max"]}] deg')
+        else:
+            try:
+                limits = build_limits(mins, maxs, a.margin_deg, jitter_note,
+                                      method='global per-joint [min,max] over the session')
+            except ValueError as e:
+                print(f'REFUSING to write: {e}', file=sys.stderr)
+                return 1
+            write_limits_file(a.out, limits)
+            print(f'wrote {a.out}')
+        # unified summary from the final written file (works for both modes)
         ref, win = limits['reference_pose_rad'], limits['window_deg']
-        for i, j in enumerate(JOINTS):
-            lo = math.degrees(mins[i]); hi = math.degrees(maxs[i])
+        exd = limits['measured']['extremes_deg']
+        print(f'{"joint":20s} {"raw min":>9} {"raw max":>9} {"win lo":>9} {"win hi":>9}  (deg)')
+        for j in JOINTS:
             wlo = math.degrees(ref[j] - math.radians(win[j]))
             whi = math.degrees(ref[j] + math.radians(win[j]))
-            print(f'{j:20s} {lo:9.2f} {hi:9.2f} {wlo:12.2f} {whi:10.2f}')
+            print(f'{j:20s} {exd[j]["min"]:9.2f} {exd[j]["max"]:9.2f} {wlo:9.2f} {whi:9.2f}')
         return 0
     finally:
         node.destroy_node()

@@ -195,6 +195,99 @@ def test_make_limited_urdf_frozen_consumes_the_file():
         os.rmdir(tmpdir)
 
 
+# --- targeted re-sweep MERGE mode -----------------------------------------
+
+def test_normalize_joint_accepts_short_and_full():
+    assert rec.normalize_joint('shoulder_lift') == 'shoulder_lift_joint'
+    assert rec.normalize_joint('shoulder_lift_joint') == 'shoulder_lift_joint'
+    try:
+        rec.normalize_joint('elbow_flange')
+    except ValueError:
+        return
+    raise AssertionError('expected ValueError on unknown joint')
+
+
+def test_merge_extends_only_named_joint_keeps_others():
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base', date='2026-09-04')
+    smins, smaxs = list(mins), list(maxs)
+    smins[1] = -2.5   # shoulder_lift: extend below base min (-2.1)
+    smaxs[1] = 1.0    # and above base max (0.5)
+    merged, changed = rec.merge_limits(base, smins, smaxs, ['shoulder_lift_joint'],
+                                       'resweep evidence', date='2026-09-05')
+    # re-swept joint extended to the union of old and new extremes
+    er = merged['measured']['extremes_rad']['shoulder_lift_joint']
+    assert er['min'] == round(-2.5, 6) and er['max'] == round(1.0, 6)
+    # window recomputed = union shrunk by the FILE's margin (5 deg)
+    ref = merged['reference_pose_rad']['shoulder_lift_joint']
+    win = merged['window_deg']['shoulder_lift_joint']
+    lo = ref - math.radians(win)
+    hi = ref + math.radians(win)
+    assert math.isclose(lo, -2.5 + math.radians(5), abs_tol=1e-5)
+    assert math.isclose(hi, 1.0 - math.radians(5), abs_tol=1e-5)
+    # every OTHER joint kept byte-for-byte
+    for j in JOINTS:
+        if j == 'shoulder_lift_joint':
+            continue
+        assert merged['reference_pose_rad'][j] == base['reference_pose_rad'][j]
+        assert merged['window_deg'][j] == base['window_deg'][j]
+        assert merged['measured']['extremes_rad'][j] == base['measured']['extremes_rad'][j]
+    # provenance recorded
+    rs = merged['measured']['resweeps'][-1]
+    assert rs['joints'] == ['shoulder_lift_joint'] and rs['date'] == '2026-09-05'
+    assert changed['shoulder_lift_joint']['old_deg'][0] == round(math.degrees(-2.1), 3)
+
+
+def test_merge_never_narrows_a_joint():
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    smins, smaxs = list(mins), list(maxs)
+    smins[1], smaxs[1] = -2.0, 0.0   # NARROWER than base [-2.1, 0.5]
+    merged, _ = rec.merge_limits(base, smins, smaxs, ['shoulder_lift_joint'], 'x')
+    er = merged['measured']['extremes_rad']['shoulder_lift_joint']
+    assert er['min'] == round(-2.1, 6) and er['max'] == round(0.5, 6), 'union must not narrow'
+
+
+def test_merged_file_regenerates_limited_model():
+    """Req: the merged file must stay regenerable through make_limited_urdf --frozen."""
+    urdf_in = os.path.join(CUMOTION, 'ur10_calibrated.urdf')
+    xrdf_in = os.path.join(CUMOTION, 'ur10_map.xrdf')
+    script = os.path.join(CUMOTION, 'make_limited_urdf.py')
+    if not (os.path.exists(urdf_in) and os.path.exists(xrdf_in)):
+        print('SKIP merged round-trip: inputs missing')
+        return
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    smins, smaxs = list(mins), list(maxs)
+    smins[1], smaxs[1] = -2.6, 1.2
+    merged, _ = rec.merge_limits(base, smins, smaxs, ['shoulder_lift_joint'], 'resweep')
+    fd, path = tempfile.mkstemp(suffix='.yaml', prefix='merged_limits_')
+    os.close(fd)
+    rec.write_limits_file(path, merged)
+    tmpdir = tempfile.mkdtemp(prefix='mergeurdf_')
+    out_urdf = os.path.join(tmpdir, 'out.urdf')
+    out_xrdf = os.path.join(tmpdir, 'out.xrdf')
+    try:
+        r = subprocess.run(
+            [sys.executable, script, '--frozen', '--limits', path,
+             '--urdf', urdf_in, '--xrdf-in', xrdf_in,
+             '--out', out_urdf, '--xrdf-out', out_xrdf],
+            capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, f'make_limited_urdf on merged file failed:\n{r.stdout}\n{r.stderr}'
+        s = open(out_urdf).read()
+        m = re.search(r'<joint name="shoulder_lift_joint" type="revolute">.*?'
+                      r'<limit[^>]*lower="([-\d.eE+]+)"[^>]*upper="([-\d.eE+]+)"', s, re.S)
+        lo, hi = float(m.group(1)), float(m.group(2))
+        assert math.isclose(lo, -2.6 + math.radians(5), abs_tol=1e-4)
+        assert math.isclose(hi, 1.2 - math.radians(5), abs_tol=1e-4)
+    finally:
+        os.unlink(path)
+        for f in (out_urdf, out_xrdf):
+            if os.path.exists(f):
+                os.unlink(f)
+        os.rmdir(tmpdir)
+
+
 def _run_all():
     fns = [v for k, v in sorted(globals().items())
            if k.startswith('test_') and callable(v)]
