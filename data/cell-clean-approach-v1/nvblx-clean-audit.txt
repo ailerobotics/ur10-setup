@@ -1,0 +1,75 @@
+# nvblx_clean.py audit for cell-2026-09-04-cleaned.nvblx (captured 2026-09-04)
+
+The committed recipe (cumotion/maps/cell-2026-09-04-cleaned.md) re-run from the
+untouched original into a scratch file, with the tool's per-component audit:
+
+    python3 cams/cellmap/tools/nvblx_clean.py \
+        ~/ur10/cumotion/maps/cell-2026-09-03.nvblx /tmp/nvblx-audit/cell-2026-09-04-cleaned.nvblx \
+        --remove-box=-0.60,0.20,-0.32,0.50,-0.65,-0.10 --denoise --min-blocks 4 --self-check
+
+Every layer table (tsdf, color, esdf, occupancy, freespace, feature: rows and
+metadata) of the scratch output compared row-for-row IDENTICAL to the shipped
+~/ur10/cumotion/maps/cell-2026-09-04-cleaned.nvblx, so the 20 components below
+are exactly what the shipped map lost to --denoise. All coordinates base_link
+metres; "centre" = mean of the component's occupied (surface) voxel centres,
+"extent" = their bounding box. Block = 0.16 m, voxel = 0.02 m.
+
+---- verbatim tool output ----
+/home/manishsaini/ur10/cumotion/maps/cell-2026-09-03.nvblx -> /tmp/nvblx-audit/cell-2026-09-04-cleaned.nvblx
+  before: 11363 tsdf blocks, 91292 occupied voxels
+  crop:   1 box(es) -> cleared 18779 voxels, dropped 84 emptied blocks
+  denoise:removed 20 components (< 4 blocks) = 32 blocks — audit each one below (base_link m):
+    removed #1: 3 block(s), 10 voxel(s), centre (-0.852, -1.294, -0.602), extent x[-0.96,-0.76] y[-1.32,-1.24] z[-0.64,-0.54]
+    removed #2: 3 block(s), 28 voxel(s), centre (1.838, 0.561, -0.534), extent x[1.70,1.92] y[0.50,0.60] z[-0.62,-0.46]
+    removed #3: 2 block(s), 2 voxel(s), centre (-1.880, 2.390, 1.410), extent x[-1.90,-1.86] y[2.36,2.42] z[1.40,1.42]
+    removed #4: 2 block(s), 2 voxel(s), centre (-1.550, -0.030, 1.620), extent x[-1.66,-1.44] y[-0.14,0.08] z[1.58,1.66]
+    removed #5: 2 block(s), 2 voxel(s), centre (-0.870, -0.140, 1.970), extent x[-0.92,-0.82] y[-0.16,-0.12] z[1.86,2.08]
+    removed #6: 2 block(s), 7 voxel(s), centre (-0.810, -1.804, 0.276), extent x[-0.82,-0.80] y[-1.86,-1.72] z[0.24,0.30]
+    removed #7: 2 block(s), 3 voxel(s), centre (-0.390, -0.403, 1.703), extent x[-0.46,-0.32] y[-0.42,-0.38] z[1.64,1.78]
+    removed #8: 2 block(s), 15 voxel(s), centre (-0.375, -0.334, -0.617), extent x[-0.46,-0.30] y[-0.36,-0.32] z[-0.64,-0.58]
+    removed #9: 2 block(s), 19 voxel(s), centre (1.453, 0.703, 2.004), extent x[1.30,1.60] y[0.64,0.76] z[1.92,2.08]
+    removed #10: 2 block(s), 10 voxel(s), centre (1.546, -1.744, 1.372), extent x[1.44,1.60] y[-1.80,-1.66] z[1.34,1.40]
+    removed #11: 1 block(s), 1 voxel(s), centre (-1.610, -1.490, 0.910), extent x[-1.62,-1.60] y[-1.50,-1.48] z[0.90,0.92]
+    removed #12: 1 block(s), 2 voxel(s), centre (-1.180, -0.670, 1.960), extent x[-1.20,-1.16] y[-0.68,-0.66] z[1.94,1.98]
+    removed #13: 1 block(s), 2 voxel(s), centre (-1.050, 0.730, 1.540), extent x[-1.12,-0.98] y[0.72,0.74] z[1.52,1.56]
+    removed #14: 1 block(s), 1 voxel(s), centre (-0.990, -0.210, 0.810), extent x[-1.00,-0.98] y[-0.22,-0.20] z[0.80,0.82]
+    removed #15: 1 block(s), 1 voxel(s), centre (-0.870, -0.970, 0.450), extent x[-0.88,-0.86] y[-0.98,-0.96] z[0.44,0.46]
+    removed #16: 1 block(s), 1 voxel(s), centre (-0.590, -0.070, 1.690), extent x[-0.60,-0.58] y[-0.08,-0.06] z[1.68,1.70]
+    removed #17: 1 block(s), 6 voxel(s), centre (-0.560, -1.237, 0.767), extent x[-0.58,-0.54] y[-1.26,-1.20] z[0.74,0.78]
+    removed #18: 1 block(s), 1 voxel(s), centre (-0.210, 0.690, 1.510), extent x[-0.22,-0.20] y[0.68,0.70] z[1.50,1.52]
+    removed #19: 1 block(s), 1 voxel(s), centre (0.590, 0.070, 1.270), extent x[0.58,0.60] y[0.06,0.08] z[1.26,1.28]
+    removed #20: 1 block(s), 1 voxel(s), centre (1.910, -1.670, 1.050), extent x[1.90,1.92] y[-1.68,-1.66] z[1.04,1.06]
+  after:  11247 tsdf blocks, 90778 occupied voxels (-116 blocks, -514 voxels)
+  self-check: OK — no occupied voxel remains in any --remove-box
+---- end of tool output ----
+
+Where they sit, for the operator's check that none is a real small object
+(a carton spans 1-3 blocks):
+
+  floor level (z <= -0.53, the floor plane is z ~ -0.64):   #1 #2 #8
+  ceiling height (z >= 1.86, the ceiling plane is z ~ 2.0): #5 #9 #12
+  mid-air, 1-10 voxels each, z 0.28..1.70:                  #3 #4 #6 #7 #10 #11 #13 #14 #15 #16 #17 #18 #19 #20
+
+Largest mid-air removal: #10, 10 voxels / 2 blocks, ~16x14x6 cm extent at
+base_link ~(1.55, -1.74, 1.37) — a floating artefact in the map's far +x/-y
+corner, 2.18 m from the tool path and outside the workspace. Largest overall:
+#2 (28 voxels, on the floor plane at the +x edge) and ceiling #9 (19 voxels).
+
+Nearest approach of the plan's tool0 path (cams/cellmap/plans/tag1-shelf-cumotion.yaml,
+tool_path, 313 points) to each removed component's centre. This is the tool
+point, NOT the arm-sweep clearance; it only says which specks the demo passes
+near, so the captain knows where to look when clearing the cell:
+
+  #17  0.35 m (point  39)  6 voxels at (-0.56, -1.24, +0.77): above the table, ~0.8 m above tag 1 (0.5 m above the hover start), on the plan's climb
+  #18  0.40 m (point 228)  1 voxel  at (-0.21, +0.69, +1.51): above the shelf standoff
+  #15  0.41 m (point  12)  1 voxel  at (-0.87, -0.97, +0.45): above the table beside tag 1
+  #7   0.56 m (point 130)  3 voxels at (-0.39, -0.40, +1.70)
+  #16  0.60 m (point 145)  1 voxel  at (-0.59, -0.07, +1.69)
+  #19  0.70 m (point 185)  1 voxel  at (+0.59, +0.07, +1.27)
+  #14  0.78 m (point 113)  1 voxel  at (-0.99, -0.21, +0.81)
+  #6   0.81 m (point   0)  7 voxels at (-0.81, -1.80, +0.28): past the table's -y edge
+  all others >= 0.95 m from the tool path.
+
+Tool-point distance is not an arm-sweep check; the arm-sweep clearances that
+matter are in plan-clearance-checks.md. The cell must still be physically clear
+of anything unscanned before execution (cell-2026-09-04-cleaned.md, "Inherited").

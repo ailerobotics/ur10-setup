@@ -1,0 +1,33 @@
+/home/manishsaini/ur10/cumotion/maps/cell-2026-09-04-cleaned.ply: 125384 vertices
+  extent x -1.91..+1.91  y -1.91..+2.55  z -0.63..+2.07 m
+
+(a) table height : dominant plane z -0.070..-0.060 m (4523 pts) vs tag boards at -0.0535 -> 11 mm
+    (board thickness + one 20 mm voxel is expected; > ~40 mm means STOP)
+
+(b) vertical faces beyond y 0.8 (ascending; bins >= 794 pts):
+      y 1.12..1.14     827 pts
+      y 1.28..1.30     970 pts
+      y 1.44..1.46    1056 pts
+      y 1.60..1.62    1463 pts
+      y 1.62..1.64    1824 pts
+      y 1.64..1.66    3766 pts
+      ... and 12 further bins out to y 1.94
+    FIRST face at y ~ 1.13 m vs measured gondola front 1.516 -> 386 mm
+    (the densest bins further out are the wall behind the shelf)
+
+(d) tag anchors  : mapped surface at the calibration-measured tag centres
+      tag0   [+0.116 -1.058 -0.057]  nearest  11.1 mm, 102 pts within 100 mm, median z -0.0609 (dz 4 mm)
+      tag1   [-0.506 -1.058 -0.057]  nearest  11.3 mm, 103 pts within 100 mm, median z -0.0622 (dz 5 mm)
+    (a board is ~3 mm thick and a voxel is 20 mm, so ~10 mm is agreement;
+     tens of mm means the mount extrinsic is wrong - do NOT ship the map)
+
+(c) arm absent   : nearest mapped point to each live link origin
+      shoulder_link    0.518 m
+      upper_arm_link   0.518 m
+      forearm_link     0.454 m
+      wrist_1_link     0.322 m
+      wrist_2_link     0.315 m
+      wrist_3_link     0.327 m
+      tool0            0.327 m
+    (link radii are 0.06-0.08 m; anything under ~0.15 m on a MOVING
+     link means the segmenter let the arm into its own map)

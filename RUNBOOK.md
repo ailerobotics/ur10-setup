@@ -262,6 +262,87 @@ systemctl --user stop ur10-cumotion; docker stop ur10-cumotion
 systemd-run --user --unit=ur10-cumotion -p Restart=on-failure -p RestartSec=15 ~/ur10/cumotion/start_cumotion.sh
 ```
 
+### Clean an existing map in place (no re-scan)
+
+To make a map usable for planning without re-scanning — e.g. drop the
+robot base/pedestal (the fixed base is not masked during a scan, so it stands in
+the map as a phantom obstacle where every plan starts) and isolated speckle:
+
+```bash
+# writes a NEW cleaned .nvblx; the original is left untouched for rollback
+python3 cams/cellmap/tools/nvblx_clean.py \
+    ~/ur10/cumotion/maps/cell-2026-09-03.nvblx \
+    ~/ur10/cumotion/maps/cell-2026-09-04-cleaned.nvblx \
+    --remove-box=-0.60,0.20,-0.32,0.50,-0.65,-0.10 \
+    --denoise --min-blocks 4 --self-check
+```
+
+A `.nvblx` is a SQLite DB; the tool zeroes the TSDF weight of voxels whose centre
+is inside a base_link box (voxel-precise) and drops small isolated blocks — no
+ROS, no rig (colocated `test_nvblx_clean.py`). cuMotion recomputes the ESDF it
+plans against from the TSDF, so editing the TSDF is what the planner sees. The
+tool refuses an output that already exists (`--force` replaces a previous cleaned
+map; the source file is never the target). `--denoise` prints one audit line per
+removed component (base_link centre, extent, block count): unobserved space reads
+as FREE to the planner, so confirm each one is mid-air speckle and not a real
+small object (a carton spans 1–3 blocks at 0.16 m), and protect anything real
+with `--keep-box=x0,x1,y0,y1,z0,z1`. Audit of the shipped cleaned map:
+`data/cell-clean-approach-v1/nvblx-clean-audit.txt`. The
+cleaned file becomes operational automatically (loaders take the newest
+`cell-*.nvblx`). ALWAYS re-verify before trusting it:
+
+```bash
+# load into the planner (must say "cell map loaded … starting cuMotion", no "World update failed")
+~/ur10/cumotion/start_cumotion_map.sh cell-2026-09-04-cleaned.nvblx
+# regenerate the mesh from the loaded map, then check tags/table/arm
+docker exec ur10-cumotion bash -lc 'source /opt/ros/jazzy/setup.bash && \
+    python3 /cellmap/tools/map_ctl.py ply /tmp/cleaned.ply'
+docker cp ur10-cumotion:/tmp/cleaned.ply ~/ur10/cumotion/maps/cell-2026-09-04-cleaned.ply
+python3 cams/cellmap/tools/verify_map.py ~/ur10/cumotion/maps/cell-2026-09-04-cleaned.ply \
+    --tag tag0=0.1157,-1.0578,-0.0565 --tag tag1=-0.5057,-1.0575,-0.0572
+# table + both tags must still read ~11 mm; arm/base absent. Descriptor: cumotion/maps/cell-2026-09-04-cleaned.md
+```
+
+Cleaning is NOT a substitute for re-scanning when geometry actually moved — it
+only removes what is already in the map. Re-scan per the rules below.
+
+### Reduced joint windows (only if the pneumatic line / wire strap is on the arm)
+
+Whether the line is on the arm, and whether the captain-confirmed shoulder_pan
+±120° still stands, is the captain's call. When it is on, every plan that will
+be executed must be checked against per-joint windows in the
+`reference_pose_rad` + `window_deg` schema of `cumotion/pneumatic_limits.yaml`
+(`plan_test.py --joint-limits`, `execute_plan.py --limits`; both refuse to start
+on any other schema). PREFERRED source: the MEASURED hand-sweep limits file
+(task joint-limits-freedrive-v1, once it exists — its definitive command belongs
+here). Otherwise regenerate the proposal windows around the LIVE park pose:
+
+```bash
+# reads live /joint_states (no motion); writes a NEW timestamped windows file and
+# REFUSES to overwrite an existing one (a measured file is never replaced).
+# --out/--xrdf-out MUST be given explicitly (fresh or /tmp path): the generator's
+# DEFAULTS are the repo files cumotion/ur10_pneumatic.urdf/.xrdf, which
+# run_live.sh (cams/cellmap/live.launch.py) loads as the live-avoidance
+# planner's robot description — never overwrite them. Do NOT start the map
+# planner on the generated XRDF either: it drops shoulder_link/upper_arm_link
+# from world collision (a pedestal workaround, obsolete on a cleaned map). The
+# map planner stays on ur10_map.xrdf.
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 ~/ur10/cumotion/make_limited_urdf.py \
+    --out /tmp/ur10_pneumatic.urdf --xrdf-out /tmp/ur10_pneumatic.xrdf \
+    --write-limits ~/ur10/cumotion/pneumatic_limits_live-$(date +%Y%m%d-%H%M).yaml
+```
+
+`run_live.sh` itself defaults to those same `ur10_pneumatic.*` files (the
+2026-08-28 pedestal workaround with shoulder/upper_arm excluded from world
+collision). On the cleaned map that exclusion is no longer needed; pointing the
+live launch at the full model (`urdf:=/cfg/ur10_calibrated.urdf
+xrdf:=/cfg/ur10_map.xrdf`) is a captain decision and is not changed here.
+
+Then re-validate on a FRESH label with `--joint-limits <that file>` and require
+both `--check-box` sweeps ≥ 0 (`cams/cellmap/README.md` §5), and execute only
+with `execute_plan.py --exact --limits <that file>`. `--frozen` centres the
+windows on the yaml's 2026-08-28 reference pose — never use it for execution.
+
 ### When to re-scan
 
 - Anything the arm can reach was moved, added or removed. The map is a

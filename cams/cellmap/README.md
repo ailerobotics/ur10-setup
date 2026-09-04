@@ -38,6 +38,7 @@ recorded in `cellmap-report.html` as they happen.
 | `planner.launch.py` | container `ur10-cumotion` | nvblox (serves the saved map, no camera) → `load_map` → cuMotion `read_esdf_world:=true` |
 | `../../cumotion/start_cumotion_map.sh` | host | opt-in sibling of `start_cumotion.sh`; newest `cell-*.nvblx` |
 | `../../cumotion/ur10_map.xrdf` | container | world buffers 0.04 m on forearm/wrists/tool, 0.02 on shoulder/upper arm (why: below) |
+| `tools/nvblx_clean.py` (+ `tools/test_nvblx_clean.py`) | host, no ROS | clean a saved `.nvblx` in place: voxel-precise `--remove-box` crop-out + isolated-block `--denoise`, NEW file, `--self-check`; offline test on a synthetic map (§5, `RUNBOOK.md` §10) |
 | `tools/plan_test.py` | host | plan-only legs (joint or **pose** goal, `--start-from` chaining), FK tool path, arm-sweep clearance vs a box, plots |
 | `tools/fake_depth.py` | host | synthetic depth camera + TF for the bench rehearsal |
 
@@ -492,6 +493,81 @@ Acceptance: a cardboard box scanned on the straight line between two poses →
 the plan routes around it (arm-sweep clearance ≥ 0 via `--recheck
 --check-box`); box removed + re-scan → the plan straightens. Execution stays
 captain-confirmed (approach demo rules, ≤ 0.05 scaling).
+
+### 5. Clean a map in place, then plan AprilTag 1 → shelf (2026-09-04)
+
+Clean-in-place instead of re-scanning when the map is right but carries an
+unwanted obstacle — here the robot base/pedestal (never masked during a scan)
+plus isolated speckle. `tools/nvblx_clean.py` edits the `.nvblx` SQLite TSDF
+directly (voxel-precise box crop-out + isolated-block denoise), writes a NEW
+file, leaves the original for rollback, and self-checks; offline test
+`tools/test_nvblx_clean.py` (no rig). Full procedure and verify commands:
+`RUNBOOK.md` §10 "Clean an existing map in place". Descriptor +
+before/after evidence: `cumotion/maps/cell-2026-09-04-cleaned.md`.
+
+Collision-aware demo against the cleaned map — hover above AprilTag 1 (base_link
+−0.506, −1.058, −0.057) to a standoff short of the gondola shelf, tool held as
+parked, plan-only:
+
+```bash
+cumotion/start_cumotion_map.sh cell-2026-09-04-cleaned.nvblx        # ur10_map.xrdf = full collision model
+# Always a FRESH label: plan_test.py writes plans/<label>.yaml unconditionally
+# and cuMotion trajopt is not bit-deterministic, so re-using the label
+# tag1-shelf-cumotion would replace the committed VALIDATED plan (and drop its
+# box_check) with an un-swept re-plan. Never re-use that label.
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
+    --label tag1-shelf-replan --pipeline isaac_ros_cumotion \
+    --start-joints 1.2971236651069784,-3.0399117660822967,-0.2455590220532742,5.930127513948878,-1.1606540077724152,-0.5524234521170055 \
+    --goal-pose=-0.10,0.80,0.95 --pose-goal
+#   --start-joints = the committed plan's start_joints, so the re-validation
+#   checks exactly its start -> goal wherever the arm is parked. (The original
+#   run used --start-pose=-0.506,-1.058,0.25, which solves IK from the LIVE
+#   joints and can pick a different branch — use that only for a NEW route.)
+#   pneumatic line on the arm? add --joint-limits <windows yaml> (RUNBOOK §10
+#   "Reduced joint windows"); the planner stays on ur10_map.xrdf regardless.
+# Then BOTH arm-sweep clearances on that label must be >= 0 (each run overwrites
+# the label's single box_check slot):
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
+    --recheck tag1-shelf-replan --check-box=-1.0,1.0,-1.92,-0.90,-0.12,-0.03    # table slab
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
+    --recheck tag1-shelf-replan --check-box=-0.6,0.4,1.10,1.94,0.45,1.55       # shelf / cartons
+```
+
+The committed `plans/tag1-shelf-cumotion.yaml` was produced once, on 2026-09-04,
+by that same plan command under `--label tag1-shelf-cumotion`: cuMotion arcs up
+over the table and stops short of the shelf — 1.27× straight line, +13.7 cm to
+the shelf/carton volume, +4.8 cm to the table (both `--recheck --check-box`
+commands + outputs, and why the yaml keeps only the last one:
+`data/cell-clean-approach-v1/plan-clearance-checks.md`). Cross-checked vs live
+wrist-cam carton detections (base_link y≈1.13–1.32) — the map shelf is where
+the cartons really are. That yaml is the collision-validated EVIDENCE for the
+demo, NOT an executable plan: it drives wrist_1 to 355.1° (100 of 313 waypoints
+above 350°, 61 above the 353.2° bind the captain measured by hand-sweep in task
+joint-limits-freedrive-v1 — that task's measured-limits file is its deliverable
+and is not in this branch), so it must not be sent to the arm; the executable
+plan and captain command come from that task. Re-runs must use a different
+label.
+
+`plans/tag1-shelf-ompl.yaml` is the failed MAP-BLIND OMPL baseline for the same
+tag 1 → shelf start/goal, planned minutes before the cuMotion run: OMPL rewound
+shoulder_pan 215° and `plan_test.py`'s 170° rewind guard refused it
+(`error_code: -170`, no joint path kept). The MoveIt planning scene on this rig
+is empty (`RUNBOOK.md` §8b), so only cuMotion (`read_esdf_world`) sees the map
+and OMPL plans blind to it — which is why the seeded, guarded cuMotion plan is
+the safe one. An independent planner benchmark on 2026-09-04 reproduced the same
+result.
+
+Cross-check the map's shelf against reality with the wrist (hand-eye-calibrated)
+camera, not the shelf cam — only the wrist places detections in base_link. If
+the mount TF is not up (`zz_rigcams` runs without it), restore it with
+`tools/publish_mount.py calib/tool0_to_camera_<date>.yaml
+--key tool0_to_camera_color_optical_frame` (TF only, touches no camera). The
+eye-level parked view boxes shelf *boards* as `tray`, not the cartons (recorded
+viewpoint limitation) — per-carton confirmation lands during the captain's
+approach. Captain execute + safety checklist: prepared per run in the task's
+`data/cell-clean-approach-v1/captain-execute-note.md` — SUPERSEDED for execution
+(wrist_1 exceeds the measured bind); kept as the collision-evidence record and
+safety-checklist reference for task joint-limits-freedrive-v1's executable plan.
 
 ## Traps hit
 

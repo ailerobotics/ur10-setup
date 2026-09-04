@@ -16,7 +16,9 @@ Guards, all of which abort before any motion:
   * live start must equal the validated plan's start (the arm must not have
     been touched since validation)
   * re-planned path must match the validated path within --tol-rad
-  * every waypoint must sit inside the pneumatic windows
+  * every waypoint must sit inside the joint windows of the mandatory
+    --limits FILE (reference_pose_rad + window_deg); there is no bypass — a
+    bench / no-line case is served by a wider limits file, never by skipping
   * robot must be RUNNING/NORMAL with its program up and speed scaling > 0
 During motion it watches the tracking error and cancels the goal on any
 excursion beyond --max-track-rad.
@@ -25,7 +27,6 @@ excursion beyond --max-track-rad.
 """
 import argparse
 import math
-import os
 import sys
 import time
 
@@ -53,7 +54,7 @@ class Exec(Node):
                                  lambda m: self.js.update(zip(m.name, m.position)), 20)
         self.prog = None
         self.scaling = None
-        from std_msgs.msg import Bool, Float64
+        from std_msgs.msg import Bool
         self.create_subscription(Bool, '/io_and_status_controller/robot_program_running',
                                  lambda m: setattr(self, 'prog', m.data), 5)
         self.mg = ActionClient(self, MoveGroup, '/cumotion/move_group')
@@ -112,7 +113,9 @@ class Exec(Node):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('plan')
-    ap.add_argument('--limits', required=True)
+    ap.add_argument('--limits', required=True,
+                    help='joint windows yaml (reference_pose_rad + window_deg): '
+                         'refuse any waypoint outside them')
     ap.add_argument('--tol-rad', type=float, default=0.02,
                     help='max joint-space deviation of the re-planned path from the '
                          'validated one before this refuses to run')

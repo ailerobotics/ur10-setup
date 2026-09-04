@@ -1,0 +1,22 @@
+{
+  "model": "/root/weights/tray_v5_best.pt",
+  "updated": 1788527205.5542102,
+  "classes_seen": {
+    "tray": 118
+  },
+  "last_frame_accepted": [],
+  "carton_clusters": [
+    {
+      "xyz_base": [
+        -0.442,
+        1.138,
+        1.24
+      ],
+      "hits": 40,
+      "max_conf": 0.5,
+      "cls": {
+        "tray": 40
+      }
+    }
+  ]
+}

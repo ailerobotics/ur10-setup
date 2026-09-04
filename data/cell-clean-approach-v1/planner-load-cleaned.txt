@@ -1,0 +1,2 @@
+[load_map-2] load /mapdir/cell-2026-09-04-cleaned.nvblx: OK (79.4 MB) in 1.5 s
+[INFO] [launch.user]: cell map loaded: /mapdir/cell-2026-09-04-cleaned.nvblx -> starting cuMotion (read_esdf_world=true, xrdf /cfg/ur10_map.xrdf)
