@@ -38,6 +38,7 @@ recorded in `cellmap-report.html` as they happen.
 | `planner.launch.py` | container `ur10-cumotion` | nvblox (serves the saved map, no camera) → `load_map` → cuMotion `read_esdf_world:=true` |
 | `../../cumotion/start_cumotion_map.sh` | host | opt-in sibling of `start_cumotion.sh`; newest `cell-*.nvblx` |
 | `../../cumotion/ur10_map.xrdf` | container | world buffers 0.04 m on forearm/wrists/tool, 0.02 on shoulder/upper arm (why: below) |
+| `tools/nvblx_clean.py` (+ `tools/test_nvblx_clean.py`) | host, no ROS | clean a saved `.nvblx` in place: voxel-precise `--remove-box` crop-out + isolated-block `--denoise`, NEW file, `--self-check`; offline test on a synthetic map (§5, `RUNBOOK.md` §10) |
 | `tools/plan_test.py` | host | plan-only legs (joint or **pose** goal, `--start-from` chaining), FK tool path, arm-sweep clearance vs a box, plots |
 | `tools/fake_depth.py` | host | synthetic depth camera + TF for the bench rehearsal |
 

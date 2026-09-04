@@ -27,7 +27,6 @@ excursion beyond --max-track-rad.
 """
 import argparse
 import math
-import os
 import sys
 import time
 
@@ -55,7 +54,7 @@ class Exec(Node):
                                  lambda m: self.js.update(zip(m.name, m.position)), 20)
         self.prog = None
         self.scaling = None
-        from std_msgs.msg import Bool, Float64
+        from std_msgs.msg import Bool
         self.create_subscription(Bool, '/io_and_status_controller/robot_program_running',
                                  lambda m: setattr(self, 'prog', m.data), 5)
         self.mg = ActionClient(self, MoveGroup, '/cumotion/move_group')

@@ -167,7 +167,6 @@ class TrayProbe(Node):
                                       dets=accepted))
         if now - self._last_log > LOG_EVERY_S:
             self._last_log = now
-            base_pts = [d['xyz_base'] for d in accepted if d['xyz_base']]
             self.get_logger().info(
                 f'accepted={len(accepted)} '
                 + '; '.join(f"{d['cls']}:{d['conf']:.2f}"
