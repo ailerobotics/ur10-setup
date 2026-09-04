@@ -516,7 +516,12 @@ cumotion/start_cumotion_map.sh cell-2026-09-04-cleaned.nvblx        # ur10_map.x
 # box_check) with an un-swept re-plan. Never re-use that label.
 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
     --label tag1-shelf-replan --pipeline isaac_ros_cumotion \
-    --start-pose=-0.506,-1.058,0.25 --goal-pose=-0.10,0.80,0.95 --pose-goal
+    --start-joints 1.2971236651069784,-3.0399117660822967,-0.2455590220532742,5.930127513948878,-1.1606540077724152,-0.5524234521170055 \
+    --goal-pose=-0.10,0.80,0.95 --pose-goal
+#   --start-joints = the committed plan's start_joints, so the re-validation
+#   checks exactly its start -> goal wherever the arm is parked. (The original
+#   run used --start-pose=-0.506,-1.058,0.25, which solves IK from the LIVE
+#   joints and can pick a different branch — use that only for a NEW route.)
 #   pneumatic line on the arm? add --joint-limits <windows yaml> (RUNBOOK §10
 #   "Reduced joint windows"); the planner stays on ur10_map.xrdf regardless.
 # Then BOTH arm-sweep clearances on that label must be >= 0 (each run overwrites

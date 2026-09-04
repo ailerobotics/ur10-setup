@@ -35,8 +35,10 @@ row-major voxels[x][y][z], so linear L -> vx=L//64, vy=(L//8)%8, vz=L%8, and the
 voxel centre is ((block_index*8 + v + 0.5) * voxel_size) in base_link.
 
   nvblx_clean.py in.nvblx out.nvblx \
-      --remove-box -0.60,0.20,-0.32,0.50,-0.65,-0.10 --denoise --self-check
-  nvblx_clean.py in.nvblx out.nvblx --remove-box x0,x1,y0,y1,z0,z1   # repeatable
+      --remove-box=-0.60,0.20,-0.32,0.50,-0.65,-0.10 --denoise --self-check
+  nvblx_clean.py in.nvblx out.nvblx --remove-box=x0,x1,y0,y1,z0,z1   # repeatable
+(use the --flag=value form: a box whose first number is negative is otherwise
+read by argparse as an option and rejected with "expected one argument")
 
 Runs anywhere Python + sqlite3 reach the file — no ROS, no rig (see
 test_nvblx_clean.py). Confirm the cleaned map on the planner separately with

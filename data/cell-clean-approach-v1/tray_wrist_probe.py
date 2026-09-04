@@ -23,6 +23,9 @@ snapshot of the parked arm, tool0_to_camera_2026-09-03.yaml + live TF):
 --secs 0 runs forever (background); >0 runs a bounded probe then exits. Without
 --base-tf the mount TF must be up (cams/cellmap/tools/publish_mount.py) so
 optical->base_link resolves live; the JSON dump records which base_tf was used.
+Caveat: the committed tray-detections-base_link.json predates the base_tf /
+base_tf_note dump fields (it was written by the earlier _dump()); the --base-tf
+it used is the value in the invocation above.
 """
 import argparse
 import collections

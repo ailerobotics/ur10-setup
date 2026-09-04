@@ -156,10 +156,15 @@ source /opt/ros/jazzy/setup.bash
 # 1 — DRY RUN: confirm the live stack (arm, cleaned map, full collision model)
 #     still plans this start -> goal. Plan-only, no motion. FRESH label — the
 #     committed tag1-shelf-cumotion.yaml is not touched and is what executes.
-#     If the pneumatic line is on the arm, add --joint-limits <file> (conditional prerequisite).
+#     --start-joints is the committed plan's exact start (its start_joints), so
+#     this checks the same start -> goal wherever the arm is parked right now
+#     (--start-pose would re-solve IK from the live joints and can land on a
+#     different branch). If the pneumatic line is on the arm, add
+#     --joint-limits <file> (conditional prerequisite).
 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 \
   ~/ur10/cams/cellmap/tools/plan_test.py --label tag1-shelf-dryrun \
-  --pipeline isaac_ros_cumotion --start-pose=-0.506,-1.058,0.25 \
+  --pipeline isaac_ros_cumotion \
+  --start-joints 1.2971236651069784,-3.0399117660822967,-0.2455590220532742,5.930127513948878,-1.1606540077724152,-0.5524234521170055 \
   --goal-pose=-0.10,0.80,0.95 --pose-goal
 #   must print "OK: … points"; a REFUSED / planning failure = STOP (something in
 #   the cell or the stack has changed since validation).
@@ -171,12 +176,13 @@ ros2 service call /io_and_status_controller/set_speed_slider \
 # 3 — EXECUTE the COMMITTED validated waypoints at 0.05 scaling (--exact sends
 #     the approved path itself). Exactly one of the two limit flags:
 #       pneumatic line ON the arm  -> LIMITS="--limits <file>"  (conditional prerequisite passed)
-#       NO pneumatic line          -> LIMITS="--no-limits"       (your explicit, deliberate confirmation;
-#                                                                execute_plan.py refuses to start with neither)
+#       NO pneumatic line          -> LIMITS="--no-limits"       (your explicit, deliberate confirmation)
+#     LIMITS is deliberately EMPTY below: pasted unmodified, execute_plan.py
+#     refuses to start (neither flag given) — nothing moves until you set it.
 #     Guards that still abort before motion: live start must match the plan's
 #     start, program running, waypoints inside the windows when --limits is
 #     given; tracking-error cancel during motion.
-LIMITS="--no-limits"          # or: LIMITS="--limits <file from the conditional prerequisite>"
+LIMITS=    # SET ME: "--no-limits" (no pneumatic line on the arm) or "--limits <file>" (conditional prerequisite passed)
 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 \
   ~/ur10/cams/cellmap/tools/execute_plan.py \
   ~/ur10/cams/cellmap/plans/tag1-shelf-cumotion.yaml \
