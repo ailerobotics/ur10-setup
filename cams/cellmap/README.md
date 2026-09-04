@@ -541,10 +541,11 @@ commands + outputs, and why the yaml keeps only the last one:
 wrist-cam carton detections (base_link y≈1.13–1.32) — the map shelf is where
 the cartons really are. That yaml is the collision-validated EVIDENCE for the
 demo, NOT an executable plan: it drives wrist_1 to 355.1° (100 of 313 waypoints
-above 350°, 61 above the captain-measured 353.2° bind in
-`cumotion/measured_joint_limits.yaml`, task joint-limits-freedrive-v1), so it
-must not be sent to the arm; the executable plan and captain command come from
-that task. Re-runs must use a different label.
+above 350°, 61 above the 353.2° bind the captain measured by hand-sweep in task
+joint-limits-freedrive-v1 — that task's measured-limits file is its deliverable
+and is not in this branch), so it must not be sent to the arm; the executable
+plan and captain command come from that task. Re-runs must use a different
+label.
 
 Cross-check the map's shelf against reality with the wrist (hand-eye-calibrated)
 camera, not the shelf cam — only the wrist places detections in base_link. If

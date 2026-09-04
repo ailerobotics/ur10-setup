@@ -58,7 +58,9 @@ NVOX = VPS ** 3             # 512
 
 # Per-layer voxel struct. `weight_off` is the byte offset of the float weight
 # whose zeroing marks a voxel unobserved; None means "no per-voxel clear, drop
-# the whole block if it falls in the box" (used for any unexpected layer).
+# the whole block if it falls in the box". Any <name>_layer_data table not
+# listed here gets UNKNOWN_LAYER, the same drop-the-block treatment, so no
+# layer can keep a block the TSDF no longer has.
 LAYERS = {
     'tsdf':      dict(bytes=8, weight_off=4),   # {f4 distance, f4 weight}
     'color':     dict(bytes=8, weight_off=4),   # {u1 r,g,b,a, f4 weight}
@@ -67,13 +69,20 @@ LAYERS = {
     'esdf':      dict(bytes=None, weight_off=None),
     'feature':   dict(bytes=None, weight_off=None),
 }
+UNKNOWN_LAYER = dict(bytes=None, weight_off=None)
+_SUFFIX = '_layer_data'
 
 
 def layer_tables(con):
-    """Layer names that actually exist as <name>_layer_data tables."""
-    have = {r[0] for r in con.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '%_layer_data'")}
-    return [name for name in LAYERS if f'{name}_layer_data' in have]
+    """Every layer name present as a <name>_layer_data table, known or not."""
+    names = [r[0][:-len(_SUFFIX)] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE ?",
+        (f'%{_SUFFIX}',))]
+    return sorted(names, key=lambda n: (n != 'tsdf', n))
+
+
+def layer_spec(name):
+    return LAYERS.get(name, UNKNOWN_LAYER)
 
 
 def block_size(con, layer):
@@ -141,7 +150,7 @@ def crop_boxes(con, boxes, surf_band):
         for name in tables:
             if name == 'tsdf':
                 continue
-            spec = LAYERS[name]
+            spec = layer_spec(name)
             row = con.execute(
                 f"SELECT data FROM {name}_layer_data WHERE index_x=? AND index_y=? AND index_z=?",
                 (ix, iy, iz)).fetchone()

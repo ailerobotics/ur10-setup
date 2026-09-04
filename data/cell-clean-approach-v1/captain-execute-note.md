@@ -1,16 +1,19 @@
 # Captain execute note — AprilTag 1 → shelf approach, cleaned map (2026-09-04)
 
-> ## ⛔ SUPERSEDED — NOT FOR EXECUTION
+> ## ⛔ SUPERSEDED — EVIDENCE ONLY, NOT FOR EXECUTION
 >
-> The committed plan `cams/cellmap/plans/tag1-shelf-cumotion.yaml` drives
-> **wrist_1 to 355.1°** (point 129 of 313; 100 of the 313 waypoints are above
-> 350°). That is **4.9° from the ±360° mechanical stop** and **EXCEEDS the
-> captain-measured wrist_1 bind of 353.2°** (raw; 348.2° effective with its 5°
-> margin — `cumotion/measured_joint_limits.yaml`, task joint-limits-freedrive-v1;
-> 61 waypoints sit above the raw bind). **This plan and this note's execute path
-> MUST NOT be executed.** No runnable execute command remains in this note.
+> **This is a deliberate, firstmate-directed supersession.** The committed plan
+> `cams/cellmap/plans/tag1-shelf-cumotion.yaml` drives **wrist_1 to 355.1°**
+> (point 129 of 313; 100 of the 313 waypoints are above 350°). That is **4.9°
+> from the ±360° mechanical stop** and **EXCEEDS the wrist_1 bind of 353.2°
+> that the captain MEASURED by hand-sweep** in task joint-limits-freedrive-v1
+> (raw; 348.2° effective with its 5° margin; 61 waypoints sit above the raw
+> bind). Those figures come from that task's measurement, not from a file in
+> this branch: the measured-limits file is that task's deliverable and is NOT
+> committed here. **This plan MUST NOT be executed.** There is intentionally NO
+> runnable execute command anywhere in this note or this branch.
 >
-> The executable plan and the captain command come from task
+> The executable plan and the exact captain command are delivered by task
 > **joint-limits-freedrive-v1**, which re-validates the route WITHIN the measured
 > limits. What stays valid here: the plan, its clearances (+13.7 cm shelf /
 > +4.8 cm table) and the renders, as the VALIDATED EVIDENCE that cuMotion routes
@@ -21,8 +24,9 @@
 **Status: DRY-RUN VALIDATED for collision, plan-only. Nothing has moved.** An
 agent prepared and verified the plan without ever commanding arm motion. It was
 never validated against any joint window (`plan_test.py` ran without
-`--joint-limits`; the yaml carries no `pneumatic_margin_deg`), and the measured
-limits that arrived afterwards rule it out for execution — see the banner.
+`--joint-limits`; the yaml carries no `pneumatic_margin_deg`), and the captain's
+hand-sweep measurement that arrived afterwards rules it out for execution — see
+the banner.
 
 ## What the plan is (validated collision evidence)
 
@@ -55,7 +59,8 @@ y≈1.13–1.32) — the plan approaches a real shelf, not a map artefact. Rende
 ## Why it is not executable — joint excursions, checked offline against the yaml
 
 - **wrist_1 peaks at 355.1°** (+6.197 rad, point 129/313); 100 waypoints > 350°,
-  61 waypoints > the measured 353.2° bind, 116 > the 348.2° effective limit;
+  61 waypoints > the captain-measured 353.2° bind, 116 > the 348.2° effective
+  limit (both figures from the joint-limits-freedrive-v1 hand sweep);
   4.9° from the +360° stop of `cumotion/ur10_calibrated.urdf`. The executor's
   tracking-error cancel threshold (0.15 rad = 8.6°) is wider than that margin.
   The unapplied `cumotion/robotiq_limits_proposed.yaml` (wrist_1 ≤ 350°) would
@@ -69,7 +74,8 @@ y≈1.13–1.32) — the plan approaches a real shelf, not a map artefact. Rende
   wrist_1, wrist_2 or wrist_3 windows, and no ±45° shoulder_lift window around
   any park pose can admit a 162° swing. Whether the pneumatic air-line / wire
   strap is on the arm, and whether that ±120° pan limit still stands, remain the
-  captain's call — the measured limits file now supersedes the proposal.
+  captain's call — the measured limits (task joint-limits-freedrive-v1)
+  supersede the proposal.
 
 ## Prerequisites — reference for the successor deliverable
 
@@ -106,10 +112,11 @@ y≈1.13–1.32) — the plan approaches a real shelf, not a map artefact. Rende
 ## Joint windows — reference (no commands here)
 
 Every plan that will be executed must pass the joint-window guards with the
-MEASURED limits file from task joint-limits-freedrive-v1
-(`cumotion/measured_joint_limits.yaml`), in the `reference_pose_rad` +
-`window_deg` schema the guards read (`plan_test.py --joint-limits`,
-`execute_plan.py --limits`; both refuse to start on any other schema). The
+MEASURED hand-sweep limits file, which is the deliverable of task
+joint-limits-freedrive-v1 and is NOT in this branch (it may not exist yet). It
+must be in the `reference_pose_rad` + `window_deg` schema the guards read
+(`plan_test.py --joint-limits`, `execute_plan.py --limits`; both refuse to start
+on any other schema, and `--limits` is mandatory — there is no bypass). The
 `make_limited_urdf.py --write-limits` proposal windows are superseded by the
 measured file; if ever regenerated, write to a NEW timestamped file (the
 generator refuses to overwrite an existing one) and explicit `/tmp` URDF/XRDF
@@ -129,20 +136,23 @@ joint-limits-freedrive-v1's, not this note's.
 - [ ] The camera is NOT in the arm's collision model — eyeball the arm path for
       the camera body's clearance too.
 - [ ] Nobody else is commanding the arm.
-- [ ] The plan being executed passed the measured joint-window guard
-      (`--limits cumotion/measured_joint_limits.yaml`) and both clearance sweeps.
+- [ ] The plan being executed passed the joint-window guard against the
+      MEASURED limits file delivered by task joint-limits-freedrive-v1 (not in
+      this branch; `execute_plan.py --limits <that file>`) and both clearance
+      sweeps.
 - [ ] Planner is on `ur10_map.xrdf` (Prerequisite 1), not the pneumatic XRDF.
 - [ ] The executed yaml is the committed, validated one (Prerequisite 4).
 
 ## Execution
 
-**None from this note.** The execute block that used to be here has been removed:
-`tag1-shelf-cumotion.yaml` must not be sent to the arm (banner above). The
-captain command for the in-limits plan is the deliverable of task
-joint-limits-freedrive-v1; it must satisfy the prerequisites, joint-window
-reference and checklist above, and `execute_plan.py` keeps its own guards (live
-start must match, program running, every waypoint inside `--limits`, tracking
-excursion > 0.15 rad cancels the goal).
+**None from this note — deliberately.** The execute block that used to be here
+was removed on firstmate direction: `tag1-shelf-cumotion.yaml` must not be sent
+to the arm (banner above). The captain command for the in-limits plan is the
+deliverable of task joint-limits-freedrive-v1; it must satisfy the
+prerequisites, joint-window reference and checklist above, and `execute_plan.py`
+keeps its own guards (live start must match, program running, every waypoint
+inside the mandatory `--limits` file, tracking excursion > 0.15 rad cancels the
+goal).
 
 ## Notes
 

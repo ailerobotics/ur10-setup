@@ -5,7 +5,9 @@ Offline unit test for nvblx_clean.py — no ROS, no rig, no real map.
 Builds a tiny synthetic .nvblx (the real SQLite schema, block_size 0.16, TSDF +
 color layers) with hand-placed blocks, runs the tool, and checks that:
   * a box crops voxels by CENTRE, to 2 cm — voxels just outside survive;
-  * a block emptied by the crop is dropped from every layer;
+  * a block emptied by the crop is dropped from every layer, including a
+    <name>_layer_data table the tool has no layout for, and --denoise drops
+    its speckle blocks from that unknown layer too;
   * --denoise removes a small isolated component but keeps a large one, honours
     --keep-box, and prints an audit line (centre / extent / block count in
     base_link) for exactly the components it removed;
@@ -132,6 +134,62 @@ def test_fully_cropped_block_is_removed_everywhere():
             row = con.execute(f"SELECT 1 FROM {layer}_layer_data WHERE index_x=0 AND index_y=0 AND index_z=0").fetchone()
             assert row is None, f'{layer} block (0,0,0) should be dropped'
         con.close()
+
+
+def add_unknown_layer(path, name, blocks):
+    """Add a <name>_layer_data table (no layout known to the tool) holding an
+    opaque blob for each block in `blocks`."""
+    con = sqlite3.connect(path)
+    con.execute(f"CREATE TABLE {name}_layer_metadata(param_name TEXT PRIMARY KEY "
+                "UNIQUE NOT NULL,value_string TEXT,value_int INT,value_float FLOAT)")
+    con.execute(f"CREATE TABLE {name}_layer_data(index_x INT NOT NULL,index_y INT "
+                "NOT NULL,index_z INT NOT NULL,data BLOB,PRIMARY KEY(index_x,index_y,index_z))")
+    con.execute(f"INSERT INTO {name}_layer_metadata VALUES('block_size',NULL,NULL,?)", (BS,))
+    for ix, iy, iz in blocks:
+        con.execute(f"INSERT INTO {name}_layer_data VALUES(?,?,?,?)",
+                    (ix, iy, iz, bytes(range(16))))
+    con.commit()
+    con.close()
+
+
+def layer_blocks(path, name):
+    con = sqlite3.connect(path)
+    out = set(con.execute(f"SELECT index_x,index_y,index_z FROM {name}_layer_data").fetchall())
+    con.close()
+    return out
+
+
+def test_unknown_layer_follows_tsdf_on_crop_and_denoise():
+    with tempfile.TemporaryDirectory() as d:
+        src, dst = os.path.join(d, 'in.nvblx'), os.path.join(d, 'out.nvblx')
+        # blocks (1..5,0,0) form a 5-block line that survives --min-blocks 4;
+        # block (1,0,0) is only PARTLY in the box (its vx=0 slab, centre x=0.17)
+        # so it stays in the TSDF, while block (0,0,0) is emptied by the crop.
+        make_map(src, {
+            (0, 0, 0): [(1, 1, 1)],                                   # fully in box -> emptied
+            (1, 0, 0): [(0, 0, 0), (7, 7, 7)],                        # partly in box -> stays in tsdf
+            (2, 0, 0): [(0, 0, 0)], (3, 0, 0): [(0, 0, 0)],
+            (4, 0, 0): [(0, 0, 0)], (5, 0, 0): [(0, 0, 0)],
+            (20, 20, 20): [(0, 0, 0)],                                # lone speck -> denoised
+        })
+        assert 'mystery' not in nc.LAYERS
+        add_unknown_layer(src, 'mystery', [(0, 0, 0), (1, 0, 0), (3, 0, 0),
+                                           (5, 0, 0), (20, 20, 20)])
+        # box covers block (0,0,0) entirely and only the vx=0 slab of block (1,0,0)
+        r = run(src, dst, '--remove-box', '0,0.18,0,0.16,0,0.16', '--denoise',
+                '--min-blocks', '4', '--self-check')
+        assert r.returncode == 0, r.stderr + r.stdout
+        occ = occupied_voxels(dst)
+        assert (0, 0, 0) not in occ and (20, 20, 20) not in occ, occ
+        assert occ.get((1, 0, 0)) == {(7, 7, 7)}, occ.get((1, 0, 0))
+        left = layer_blocks(dst, 'mystery')
+        assert (0, 0, 0) not in left, 'emptied block must leave the unknown layer too'
+        assert (20, 20, 20) not in left, 'denoised speck must leave the unknown layer too'
+        assert (1, 0, 0) not in left, 'in-box block of an unknown layout is dropped whole'
+        assert left == {(3, 0, 0), (5, 0, 0)}, left
+        # the known layers agree with the unknown one on which blocks survive
+        assert layer_blocks(dst, 'color') == set(occ), (layer_blocks(dst, 'color'), set(occ))
+        assert layer_blocks(dst, 'tsdf') == set(occ)
 
 
 def test_denoise_drops_small_keeps_large_and_keep_box():

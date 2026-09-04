@@ -16,15 +16,14 @@ Guards, all of which abort before any motion:
   * live start must equal the validated plan's start (the arm must not have
     been touched since validation)
   * re-planned path must match the validated path within --tol-rad
-  * every waypoint must sit inside the pneumatic windows (--limits FILE); the
-    guard can only be skipped by the EXPLICIT --no-limits, for when the captain
-    has confirmed no pneumatic line / wire strap is on the arm
+  * every waypoint must sit inside the joint windows of the mandatory
+    --limits FILE (reference_pose_rad + window_deg); there is no bypass — a
+    bench / no-line case is served by a wider limits file, never by skipping
   * robot must be RUNNING/NORMAL with its program up and speed scaling > 0
 During motion it watches the tracking error and cancels the goal on any
 excursion beyond --max-track-rad.
 
   python3 execute_plan.py cams/cellmap/plans/mt-tag0.yaml --limits cumotion/pneumatic_limits.yaml
-  python3 execute_plan.py cams/cellmap/plans/mt-tag0.yaml --no-limits      # captain: no pneumatic line
 """
 import argparse
 import math
@@ -115,12 +114,9 @@ class Exec(Node):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('plan')
-    lim_group = ap.add_mutually_exclusive_group(required=True)
-    lim_group.add_argument('--limits', help='pneumatic windows yaml (reference_pose_rad + '
-                           'window_deg): refuse any waypoint outside them')
-    lim_group.add_argument('--no-limits', action='store_true',
-                           help='EXPLICITLY skip the pneumatic-window guard: only when the '
-                                'captain has confirmed no pneumatic line / wire strap is on the arm')
+    ap.add_argument('--limits', required=True,
+                    help='joint windows yaml (reference_pose_rad + window_deg): '
+                         'refuse any waypoint outside them')
     ap.add_argument('--tol-rad', type=float, default=0.02,
                     help='max joint-space deviation of the re-planned path from the '
                          'validated one before this refuses to run')
@@ -136,15 +132,10 @@ def main():
     saved = yaml.safe_load(open(a.plan))
     val = np.array(saved['joint_path'])
     goal = np.array(saved['goal_joints'] if saved.get('goal_joints') else val[-1])
-    if a.limits:
-        lim = yaml.safe_load(open(a.limits))
-        ref, win = lim['reference_pose_rad'], lim['window_deg']
-        lo = np.array([ref[j] - math.radians(win[j]) for j in JOINTS])
-        hi = np.array([ref[j] + math.radians(win[j]) for j in JOINTS])
-    else:
-        lo = hi = None
-        print('pneumatic-window guard SKIPPED (--no-limits): captain confirmed no '
-              'pneumatic line / wire strap on the arm')
+    lim = yaml.safe_load(open(a.limits))
+    ref, win = lim['reference_pose_rad'], lim['window_deg']
+    lo = np.array([ref[j] - math.radians(win[j]) for j in JOINTS])
+    hi = np.array([ref[j] + math.radians(win[j]) for j in JOINTS])
 
     rclpy.init()
     n = Exec()
@@ -220,13 +211,12 @@ def main():
     if dev > a.tol_rad or ends > a.tol_rad:
         sys.exit('ABORT: re-planned path differs from the validated one — not executing.')
 
-    if lo is not None:
-        out = [(k, JOINTS[i], v) for k, w in enumerate(got) for i, v in enumerate(w)
-               if not (lo[i] <= v <= hi[i])]
-        if out:
-            sys.exit(f'ABORT: {len(out)} waypoints outside the pneumatic windows '
-                     f'(first: point {out[0][0]} {out[0][1]})')
-        print(f'pneumatic windows OK for all {len(got)} waypoints')
+    out = [(k, JOINTS[i], v) for k, w in enumerate(got) for i, v in enumerate(w)
+           if not (lo[i] <= v <= hi[i])]
+    if out:
+        sys.exit(f'ABORT: {len(out)} waypoints outside the pneumatic windows '
+                 f'(first: point {out[0][0]} {out[0][1]})')
+    print(f'pneumatic windows OK for all {len(got)} waypoints')
 
     dur = traj.points[-1].time_from_start
     dur = dur.sec + dur.nanosec * 1e-9
