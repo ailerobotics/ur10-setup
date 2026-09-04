@@ -51,7 +51,7 @@ ceiling height 2–19 voxels, the 14 in mid-air 1–10 voxels. The largest mid-a
 removal is #10 (10 voxels / 2 blocks, ~16×14×6 cm at base_link ≈(1.55, −1.74,
 1.37)), a floating artefact in the map's far corner, ≥ 0.95 m from the plan's
 tool path and outside the workspace. The one closest to the plan is #17 (6
-voxels ~0.5 m above tag 1, 0.35 m from the tool path — glance there when
+voxels ~0.8 m above tag 1 (0.5 m above the hover start), 0.35 m from the tool path — glance there when
 clearing the cell). The z≈+2.0 ceiling plane and
 all real cell structure are preserved. The column *above* the base is empty in
 the scan (the arm was masked there), so there were no "up the column" voxels to

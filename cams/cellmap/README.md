@@ -539,8 +539,12 @@ the shelf/carton volume, +4.8 cm to the table (both `--recheck --check-box`
 commands + outputs, and why the yaml keeps only the last one:
 `data/cell-clean-approach-v1/plan-clearance-checks.md`). Cross-checked vs live
 wrist-cam carton detections (base_link y≈1.13–1.32) — the map shelf is where
-the cartons really are. That yaml is the validated artefact
-`execute_plan.py --exact` sends; re-runs must use a different label.
+the cartons really are. That yaml is the collision-validated EVIDENCE for the
+demo, NOT an executable plan: it drives wrist_1 to 355.1° (100 of 313 waypoints
+above 350°, 61 above the captain-measured 353.2° bind in
+`cumotion/measured_joint_limits.yaml`, task joint-limits-freedrive-v1), so it
+must not be sent to the arm; the executable plan and captain command come from
+that task. Re-runs must use a different label.
 
 Cross-check the map's shelf against reality with the wrist (hand-eye-calibrated)
 camera, not the shelf cam — only the wrist places detections in base_link. If
@@ -550,7 +554,9 @@ the mount TF is not up (`zz_rigcams` runs without it), restore it with
 eye-level parked view boxes shelf *boards* as `tray`, not the cartons (recorded
 viewpoint limitation) — per-carton confirmation lands during the captain's
 approach. Captain execute + safety checklist: prepared per run in the task's
-`data/cell-clean-approach-v1/captain-execute-note.md`.
+`data/cell-clean-approach-v1/captain-execute-note.md` — SUPERSEDED for execution
+(wrist_1 exceeds the measured bind); kept as the collision-evidence record and
+safety-checklist reference for task joint-limits-freedrive-v1's executable plan.
 
 ## Traps hit
 

@@ -319,14 +319,24 @@ here). Otherwise regenerate the proposal windows around the LIVE park pose:
 
 ```bash
 # reads live /joint_states (no motion); writes a NEW timestamped windows file and
-# REFUSES to overwrite an existing one (a measured file is never replaced). The
-# URDF/XRDF it also writes go to /tmp: do NOT start the map planner on them —
-# that XRDF drops shoulder_link/upper_arm_link from world collision (a pedestal
-# workaround, obsolete on a cleaned map). The planner stays on ur10_map.xrdf.
+# REFUSES to overwrite an existing one (a measured file is never replaced).
+# --out/--xrdf-out MUST be given explicitly (fresh or /tmp path): the generator's
+# DEFAULTS are the repo files cumotion/ur10_pneumatic.urdf/.xrdf, which
+# run_live.sh (cams/cellmap/live.launch.py) loads as the live-avoidance
+# planner's robot description — never overwrite them. Do NOT start the map
+# planner on the generated XRDF either: it drops shoulder_link/upper_arm_link
+# from world collision (a pedestal workaround, obsolete on a cleaned map). The
+# map planner stays on ur10_map.xrdf.
 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 ~/ur10/cumotion/make_limited_urdf.py \
     --out /tmp/ur10_pneumatic.urdf --xrdf-out /tmp/ur10_pneumatic.xrdf \
     --write-limits ~/ur10/cumotion/pneumatic_limits_live-$(date +%Y%m%d-%H%M).yaml
 ```
+
+`run_live.sh` itself defaults to those same `ur10_pneumatic.*` files (the
+2026-08-28 pedestal workaround with shoulder/upper_arm excluded from world
+collision). On the cleaned map that exclusion is no longer needed; pointing the
+live launch at the full model (`urdf:=/cfg/ur10_calibrated.urdf
+xrdf:=/cfg/ur10_map.xrdf`) is a captain decision and is not changed here.
 
 Then re-validate on a FRESH label with `--joint-limits <that file>` and require
 both `--check-box` sweeps ≥ 0 (`cams/cellmap/README.md` §5), and execute only

@@ -23,6 +23,12 @@ because one guard is not a guard.
 The live read needs the rig's DDS transport (FASTDDS_BUILTIN_TRANSPORTS=UDPv4)
 like every other ROS-talking command; without it discovery fails and the script
 exits — do not fall back to --frozen for anything that will be executed.
+
+The DEFAULT --out / --xrdf-out are this directory's ur10_pneumatic.urdf / .xrdf,
+which run_live.sh (cams/cellmap/live.launch.py) loads as the live-avoidance
+planner's robot description. When only the --write-limits file is wanted, pass
+explicit --out/--xrdf-out to a fresh or /tmp path so those repo files are not
+silently rewritten around the current pose.
 """
 import argparse
 import datetime as dt

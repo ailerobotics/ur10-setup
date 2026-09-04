@@ -60,7 +60,7 @@ tool_path, 313 points) to each removed component's centre. This is the tool
 point, NOT the arm-sweep clearance; it only says which specks the demo passes
 near, so the captain knows where to look when clearing the cell:
 
-  #17  0.35 m (point  39)  6 voxels at (-0.56, -1.24, +0.77): above the table, ~0.5 m above tag 1, on the plan's climb
+  #17  0.35 m (point  39)  6 voxels at (-0.56, -1.24, +0.77): above the table, ~0.8 m above tag 1 (0.5 m above the hover start), on the plan's climb
   #18  0.40 m (point 228)  1 voxel  at (-0.21, +0.69, +1.51): above the shelf standoff
   #15  0.41 m (point  12)  1 voxel  at (-0.87, -0.97, +0.45): above the table beside tag 1
   #7   0.56 m (point 130)  3 voxels at (-0.39, -0.40, +1.70)
