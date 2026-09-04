@@ -548,6 +548,15 @@ and is not in this branch), so it must not be sent to the arm; the executable
 plan and captain command come from that task. Re-runs must use a different
 label.
 
+`plans/tag1-shelf-ompl.yaml` is the failed MAP-BLIND OMPL baseline for the same
+tag 1 → shelf start/goal, planned minutes before the cuMotion run: OMPL rewound
+shoulder_pan 215° and `plan_test.py`'s 170° rewind guard refused it
+(`error_code: -170`, no joint path kept). The MoveIt planning scene on this rig
+is empty (`RUNBOOK.md` §8b), so only cuMotion (`read_esdf_world`) sees the map
+and OMPL plans blind to it — which is why the seeded, guarded cuMotion plan is
+the safe one. An independent planner benchmark on 2026-09-04 reproduced the same
+result.
+
 Cross-check the map's shelf against reality with the wrist (hand-eye-calibrated)
 camera, not the shelf cam — only the wrist places detections in base_link. If
 the mount TF is not up (`zz_rigcams` runs without it), restore it with
