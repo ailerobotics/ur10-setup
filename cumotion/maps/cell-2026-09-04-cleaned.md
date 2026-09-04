@@ -45,10 +45,14 @@ nvblx_clean.py cell-2026-09-03.nvblx cell-2026-09-04-cleaned.nvblx \
 
 Totals: TSDF **11 363 → 11 247 blocks** (−116), occupied surface voxels
 **91 292 → 90 778** (−514). The crop box removed nothing above z −0.10, so the
-table plane, both tag boards, and the shelf are untouched by it; the denoised
-specks above z −0.10 are all isolated 1–7-voxel clusters listed in the audit
-file (the largest mid-air one, 6 voxels ~0.5 m above tag 1, sits 0.35 m from the
-plan's tool path — glance there when clearing the cell). The z≈+2.0 ceiling plane and
+table plane, both tag boards, and the shelf are untouched by it; the 17 denoised
+specks above z −0.10 are isolated clusters listed in the audit file — the 3 at
+ceiling height 2–19 voxels, the 14 in mid-air 1–10 voxels. The largest mid-air
+removal is #10 (10 voxels / 2 blocks, ~16×14×6 cm at base_link ≈(1.55, −1.74,
+1.37)), a floating artefact in the map's far corner, ≥ 0.95 m from the plan's
+tool path and outside the workspace. The one closest to the plan is #17 (6
+voxels ~0.5 m above tag 1, 0.35 m from the tool path — glance there when
+clearing the cell). The z≈+2.0 ceiling plane and
 all real cell structure are preserved. The column *above* the base is empty in
 the scan (the arm was masked there), so there were no "up the column" voxels to
 remove.

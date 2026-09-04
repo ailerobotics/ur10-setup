@@ -48,7 +48,12 @@ Where they sit, for the operator's check that none is a real small object
 
   floor level (z <= -0.53, the floor plane is z ~ -0.64):   #1 #2 #8
   ceiling height (z >= 1.86, the ceiling plane is z ~ 2.0): #5 #9 #12
-  mid-air, 1-7 voxels each, z 0.28..1.70:                   #3 #4 #6 #7 #10 #11 #13 #14 #15 #16 #17 #18 #19 #20
+  mid-air, 1-10 voxels each, z 0.28..1.70:                  #3 #4 #6 #7 #10 #11 #13 #14 #15 #16 #17 #18 #19 #20
+
+Largest mid-air removal: #10, 10 voxels / 2 blocks, ~16x14x6 cm extent at
+base_link ~(1.55, -1.74, 1.37) — a floating artefact in the map's far +x/-y
+corner, 2.18 m from the tool path and outside the workspace. Largest overall:
+#2 (28 voxels, on the floor plane at the +x edge) and ceiling #9 (19 voxels).
 
 Nearest approach of the plan's tool0 path (cams/cellmap/plans/tag1-shelf-cumotion.yaml,
 tool_path, 313 points) to each removed component's centre. This is the tool
