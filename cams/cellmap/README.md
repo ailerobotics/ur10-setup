@@ -509,17 +509,33 @@ Collision-aware demo against the cleaned map — hover above AprilTag 1 (base_li
 parked, plan-only:
 
 ```bash
-cumotion/start_cumotion_map.sh cell-2026-09-04-cleaned.nvblx
+cumotion/start_cumotion_map.sh cell-2026-09-04-cleaned.nvblx        # ur10_map.xrdf = full collision model
+# Always a FRESH label: plan_test.py writes plans/<label>.yaml unconditionally
+# and cuMotion trajopt is not bit-deterministic, so re-using the label
+# tag1-shelf-cumotion would replace the committed VALIDATED plan (and drop its
+# box_check) with an un-swept re-plan. Never re-use that label.
 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
-    --label tag1-shelf-cumotion --pipeline isaac_ros_cumotion \
+    --label tag1-shelf-replan --pipeline isaac_ros_cumotion \
     --start-pose=-0.506,-1.058,0.25 --goal-pose=-0.10,0.80,0.95 --pose-goal
-# cuMotion arcs up over the table and stops short of the shelf: 1.27x straight
-# line, +13.7 cm to the shelf/carton volume, +4.8 cm to the table
-# (--recheck --check-box; both commands + outputs, and why the yaml keeps only
-# the last one: data/cell-clean-approach-v1/plan-clearance-checks.md).
-# Cross-checked vs live wrist-cam carton detections
-# (base_link y≈1.13–1.32) — the map shelf is where the cartons really are.
+#   pneumatic line on the arm? add --joint-limits <windows yaml> (RUNBOOK §10
+#   "Reduced joint windows"); the planner stays on ur10_map.xrdf regardless.
+# Then BOTH arm-sweep clearances on that label must be >= 0 (each run overwrites
+# the label's single box_check slot):
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
+    --recheck tag1-shelf-replan --check-box=-1.0,1.0,-1.92,-0.90,-0.12,-0.03    # table slab
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
+    --recheck tag1-shelf-replan --check-box=-0.6,0.4,1.10,1.94,0.45,1.55       # shelf / cartons
 ```
+
+The committed `plans/tag1-shelf-cumotion.yaml` was produced once, on 2026-09-04,
+by that same plan command under `--label tag1-shelf-cumotion`: cuMotion arcs up
+over the table and stops short of the shelf — 1.27× straight line, +13.7 cm to
+the shelf/carton volume, +4.8 cm to the table (both `--recheck --check-box`
+commands + outputs, and why the yaml keeps only the last one:
+`data/cell-clean-approach-v1/plan-clearance-checks.md`). Cross-checked vs live
+wrist-cam carton detections (base_link y≈1.13–1.32) — the map shelf is where
+the cartons really are. That yaml is the validated artefact
+`execute_plan.py --exact` sends; re-runs must use a different label.
 
 Cross-check the map's shelf against reality with the wrist (hand-eye-calibrated)
 camera, not the shelf cam — only the wrist places detections in base_link. If

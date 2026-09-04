@@ -88,50 +88,51 @@ What is known, checked offline against the committed plan:
    the plan is only collision-checked from that start.
 3. Robot RUNNING/NORMAL, external-control program up (RUNBOOK §4), one writer only
    (RUNBOOK §6b).
+4. **The plan yaml is the committed, validated one.** `plan_test.py` writes
+   `plans/<label>.yaml` unconditionally, so any re-run under the label
+   `tag1-shelf-cumotion` silently replaces the validated waypoints with an
+   un-swept re-plan. Before executing:
+   ```bash
+   git -C ~/ur10 status --short cams/cellmap/plans/tag1-shelf-cumotion.yaml   # must print nothing
+   ```
 
 ## CONDITIONAL PREREQUISITE — only if the pneumatic line IS on the arm
 
-Skip this section entirely if you confirm there is no pneumatic line / wire
-strap on the arm (then the execute step runs with `--no-limits`). Otherwise all
-of it must pass before the execute step, which then runs with `--limits`.
+Whether the pneumatic air-line / wire strap is on the arm, and whether the
+shoulder_pan ±120° limit you confirmed on 2026-08-28 still stands, remain your
+call. If you confirm there is NO line on the arm, skip this section: the execute
+step runs with `--no-limits`. If the line IS on the arm, all of the following
+must be done before the execute step, which then runs with `--limits <file>`.
 
-```bash
-source /opt/ros/jazzy/setup.bash
+1. **Obtain the reduced joint windows.** PREFERRED source: the MEASURED limits
+   file from your hand-sweep (task joint-limits-freedrive-v1, being recorded
+   now), once it exists. Otherwise regenerate the proposal windows around the
+   LIVE park pose with `make_limited_urdf.py --write-limits` into a NEW,
+   timestamped file — never over a measured one (the generator refuses to
+   overwrite an existing file). Either way the file must use the
+   `reference_pose_rad` + `window_deg` schema of `cumotion/pneumatic_limits.yaml`;
+   both guards refuse to start on anything else. The URDF/XRDF the generator
+   also writes are NOT loaded anywhere (Prerequisite 1).
+2. **Re-validate inside those windows, plan-only, on the FULL collision model**
+   — planner untouched on `ur10_map.xrdf`; never `ur10_pneumatic.xrdf`, never
+   drop `shoulder_link` / `upper_arm_link` from world collision — writing to a
+   FRESH label so `tag1-shelf-cumotion.yaml` is never overwritten
+   (`plan_test.py --label <fresh> … --joint-limits <file>`). A REFUSED here
+   means STOP: nothing from this note may be executed (expected for this route:
+   162° shoulder_lift vs a ±45° window).
+3. **Both arm-sweep clearances on that fresh label must be ≥ 0** — the
+   table-slab box and the shelf/carton box from `plan-clearance-checks.md`
+   (`plan_test.py --recheck <fresh> --check-box=…`). Any "SWEEPS THROUGH THE
+   BOX" means STOP.
+4. Only then run the execute step with `execute_plan.py --exact --limits <file>`.
+   It still sends the COMMITTED waypoints and re-checks every one of them
+   against the same windows, aborting on any violation — that guard, not step 2,
+   is the final word.
 
-# C1 — obtain the joint windows. PREFERRED: the MEASURED limits file from your
-#      hand-sweep (task joint-limits-freedrive-v1), once it exists — use that
-#      path as $WIN below. ELSE regenerate the proposal windows around the LIVE
-#      park pose (re-reads /joint_states; no motion). The URDF/XRDF it also
-#      writes are sent to /tmp and are NOT loaded anywhere (see Prerequisite 1);
-#      only the limits yaml is used.
-WIN=~/ur10/cumotion/pneumatic_limits_live.yaml
-python3 ~/ur10/cumotion/make_limited_urdf.py \
-  --out /tmp/ur10_pneumatic.urdf --xrdf-out /tmp/ur10_pneumatic.xrdf \
-  --write-limits $WIN
-
-# C2 — re-validate inside those windows, plan-only, on the FULL collision model
-#      (planner untouched, still ur10_map.xrdf), to a FRESH label. Every waypoint
-#      is checked against $WIN; "REFUSED" here = STOP, nothing from this note may
-#      be executed (expected for this route: 162° shoulder_lift vs a ±45° window).
-FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 \
-  ~/ur10/cams/cellmap/tools/plan_test.py --label tag1-shelf-windowcheck \
-  --pipeline isaac_ros_cumotion --start-pose=-0.506,-1.058,0.25 \
-  --goal-pose=-0.10,0.80,0.95 --pose-goal --joint-limits $WIN
-#   must print "pneumatic limits OK: every waypoint inside; tightest margin …"
-
-# C3 — BOTH arm-sweep clearances on that label must be >= 0 (same boxes as
-#      plan-clearance-checks.md; each run overwrites the label's box_check slot)
-FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 ~/ur10/cams/cellmap/tools/plan_test.py \
-  --recheck tag1-shelf-windowcheck --check-box=-1.0,1.0,-1.92,-0.90,-0.12,-0.03   # table slab
-FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 ~/ur10/cams/cellmap/tools/plan_test.py \
-  --recheck tag1-shelf-windowcheck --check-box=-0.6,0.4,1.10,1.94,0.45,1.55      # shelf / cartons
-#   both must say "-> clear" with a positive cm value; any "SWEEPS THROUGH THE BOX" = STOP
-```
-
-C2/C3 prove the live stack can plan this start→goal inside the windows with full
-collision checking. The execute step still sends the COMMITTED waypoints, and
-`execute_plan.py --limits $WIN` re-checks every one of them against the same
-windows and aborts on any violation — that guard, not C2, is the final word.
+Exact commands: `RUNBOOK.md` §10 "Reduced joint windows" (obtaining the file)
+and `cams/cellmap/README.md` §5 (re-validation on a fresh label and both
+sweeps). When the measured-limits task lands, its definitive command for step 1
+belongs in that RUNBOOK subsection.
 
 ## Safety checklist — do not skip a line (from cams/approach/README.md)
 
@@ -143,8 +144,9 @@ windows and aborts on any violation — that guard, not C2, is the final word.
       the camera body's clearance too.
 - [ ] Nobody else is commanding the arm.
 - [ ] Joint-limit policy decided (above); if the line is on the arm, the
-      conditional prerequisite passed and `$WIN` is set.
+      conditional prerequisite passed and the limits file it used is at hand.
 - [ ] Planner is on `ur10_map.xrdf` (Prerequisite 1), not the pneumatic XRDF.
+- [ ] `tag1-shelf-cumotion.yaml` is unmodified vs the commit (Prerequisite 4).
 
 ## Run it (dry-run FIRST, then execute)
 
@@ -154,7 +156,7 @@ source /opt/ros/jazzy/setup.bash
 # 1 — DRY RUN: confirm the live stack (arm, cleaned map, full collision model)
 #     still plans this start -> goal. Plan-only, no motion. FRESH label — the
 #     committed tag1-shelf-cumotion.yaml is not touched and is what executes.
-#     If the pneumatic line is on the arm, this is C2 above (with --joint-limits).
+#     If the pneumatic line is on the arm, add --joint-limits <file> (conditional prerequisite).
 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 \
   ~/ur10/cams/cellmap/tools/plan_test.py --label tag1-shelf-dryrun \
   --pipeline isaac_ros_cumotion --start-pose=-0.506,-1.058,0.25 \
@@ -168,13 +170,13 @@ ros2 service call /io_and_status_controller/set_speed_slider \
 
 # 3 — EXECUTE the COMMITTED validated waypoints at 0.05 scaling (--exact sends
 #     the approved path itself). Exactly one of the two limit flags:
-#       pneumatic line ON the arm  -> LIMITS="--limits $WIN"   (conditional prerequisite passed)
-#       NO pneumatic line          -> LIMITS="--no-limits"     (your explicit, deliberate confirmation;
-#                                                              execute_plan.py refuses to start with neither)
+#       pneumatic line ON the arm  -> LIMITS="--limits <file>"  (conditional prerequisite passed)
+#       NO pneumatic line          -> LIMITS="--no-limits"       (your explicit, deliberate confirmation;
+#                                                                execute_plan.py refuses to start with neither)
 #     Guards that still abort before motion: live start must match the plan's
-#     start, program running, waypoints inside $WIN when --limits is given;
-#     tracking-error cancel during motion.
-LIMITS="--no-limits"          # or: LIMITS="--limits $WIN"
+#     start, program running, waypoints inside the windows when --limits is
+#     given; tracking-error cancel during motion.
+LIMITS="--no-limits"          # or: LIMITS="--limits <file from the conditional prerequisite>"
 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 \
   ~/ur10/cams/cellmap/tools/execute_plan.py \
   ~/ur10/cams/cellmap/plans/tag1-shelf-cumotion.yaml \

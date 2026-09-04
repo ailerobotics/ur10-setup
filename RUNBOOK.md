@@ -306,6 +306,33 @@ python3 cams/cellmap/tools/verify_map.py ~/ur10/cumotion/maps/cell-2026-09-04-cl
 Cleaning is NOT a substitute for re-scanning when geometry actually moved — it
 only removes what is already in the map. Re-scan per the rules below.
 
+### Reduced joint windows (only if the pneumatic line / wire strap is on the arm)
+
+Whether the line is on the arm, and whether the captain-confirmed shoulder_pan
+±120° still stands, is the captain's call. When it is on, every plan that will
+be executed must be checked against per-joint windows in the
+`reference_pose_rad` + `window_deg` schema of `cumotion/pneumatic_limits.yaml`
+(`plan_test.py --joint-limits`, `execute_plan.py --limits`; both refuse to start
+on any other schema). PREFERRED source: the MEASURED hand-sweep limits file
+(task joint-limits-freedrive-v1, once it exists — its definitive command belongs
+here). Otherwise regenerate the proposal windows around the LIVE park pose:
+
+```bash
+# reads live /joint_states (no motion); writes a NEW timestamped windows file and
+# REFUSES to overwrite an existing one (a measured file is never replaced). The
+# URDF/XRDF it also writes go to /tmp: do NOT start the map planner on them —
+# that XRDF drops shoulder_link/upper_arm_link from world collision (a pedestal
+# workaround, obsolete on a cleaned map). The planner stays on ur10_map.xrdf.
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 ~/ur10/cumotion/make_limited_urdf.py \
+    --out /tmp/ur10_pneumatic.urdf --xrdf-out /tmp/ur10_pneumatic.xrdf \
+    --write-limits ~/ur10/cumotion/pneumatic_limits_live-$(date +%Y%m%d-%H%M).yaml
+```
+
+Then re-validate on a FRESH label with `--joint-limits <that file>` and require
+both `--check-box` sweeps ≥ 0 (`cams/cellmap/README.md` §5), and execute only
+with `execute_plan.py --exact --limits <that file>`. `--frozen` centres the
+windows on the yaml's 2026-08-28 reference pose — never use it for execution.
+
 ### When to re-scan
 
 - Anything the arm can reach was moved, added or removed. The map is a

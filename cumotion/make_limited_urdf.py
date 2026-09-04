@@ -11,12 +11,18 @@ and on the real arm, "we noticed afterwards" is not a safety property.
 plan_test.py --joint-limits still re-verifies every waypoint independently,
 because one guard is not a guard.
 
-  python3 cumotion/make_limited_urdf.py            # windows around the LIVE pose
-  python3 cumotion/make_limited_urdf.py --frozen   # around the pose recorded in the yaml
-  python3 cumotion/make_limited_urdf.py --write-limits cumotion/pneumatic_limits_live.yaml
+  FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cumotion/make_limited_urdf.py   # windows around the LIVE pose
+  python3 cumotion/make_limited_urdf.py --frozen   # around the pose recorded in the yaml (no ROS)
+  FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cumotion/make_limited_urdf.py \
+      --write-limits cumotion/pneumatic_limits_live-<stamp>.yaml
       # also writes the windows AS APPLIED (reference = the live pose) in the
       # schema plan_test.py --joint-limits and execute_plan.py --limits read,
-      # so the guards check the same windows the planner was given
+      # so the guards check the same windows the planner was given. Refuses to
+      # overwrite an existing limits file (a MEASURED one must never be
+      # replaced) unless --force is given.
+The live read needs the rig's DDS transport (FASTDDS_BUILTIN_TRANSPORTS=UDPv4)
+like every other ROS-talking command; without it discovery fails and the script
+exits — do not fall back to --frozen for anything that will be executed.
 """
 import argparse
 import datetime as dt
@@ -64,7 +70,12 @@ def main():
     ap.add_argument('--write-limits', default=None, metavar='YAML',
                     help='also write the applied windows (reference_pose_rad = the pose used '
                          'here, window_deg) for plan_test.py --joint-limits / execute_plan.py --limits')
+    ap.add_argument('--force', action='store_true',
+                    help='allow --write-limits to overwrite an existing file')
     a = ap.parse_args()
+    if a.write_limits and os.path.exists(a.write_limits) and not a.force:
+        sys.exit(f'refusing to overwrite {a.write_limits}: a limits file that already exists '
+                 f'may be a MEASURED one. Write to a new path, or pass --force.')
 
     cfg = yaml.safe_load(open(a.limits))
     win = cfg['window_deg']

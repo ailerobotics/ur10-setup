@@ -40,8 +40,8 @@ nvblx_clean.py cell-2026-09-03.nvblx cell-2026-09-04-cleaned.nvblx \
 
 | removal | what it was | effect |
 |---|---|---|
-| crop box `x[-0.60,0.20] y[-0.32,0.50] z[-0.65,-0.10]` (base_link, m) | the robot base/pedestal: a C-bracket of voxels standing on the floor under the arm mount, z −0.64..−0.16, footprint x −0.55..+0.15 / y −0.25..+0.45 | 18 779 weighted voxels set unobserved (≈482 of them observed surface); 84 fully-emptied blocks dropped |
-| `--denoise --min-blocks 4` | 20 isolated 26-connected components of ≤3 blocks (1–28 surface voxels each): 3 on the floor plane, 3 at ceiling height, 14 in mid-air — none on the table, tag boards or shelf. Each one's base_link centre / extent / block count: `data/cell-clean-approach-v1/nvblx-clean-audit.txt` (re-run of this recipe, output byte-identical to the shipped file) | 32 blocks removed |
+| crop box `x[-0.60,0.20] y[-0.32,0.50] z[-0.65,-0.10]` (base_link, m) | the robot base/pedestal: a C-bracket of voxels standing on the floor under the arm mount, z −0.64..−0.16, footprint x −0.55..+0.15 / y −0.25..+0.45 | 18 779 weighted voxels set unobserved (399 of them observed surface = the 514 surface voxels removed in total minus the 115 in the 20 denoised components); 84 fully-emptied blocks dropped |
+| `--denoise --min-blocks 4` | 20 isolated 26-connected components of ≤3 blocks (1–28 surface voxels each): 3 on the floor plane, 3 at ceiling height, 14 in mid-air — none on the table, tag boards or shelf. Each one's base_link centre / extent / block count: `data/cell-clean-approach-v1/nvblx-clean-audit.txt` (re-run of this recipe; every layer table row-for-row identical to the shipped file) | 32 blocks removed |
 
 Totals: TSDF **11 363 → 11 247 blocks** (−116), occupied surface voxels
 **91 292 → 90 778** (−514). The crop box removed nothing above z −0.10, so the
