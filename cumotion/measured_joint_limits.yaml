@@ -1,0 +1,84 @@
+# Measured UR10 joint limits — captain freedrive hand-sweep.
+#
+# HOW: the captain hand-drove each joint to its real physical extreme in ROS
+# freedrive (tools/freedrive.py) while tools/record_joint_limits.py recorded
+# the running per-joint [min, max] from /joint_states. No motion was ever
+# commanded; the feed was verified LIVE by encoder jitter, not by rate (a
+# dropped RTDE link republishes a frozen packet at a perfect 125 Hz).
+#
+# FORMAT — identical to cumotion/pneumatic_limits.yaml so the same consumers
+# read it: make_limited_urdf.py (limits -> limited URDF/XRDF) and
+# execute_plan.py --limits (per-waypoint window guard). Each window is
+#   reference_pose_rad +- radians(window_deg)
+# and here reference is the MIDPOINT of the measured [min, max] and window_deg
+# is half the measured range minus the safety margin, so the effective window
+# is exactly [measured_min + margin, measured_max - margin]. The raw measured
+# extremes and the margin are under `measured:` below.
+#
+# make_limited_urdf.py MUST be run with --frozen against this file: these are
+# ABSOLUTE measured joint positions, not a window around the live pose, so the
+# default (live-pose) mode would centre the windows in the wrong place.
+#
+# REGENERATE whenever the line is re-routed or the arm re-parked — the real
+# reachable travel changes. Re-run the recorder (see cams/cellmap/README.md
+# "Measuring real joint limits").
+#
+reference_pose_rad:
+  shoulder_pan_joint: 0.223385
+  shoulder_lift_joint: -2.364985
+  elbow_joint: 0.536284
+  wrist_1_joint: 4.458966
+  wrist_2_joint: 0.343505
+  wrist_3_joint: 0.706048
+window_deg:
+  shoulder_pan_joint: 73.1184
+  shoulder_lift_joint: 33.296
+  elbow_joint: 78.4983
+  wrist_1_joint: 92.7289
+  wrist_2_joint: 95.6854
+  wrist_3_joint: 124.2285
+measured:
+  source: captain freedrive hand-sweep
+  method: global per-joint [min,max] over the session
+  date: '2026-09-04'
+  margin_deg: 5.0
+  jitter_evidence: 'startup gate: 251 samples, 6.202 mdeg jitter; min recent jitter
+    while recording: 4.808 mdeg'
+  extremes_rad:
+    shoulder_pan_joint:
+      min: -1.140037
+      max: 1.586808
+    shoulder_lift_joint:
+      min: -3.033376
+      max: -1.696594
+    elbow_joint:
+      min: -0.921036
+      max: 1.993605
+    wrist_1_joint:
+      min: 2.753274
+      max: 6.164658
+    wrist_2_joint:
+      min: -1.413787
+      max: 2.100797
+    wrist_3_joint:
+      min: -1.549414
+      max: 2.96151
+  extremes_deg:
+    shoulder_pan_joint:
+      min: -65.319
+      max: 90.917
+    shoulder_lift_joint:
+      min: -173.8
+      max: -97.208
+    elbow_joint:
+      min: -52.771
+      max: 114.225
+    wrist_1_joint:
+      min: 157.751
+      max: 353.209
+    wrist_2_joint:
+      min: -81.004
+      max: 120.367
+    wrist_3_joint:
+      min: -88.775
+      max: 169.682
