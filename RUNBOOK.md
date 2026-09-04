@@ -262,6 +262,43 @@ systemctl --user stop ur10-cumotion; docker stop ur10-cumotion
 systemd-run --user --unit=ur10-cumotion -p Restart=on-failure -p RestartSec=15 ~/ur10/cumotion/start_cumotion.sh
 ```
 
+### Clean an existing map in place (no re-scan)
+
+To make a map usable for planning without re-scanning — e.g. drop the
+robot base/pedestal (the fixed base is not masked during a scan, so it stands in
+the map as a phantom obstacle where every plan starts) and isolated speckle:
+
+```bash
+# writes a NEW cleaned .nvblx; the original is left untouched for rollback
+python3 cams/cellmap/tools/nvblx_clean.py \
+    ~/ur10/cumotion/maps/cell-2026-09-03.nvblx \
+    ~/ur10/cumotion/maps/cell-2026-09-04-cleaned.nvblx \
+    --remove-box=-0.60,0.20,-0.32,0.50,-0.65,-0.10 \
+    --denoise --min-blocks 4 --self-check
+```
+
+A `.nvblx` is a SQLite DB; the tool zeroes the TSDF weight of voxels whose centre
+is inside a base_link box (voxel-precise) and drops small isolated blocks — no
+ROS, no rig (colocated `test_nvblx_clean.py`). cuMotion recomputes the ESDF it
+plans against from the TSDF, so editing the TSDF is what the planner sees. The
+cleaned file becomes operational automatically (loaders take the newest
+`cell-*.nvblx`). ALWAYS re-verify before trusting it:
+
+```bash
+# load into the planner (must say "cell map loaded … starting cuMotion", no "World update failed")
+~/ur10/cumotion/start_cumotion_map.sh cell-2026-09-04-cleaned.nvblx
+# regenerate the mesh from the loaded map, then check tags/table/arm
+docker exec ur10-cumotion bash -lc 'source /opt/ros/jazzy/setup.bash && \
+    python3 /cellmap/tools/map_ctl.py ply /tmp/cleaned.ply'
+docker cp ur10-cumotion:/tmp/cleaned.ply ~/ur10/cumotion/maps/cell-2026-09-04-cleaned.ply
+python3 cams/cellmap/tools/verify_map.py ~/ur10/cumotion/maps/cell-2026-09-04-cleaned.ply \
+    --tag tag0=0.1157,-1.0578,-0.0565 --tag tag1=-0.5057,-1.0575,-0.0572
+# table + both tags must still read ~11 mm; arm/base absent. Descriptor: cumotion/maps/cell-2026-09-04-cleaned.md
+```
+
+Cleaning is NOT a substitute for re-scanning when geometry actually moved — it
+only removes what is already in the map. Re-scan per the rules below.
+
 ### When to re-scan
 
 - Anything the arm can reach was moved, added or removed. The map is a

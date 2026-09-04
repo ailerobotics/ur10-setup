@@ -493,6 +493,42 @@ the plan routes around it (arm-sweep clearance ≥ 0 via `--recheck
 --check-box`); box removed + re-scan → the plan straightens. Execution stays
 captain-confirmed (approach demo rules, ≤ 0.05 scaling).
 
+### 5. Clean a map in place, then plan AprilTag 1 → shelf (2026-09-04)
+
+Clean-in-place instead of re-scanning when the map is right but carries an
+unwanted obstacle — here the robot base/pedestal (never masked during a scan)
+plus isolated speckle. `tools/nvblx_clean.py` edits the `.nvblx` SQLite TSDF
+directly (voxel-precise box crop-out + isolated-block denoise), writes a NEW
+file, leaves the original for rollback, and self-checks; offline test
+`tools/test_nvblx_clean.py` (no rig). Full procedure and verify commands:
+`RUNBOOK.md` §10 "Clean an existing map in place". Descriptor +
+before/after evidence: `cumotion/maps/cell-2026-09-04-cleaned.md`.
+
+Collision-aware demo against the cleaned map — hover above AprilTag 1 (base_link
+−0.506, −1.058, −0.057) to a standoff short of the gondola shelf, tool held as
+parked, plan-only:
+
+```bash
+cumotion/start_cumotion_map.sh cell-2026-09-04-cleaned.nvblx
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
+    --label tag1-shelf-cumotion --pipeline isaac_ros_cumotion \
+    --start-pose=-0.506,-1.058,0.25 --goal-pose=-0.10,0.80,0.95 --pose-goal
+# cuMotion arcs up over the table and stops short of the shelf: 1.27x straight
+# line, +13.7 cm to the shelf/carton volume, +4.8 cm to the table
+# (--recheck --check-box). Cross-checked vs live wrist-cam carton detections
+# (base_link y≈1.13–1.32) — the map shelf is where the cartons really are.
+```
+
+Cross-check the map's shelf against reality with the wrist (hand-eye-calibrated)
+camera, not the shelf cam — only the wrist places detections in base_link. If
+the mount TF is not up (`zz_rigcams` runs without it), restore it with
+`tools/publish_mount.py calib/tool0_to_camera_<date>.yaml
+--key tool0_to_camera_color_optical_frame` (TF only, touches no camera). The
+eye-level parked view boxes shelf *boards* as `tray`, not the cartons (recorded
+viewpoint limitation) — per-carton confirmation lands during the captain's
+approach. Captain execute + safety checklist: prepared per run in the task's
+`data/cell-clean-approach-v1/captain-execute-note.md`.
+
 ## Traps hit
 
 - **A print-ready PDF that renders as stripes** (2026-08-27, cost the captain
