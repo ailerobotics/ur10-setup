@@ -75,10 +75,14 @@ published (it is gated off in `approach/wrist_rig.launch.py`).
 ## Multi-camera rig (v2, 2026-08-31)
 
 The rig grew from one camera to three: the wrist **D435i** (`018322070619`,
-repositioned on the flange) plus two static **D415**s — `024122061936`
-(SHELF, high/frontal) and `025522060953` (TABLE, workspace side view). The
-two D415s are interchangeable, so the SHELF/TABLE serial assignment is
-provisional until mounted (Step 2); swap the two params YAMLs if reversed.
+repositioned on the flange, **mounted upside down** — next section) plus two
+static **D415**s — SHELF (high/frontal) and `025522060953` (TABLE, workspace
+side view). The SHELF unit is whichever second D415 is plugged in:
+`024122061936` on 2026-08-31, `021422061772` since 2026-09-03 (the 08-31 unit
+is no longer connected; `rs-enumerate-devices -s` is the authority, and
+`params/shelf_d415.yaml` must carry the connected serial, quoted). The two
+D415s are interchangeable, so the SHELF/TABLE serial assignment is provisional
+until mounted (Step 2); swap the two params YAMLs if reversed.
 
 ```
 # All three on domain 0 (local RViz), each pinned by a quoted params YAML:
@@ -100,12 +104,85 @@ ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 DISPLAY=:0 \
   python3 cams/tools/rig_feed_montage.py
 ```
 
+```
+# Are the feeds LIVE (not latched)? Bounded check: frames in a window, Hz, and
+# the age of the newest header stamp against the wall clock. Exit 0 = all live.
+python3 cams/tools/rig_feed_check.py                     # the three raw colour feeds
+python3 cams/tools/rig_feed_check.py --topic /wrist/color_upright/image_raw
+```
+
 Per-camera topics: `/<role>/color/image_raw`, `/<role>/aligned_depth/image`
 (metres) + `/image_mm` (raw), `/<role>/points`. Each camera runs its own node
 in namespace `/wrist|/shelf|/table` pinned by `cams/params/<role>_*.yaml`.
+Launch args beyond `cams:=`: `upright:=true` (default; the rot180 twin for
+cameras flagged upside down, below), `reset:=true` (SDK `hardware_reset()` of
+the listed cameras before streaming — the software reset, see the 09-03
+traps), `imu:=true` (wrist accel+gyro), `color_profile` / `depth_profile`.
 Extrinsics are NOT set here — that is Step 2 (AprilTag world-alignment for the
 D415s; hand-eye re-calibration for the repositioned wrist, whose
 `cams/cellmap/calib/tool0_to_camera_2026-08-27.yaml` is now STALE).
+
+## Wrist camera is mounted upside down (2026-09-03)
+
+The wrist D435i sits inverted in its flange bracket, so the driver's raw colour
+image is upside down for humans. realsense2_camera cannot rotate, so
+`rig_multicam.launch.py` runs `tools/image_rot180.py` beside the wrist driver
+and publishes an **upright twin** of the colour and aligned-depth streams —
+image **and** a matching CameraInfo **and** its own optical frame, i.e. a
+complete, consistent camera model rather than a display hack:
+
+| raw (driver, untouched) | upright twin (rot180) |
+|---|---|
+| `/wrist/color/image_raw` + `camera_info`, frame `wrist_color_optical_frame` | `/wrist/color_upright/image_raw` + `camera_info`, frame `wrist_color_upright_optical_frame` |
+| `/wrist/aligned_depth/image` (m) + `/image_mm` + `camera_info` | `/wrist/aligned_depth_upright/image` (m) + `camera_info` (mm: `cellmap/tools/depth_to_mm.py`) |
+| `/wrist/points`, `/wrist/imu` | — (3D data has no "up"; use TF) |
+
+Camera model of the rotation (pixel-centre convention): `u' = (W-1)-u`,
+`v' = (H-1)-v`; fx/fy unchanged; `cx' = (W-1)-cx`, `cy' = (H-1)-cy`; radial
+distortion unchanged, tangential p1/p2 negated; P gets the same cx/cy shift.
+Verified live on 848x480: cx 430.45 -> 416.55, cy 230.17 -> 248.83. The node
+also broadcasts the static TF `wrist_color_optical_frame ->
+wrist_color_upright_optical_frame` = Rz(180 deg), quaternion (0,0,1,0), so
+both frames live in one tree.
+
+**What calibration and perception must know.** The upright twin is the stream
+the hand-eye calibration was solved against and the stream the cell map
+consumes (2026-09-03, `cams/cellmap/README.md` "Recalibration for the
+UPSIDE-DOWN mount"): the extrinsic on file is `tool0 ->
+wrist_color_upright_optical_frame`. An extrinsic is only meaningful together
+with the stream it was solved on — solving on raw and applying to upright (or
+vice versa) is a silent 180 deg roll about the optical axis that no residual
+reveals. Never pair an image from one twin with the CameraInfo or frame of the
+other; the raw topics are left exactly as the driver publishes them so nothing
+that already consumes them changes. AprilTag detection itself is
+rotation-invariant (36h11 decodes in any orientation and the corner order
+follows the tag), so tags work on either stream. The montage and
+`rig_multicam.rviz` show the upright twin for the wrist. The IMU stays in the
+driver's frame — the old `cam_roll_deg` / gravity-residual assumptions in
+`approach/` predate the inverted mount and are stale.
+
+## Traps hit on 2026-09-03 (rig v2 bring-up + flip)
+
+- **`Color Sensor Failure! RS4XX: RGB modules inconsistency - 2 found`** on a
+  D415 at enumeration = the kernel could not probe that unit's RGB UVC
+  interface: `journalctl -k | grep '4-1:1.3'` shows `Failed to query ... -71`
+  (EPROTO) and `probe with driver uvcvideo failed`. It is the USB **link**, not
+  the SDK: host port `4-1` did this to `024122061936` on 09-01 and to
+  `025522060953` on 09-03 while the same units were fine elsewhere. The
+  software reset (`ros2 launch cams/rig_multicam.launch.py cams:=table
+  reset:=true`) re-enumerates the device; on this port it came back with the
+  same EPROTO errors and then **dropped off the bus entirely** (`The device has
+  been disconnected!`, `/dev/video6: No such file`). After that only a physical
+  replug helps — into a different port/cable. The node keeps retrying
+  (`NOT found. Will Try again`) so it picks the camera up when replugged.
+- **Best-effort image drops under subscriber load**: 848x480 rgb8 at 30 Hz is
+  ~36 MB/s per subscriber over UDPv4 and every fragment must land in a
+  212 KB default socket buffer (`net.core.rmem_default`); `/proc/net/snmp`
+  `Udp: RcvbufErrors` grows ~500/s with the montage + RViz + flip nodes up,
+  and per-subscriber rates read 20-29 Hz while `ros2 topic hz` alone reads
+  ~27 Hz. Frames stay fresh (stamp age < 0.1 s) — it is loss, not latency.
+  Raising `rmem_default`/`rmem_max` is a sudo sysctl (captain); fewer
+  subscribers or a smaller profile also help.
 
 ## Traps hit on 2026-08-17 (each cost real time)
 

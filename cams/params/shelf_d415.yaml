@@ -16,4 +16,7 @@
 # units end up the other way round.
 /shelf/camera:
   ros__parameters:
-    serial_no: "024122061936"   # D415, provisionally the SHELF (high) unit
+    # 2026-09-03: 021422061772 is the second D415 plugged into this PC (the
+    # cell-map "cam415b"); 024122061936, the 08-31 unit, is no longer connected.
+    # `rs-enumerate-devices -s` is the authority — update this line, quoted.
+    serial_no: "021422061772"   # D415, provisionally the SHELF (high) unit

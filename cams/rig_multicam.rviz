@@ -41,7 +41,7 @@ Visualization Manager:
       Name: WRIST rgb
       Enabled: true
       Topic:
-        Value: /wrist/color/image_raw
+        Value: /wrist/color_upright/image_raw
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
@@ -72,7 +72,7 @@ Visualization Manager:
       Name: WRIST depth
       Enabled: false
       Topic:
-        Value: /wrist/aligned_depth/image
+        Value: /wrist/aligned_depth_upright/image
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last

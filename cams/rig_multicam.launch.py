@@ -29,6 +29,17 @@ per-role names so the three cameras never collide:
   /<role>/points                           organised coloured pointcloud
   /<role>/imu                              (wrist only, imu:=true)
 
+The WRIST D435i is mounted UPSIDE DOWN on the flange (2026-09-03). Its raw
+topics above stay exactly as the driver publishes them (calibration and
+perception truth); for humans an upright twin is added by tools/image_rot180.py
+(upright:=true, default) — image + matching CameraInfo + its own optical frame:
+  /wrist/color_upright/image_raw           rot180  frame wrist_color_upright_optical_frame
+  /wrist/color_upright/camera_info
+  /wrist/aligned_depth_upright/image       rot180  (metres)
+  /wrist/aligned_depth_upright/camera_info
+  TF wrist_color_optical_frame -> wrist_color_upright_optical_frame = Rz(180 deg)
+See cams/README.md "Wrist camera is mounted upside down" before calibrating.
+
 Extrinsics (where each camera sits in the world / on the arm) are NOT set here —
 that is Step 2 (AprilTag world-alignment for the two static D415s; hand-eye
 re-calibration for the repositioned wrist D435i, whose old
@@ -50,20 +61,25 @@ Then, in another shell on domain 0:
   rviz2 -d cams/rig_multicam.rviz
 """
 import pathlib
+import sys
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 HERE = pathlib.Path(__file__).resolve().parent
 PARAMS = HERE / 'params'
+ROT180 = HERE / 'tools' / 'image_rot180.py'
 
-# role -> (params_file, is_d435i). D435i has an IMU; the D415s do not.
+# role -> (params_file, is_d435i, upside_down).
+# D435i has an IMU; the D415s do not. upside_down: the camera is physically
+# mounted inverted, so an upright twin of its image topics is published
+# (upright:=true). Only the wrist is (flange bracket, 2026-09-03).
 CAMERAS = {
-    'wrist': ('wrist_d435i.yaml', True),
-    'shelf': ('shelf_d415.yaml', False),
-    'table': ('table_d415.yaml', False),
+    'wrist': ('wrist_d435i.yaml', True, True),
+    'shelf': ('shelf_d415.yaml', False, False),
+    'table': ('table_d415.yaml', False, False),
 }
 
 # Marker left in a params YAML until its real serial is filled in from
@@ -72,9 +88,35 @@ CAMERAS = {
 _PLACEHOLDER = 'FILL_'
 
 
-def _nodes_for(role, imu_on, color_profile, depth_profile):
+def _upright_nodes(role):
+    """Upright (rot180) twins of the colour + aligned-depth streams, each with
+    a correctly transformed CameraInfo and the upright optical frame + its
+    static TF (see tools/image_rot180.py for the camera model)."""
+    frame = f'{role}_color_upright_optical_frame'   # aligned depth shares it
+    pairs = [
+        (f'/{role}/color/image_raw', f'/{role}/color/camera_info',
+         f'/{role}/color_upright/image_raw', f'/{role}/color_upright/camera_info',
+         'color_upright'),
+        (f'/{role}/aligned_depth/image', f'/{role}/aligned_depth/camera_info',
+         f'/{role}/aligned_depth_upright/image', f'/{role}/aligned_depth_upright/camera_info',
+         'aligned_depth_upright'),
+    ]
+    procs = []
+    for img_in, info_in, img_out, info_out, name in pairs:
+        procs.append(ExecuteProcess(
+            cmd=[sys.executable, str(ROT180), '--ros-args',
+                 '-r', f'__ns:=/{role}', '-r', f'__node:={name}',
+                 '-p', f'image_in:={img_in}', '-p', f'info_in:={info_in}',
+                 '-p', f'image_out:={img_out}', '-p', f'info_out:={info_out}',
+                 '-p', f'frame_out:={frame}'],
+            output='screen', name=f'{role}_{name}'))
+    return procs
+
+
+def _nodes_for(role, imu_on, color_profile, depth_profile, upright, reset):
     params_file = PARAMS / CAMERAS[role][0]
     is_d435i = CAMERAS[role][1]
+    upside_down = CAMERAS[role][2]
     if not params_file.is_file():
         raise RuntimeError(f'[rig_multicam] missing params file: {params_file}')
     if _PLACEHOLDER in params_file.read_text():
@@ -108,6 +150,10 @@ def _nodes_for(role, imu_on, color_profile, depth_profile):
         'enable_infra2': False,
         'enable_gyro': imu,
         'enable_accel': imu,
+        # reset:=true -> SDK hardware_reset() of THIS camera before streaming:
+        # the software reset for a wedged unit (cams/README.md, "RGB modules
+        # inconsistency"). The device re-enumerates on USB (a few seconds).
+        'initial_reset': reset,
     }
     if imu:
         stream['unite_imu_method'] = 2      # accel+gyro united onto one /imu msg
@@ -146,7 +192,10 @@ def _nodes_for(role, imu_on, color_profile, depth_profile):
             ('image', f'/{role}/aligned_depth/image'),
         ],
     )
-    return [camera, convert]
+    nodes = [camera, convert]
+    if upright and upside_down:
+        nodes += _upright_nodes(role)
+    return nodes
 
 
 def _setup(context, *args, **kwargs):
@@ -160,10 +209,12 @@ def _setup(context, *args, **kwargs):
     imu_on = LaunchConfiguration('imu').perform(context).lower() == 'true'
     color_profile = LaunchConfiguration('color_profile').perform(context)
     depth_profile = LaunchConfiguration('depth_profile').perform(context)
+    upright = LaunchConfiguration('upright').perform(context).lower() == 'true'
+    reset = LaunchConfiguration('reset').perform(context).lower() == 'true'
 
     nodes = []
     for role in requested:
-        nodes += _nodes_for(role, imu_on, color_profile, depth_profile)
+        nodes += _nodes_for(role, imu_on, color_profile, depth_profile, upright, reset)
     return nodes
 
 
@@ -182,6 +233,18 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'depth_profile', default_value='848x480x30',
             description='Depth profile WxHxFPS for every camera.'),
+        DeclareLaunchArgument(
+            'upright', default_value='true',
+            description='Publish the rot180 upright twin (/<role>/color_upright, '
+                        '/<role>/aligned_depth_upright + TF) for cameras that '
+                        'are mounted upside down (the WRIST). Raw topics are '
+                        'never altered.'),
+        DeclareLaunchArgument(
+            'reset', default_value='false',
+            description='SDK hardware_reset() of each listed camera before '
+                        'streaming (initial_reset). Software reset for a unit '
+                        'whose colour module failed to enumerate; combine with '
+                        'cams:=<role> to reset only that camera.'),
         DeclareLaunchArgument(
             'imu', default_value='false',
             description='Enable accel+gyro on the WRIST D435i (united on '
