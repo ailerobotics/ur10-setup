@@ -13,6 +13,10 @@ because one guard is not a guard.
 
   python3 cumotion/make_limited_urdf.py            # windows around the LIVE pose
   python3 cumotion/make_limited_urdf.py --frozen   # around the pose recorded in the yaml
+  python3 cumotion/make_limited_urdf.py --write-limits cumotion/pneumatic_limits_live.yaml
+      # also writes the windows AS APPLIED (reference = the live pose) in the
+      # schema plan_test.py --joint-limits and execute_plan.py --limits read,
+      # so the guards check the same windows the planner was given
 """
 import argparse
 import datetime as dt
@@ -57,6 +61,9 @@ def main():
     ap.add_argument('--xrdf-out', default=os.path.join(HERE, 'ur10_pneumatic.xrdf'))
     ap.add_argument('--frozen', action='store_true',
                     help='use the reference pose in the yaml instead of live /joint_states')
+    ap.add_argument('--write-limits', default=None, metavar='YAML',
+                    help='also write the applied windows (reference_pose_rad = the pose used '
+                         'here, window_deg) for plan_test.py --joint-limits / execute_plan.py --limits')
     a = ap.parse_args()
 
     cfg = yaml.safe_load(open(a.limits))
@@ -158,8 +165,21 @@ def main():
 
     open(a.xrdf_out, 'w').write(xr)
 
+    if a.write_limits:
+        hdr = (f'# GENERATED {dt.datetime.now().isoformat(timespec="seconds")} by '
+               f'make_limited_urdf.py from {os.path.basename(a.limits)}.\n'
+               f'# reference_pose_rad = the {"yaml reference" if a.frozen else "LIVE /joint_states"} '
+               f'pose the windows in {os.path.basename(a.out)} were built around.\n'
+               f'# Same schema as pneumatic_limits.yaml: feed to plan_test.py --joint-limits\n'
+               f'# and execute_plan.py --limits so every guard checks THESE windows.\n')
+        body = yaml.safe_dump({'reference_pose_rad': {j: round(float(ref[j]), 6) for j in JOINTS},
+                               'window_deg': {j: win[j] for j in JOINTS}}, sort_keys=False)
+        open(a.write_limits, 'w').write(hdr + body)
+
     print(f'wrote {a.out}')
     print(f'wrote {a.xrdf_out}  (retract config moved inside the windows)')
+    if a.write_limits:
+        print(f'wrote {a.write_limits}  (applied windows for plan_test/execute_plan guards)')
     print(f'{"joint":22s} {"window":>8}   {"min rad":>9} {"max rad":>9}   {"min deg":>8} {"max deg":>8}')
     for j in JOINTS:
         lo, hi = applied[j]

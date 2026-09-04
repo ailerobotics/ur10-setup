@@ -22,6 +22,13 @@ Two operations, composable in one pass:
   * speckle drop (--denoise): 26-connected components of occupied blocks smaller
     than --min-blocks are deleted. Isolated un-scanned specks float away from the
     real structure; the big connected cell (table+walls+shelf) is one component.
+    Unobserved space reads as FREE to cuMotion, so every removed component is
+    printed with its base_link centre, extent and block count — check each one
+    is mid-air speckle and not a real small object (a carton spans 1–3 blocks),
+    and protect known small objects with --keep-box.
+
+The output file must not already exist (pass --force to overwrite a previous
+cleaned map); src and dst may never be the same file.
 
 Voxel layout (verified against the mesh, 8.9 mm median): nvblox VoxelBlock is
 row-major voxels[x][y][z], so linear L -> vx=L//64, vy=(L//8)%8, vz=L%8, and the
@@ -36,6 +43,7 @@ test_nvblx_clean.py). Confirm the cleaned map on the planner separately with
 map_ctl.py load + verify_map.py.
 """
 import argparse
+import os
 import shutil
 import sqlite3
 import sys
@@ -53,7 +61,7 @@ LAYERS = {
     'tsdf':      dict(bytes=8, weight_off=4),   # {f4 distance, f4 weight}
     'color':     dict(bytes=8, weight_off=4),   # {u1 r,g,b,a, f4 weight}
     'occupancy': dict(bytes=4, weight_off=0),   # {f4 log_odds} -> 0 = unknown
-    'freespace': dict(bytes=4, weight_off=0),
+    'freespace': dict(bytes=None, weight_off=None),   # {timestamps, bool}: no weight
     'esdf':      dict(bytes=None, weight_off=None),
     'feature':   dict(bytes=None, weight_off=None),
 }
@@ -155,15 +163,18 @@ def crop_boxes(con, boxes, surf_band):
 
 def denoise(con, min_blocks, surf_band, keep_boxes):
     """Delete 26-connected occupied-block components smaller than min_blocks.
-    Blocks whose region overlaps a keep box are never removed. Returns
-    (components_removed, blocks_removed)."""
+    Blocks whose region overlaps a keep box are never removed. Returns one
+    audit dict per removed component: blocks, voxels, centre (mean of its
+    occupied voxel centres) and extent (their bounding box), all in base_link."""
     tables = layer_tables(con)
     bs = block_size(con, 'tsdf')
-    occ = set()
+    vs = bs / VPS
+    occ = {}
     for ix, iy, iz, blob in con.execute(
             "SELECT index_x,index_y,index_z,data FROM tsdf_layer_data").fetchall():
-        if tsdf_occupied_mask(blob, surf_band).any():
-            occ.add((ix, iy, iz))
+        m = tsdf_occupied_mask(blob, surf_band)
+        if m.any():
+            occ[(ix, iy, iz)] = voxel_centres(ix, iy, iz, bs)[m]
     nbr = [(dx, dy, dz) for dx in (-1, 0, 1) for dy in (-1, 0, 1)
            for dz in (-1, 0, 1) if (dx, dy, dz) != (0, 0, 0)]
     seen, comps = set(), []
@@ -191,19 +202,35 @@ def denoise(con, min_blocks, surf_band, keep_boxes):
                 return True
         return False
 
-    removed_comps = removed_blocks = 0
+    removed = []
     for comp in comps:
         if len(comp) >= min_blocks:
             continue
         if any(protected(b) for b in comp):
             continue
-        removed_comps += 1
+        pts = np.vstack([occ[b] for b in comp])
+        removed.append(dict(blocks=len(comp), voxels=len(pts),
+                            centre=pts.mean(axis=0).tolist(),
+                            extent=np.column_stack([pts.min(axis=0) - vs / 2,
+                                                    pts.max(axis=0) + vs / 2]).tolist()))
         for ix, iy, iz in comp:
-            removed_blocks += 1
             for name in tables:
                 con.execute(f"DELETE FROM {name}_layer_data WHERE index_x=? AND index_y=? AND index_z=?",
                             (ix, iy, iz))
-    return removed_comps, removed_blocks
+    removed.sort(key=lambda r: (-r['blocks'], r['centre']))
+    return removed
+
+
+def format_audit(removed):
+    """One line per removed component, in base_link metres."""
+    lines = []
+    for i, r in enumerate(removed, 1):
+        cx, cy, cz = r['centre']
+        (x0, x1), (y0, y1), (z0, z1) = r['extent']
+        lines.append(f'    removed #{i}: {r["blocks"]} block(s), {r["voxels"]} voxel(s), '
+                     f'centre ({cx:.3f}, {cy:.3f}, {cz:.3f}), '
+                     f'extent x[{x0:.2f},{x1:.2f}] y[{y0:.2f},{y1:.2f}] z[{z0:.2f},{z1:.2f}]')
+    return lines
 
 
 def counts(con, surf_band):
@@ -238,9 +265,17 @@ def main(argv=None):
                     help='|TSDF distance| <= this (m) counts as observed surface')
     ap.add_argument('--self-check', action='store_true',
                     help='reload dst and assert no occupied voxel remains in any --remove-box')
+    ap.add_argument('--force', action='store_true',
+                    help='overwrite dst if it already exists (never the src file itself)')
     a = ap.parse_args(argv)
     if not a.remove_box and not a.denoise:
         ap.error('nothing to do: pass --remove-box and/or --denoise')
+    if not os.path.isfile(a.src):
+        ap.error(f'src not found: {a.src}')
+    if os.path.exists(a.dst) and os.path.samefile(a.src, a.dst):
+        ap.error(f'dst is the src file itself ({a.src}); the original is never modified')
+    if os.path.exists(a.dst) and not a.force:
+        ap.error(f'dst already exists: {a.dst} (pass --force to overwrite it)')
 
     shutil.copy2(a.src, a.dst)             # original stays untouched; edit the copy
     con = sqlite3.connect(a.dst)
@@ -252,8 +287,12 @@ def main(argv=None):
         cleared, dropped = crop_boxes(con, a.remove_box, a.surf_band)
         print(f'  crop:   {len(a.remove_box)} box(es) -> cleared {cleared} voxels, dropped {dropped} emptied blocks')
     if a.denoise:
-        rc, rb = denoise(con, a.min_blocks, a.surf_band, a.keep_box)
-        print(f'  denoise:removed {rc} components (< {a.min_blocks} blocks) = {rb} blocks')
+        removed = denoise(con, a.min_blocks, a.surf_band, a.keep_box)
+        rb = sum(r['blocks'] for r in removed)
+        print(f'  denoise:removed {len(removed)} components (< {a.min_blocks} blocks) = {rb} blocks'
+              + (' — audit each one below (base_link m):' if removed else ''))
+        for line in format_audit(removed):
+            print(line)
 
     con.commit()
     con.execute('VACUUM')

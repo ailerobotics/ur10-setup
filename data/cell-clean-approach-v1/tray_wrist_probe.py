@@ -8,15 +8,21 @@ TELEMETRY channel — it back-projects EVERY accepted carton to base_link via th
 calibrated tool0->wrist_color_upright_optical_frame TF and logs class / conf /
 3-D, so its detections can be cross-checked against the cleaned map's shelf.
 
-It does NOT gate anything and moves nothing. Runs inside shelfbot_ros:
+It does NOT gate anything and moves nothing. Runs inside shelfbot_ros. This is
+the exact invocation that produced tray-detections-base_link.json (model
+tray_v5_best.pt; --base-tf is the base_link<-wrist_color_upright_optical_frame
+snapshot of the parked arm, tool0_to_camera_2026-09-03.yaml + live TF):
   docker cp tray_wrist_probe.py shelfbot_ros:/root/
   docker exec -e ROS_DOMAIN_ID=0 -e FASTDDS_BUILTIN_TRANSPORTS=UDPv4 shelfbot_ros \
     bash -lc 'source /opt/ros/jazzy/setup.bash && \
       /opt/yolo_venv/bin/python3 /root/tray_wrist_probe.py --secs 0 \
+      --model /root/weights/tray_v5_best.pt \
+      --base-tf=-0.776771,-0.154955,0.824915,-0.682359,0.197102,-0.105725,0.695960 \
       --json /root/tray_probe.json --annot /root/tray_annot.png'
 
---secs 0 runs forever (background); >0 runs a bounded probe then exits. Needs the
-mount TF up (cams/cellmap/tools/publish_mount.py) so optical->base_link resolves.
+--secs 0 runs forever (background); >0 runs a bounded probe then exits. Without
+--base-tf the mount TF must be up (cams/cellmap/tools/publish_mount.py) so
+optical->base_link resolves live; the JSON dump records which base_tf was used.
 """
 import argparse
 import collections
@@ -204,6 +210,9 @@ class TrayProbe(Node):
                         cls=dict(c['cls'])) for c in clusters]
         summary.sort(key=lambda s: -s['hits'])
         json.dump(dict(model=self._args.model, updated=time.time(),
+                       base_tf=self._args.base_tf,
+                       base_tf_note=('fixed base_link<-optical snapshot tx,ty,tz,qx,qy,qz,qw'
+                                     if self._args.base_tf else 'live TF lookup per detection'),
                        classes_seen=dict(self._class_counts),
                        last_frame_accepted=self._last_accept,
                        carton_clusters=summary), open(self._args.json, 'w'), indent=2)

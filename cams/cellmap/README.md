@@ -515,7 +515,9 @@ FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
     --start-pose=-0.506,-1.058,0.25 --goal-pose=-0.10,0.80,0.95 --pose-goal
 # cuMotion arcs up over the table and stops short of the shelf: 1.27x straight
 # line, +13.7 cm to the shelf/carton volume, +4.8 cm to the table
-# (--recheck --check-box). Cross-checked vs live wrist-cam carton detections
+# (--recheck --check-box; both commands + outputs, and why the yaml keeps only
+# the last one: data/cell-clean-approach-v1/plan-clearance-checks.md).
+# Cross-checked vs live wrist-cam carton detections
 # (base_link y≈1.13–1.32) — the map shelf is where the cartons really are.
 ```
 

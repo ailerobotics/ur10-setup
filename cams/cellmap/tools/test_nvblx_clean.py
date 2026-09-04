@@ -6,14 +6,18 @@ Builds a tiny synthetic .nvblx (the real SQLite schema, block_size 0.16, TSDF +
 color layers) with hand-placed blocks, runs the tool, and checks that:
   * a box crops voxels by CENTRE, to 2 cm — voxels just outside survive;
   * a block emptied by the crop is dropped from every layer;
-  * --denoise removes a small isolated component but keeps a large one, and
-    honours --keep-box;
+  * --denoise removes a small isolated component but keeps a large one, honours
+    --keep-box, and prints an audit line (centre / extent / block count in
+    base_link) for exactly the components it removed;
   * --self-check passes on a good clean, and a voxel outside the box survives;
-  * the source file is never modified and the output is valid loadable SQLite.
+  * the source file is never modified and the output is valid loadable SQLite;
+  * an existing dst is refused without --force and overwritten with it, and
+    dst == src is refused even with --force.
 
 Run standalone (`python3 test_nvblx_clean.py`) or under pytest.
 """
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -84,6 +88,21 @@ def run(*args):
     return subprocess.run([sys.executable, TOOL, *args], capture_output=True, text=True)
 
 
+AUDIT_RE = re.compile(r'removed #(\d+): (\d+) block\(s\), (\d+) voxel\(s\), '
+                      r'centre \(([-\d.]+), ([-\d.]+), ([-\d.]+)\), '
+                      r'extent x\[([-\d.]+),([-\d.]+)\] y\[([-\d.]+),([-\d.]+)\] z\[([-\d.]+),([-\d.]+)\]')
+
+
+def audit_lines(stdout):
+    """Parsed --denoise audit: [(blocks, voxels, centre(3), extent(3x2)), ...]."""
+    out = []
+    for m in AUDIT_RE.finditer(stdout):
+        v = [float(x) for x in m.groups()[1:]]
+        out.append((int(v[0]), int(v[1]), tuple(v[2:5]),
+                    ((v[5], v[6]), (v[7], v[8]), (v[9], v[10]))))
+    return out
+
+
 def test_crop_is_voxel_precise_and_drops_emptied_blocks():
     with tempfile.TemporaryDirectory() as d:
         src, dst = os.path.join(d, 'in.nvblx'), os.path.join(d, 'out.nvblx')
@@ -133,6 +152,37 @@ def test_denoise_drops_small_keeps_large_and_keep_box():
         assert (-20, -20, -20) in occ, 'speck inside --keep-box must survive'
         for ix in range(6):
             assert (ix, 0, 0) in occ, 'large component must survive'
+        # the audit lists exactly the one removed component, where it really was:
+        # voxel (0,0,0) of block (20,20,20) has centre (20*8+0.5)*0.02 = 3.21 m
+        audit = audit_lines(r.stdout)
+        assert len(audit) == 1, r.stdout
+        blocks, voxels, centre, extent = audit[0]
+        assert (blocks, voxels) == (1, 1), audit[0]
+        assert all(abs(c - 3.21) < 1e-6 for c in centre), centre
+        for lo, hi in extent:
+            assert abs(lo - 3.20) < 1e-6 and abs(hi - 3.22) < 1e-6, extent
+
+
+def test_denoise_audit_reports_multi_block_component_extent():
+    with tempfile.TemporaryDirectory() as d:
+        src, dst = os.path.join(d, 'in.nvblx'), os.path.join(d, 'out.nvblx')
+        # a 2-block speck along +x: block (10,0,0) voxel (0,0,0) and block
+        # (11,0,0) voxel (7,7,7) -> centres (1.61,0.01,0.01) and (1.91,0.15,0.15)
+        make_map(src, {(10, 0, 0): [(0, 0, 0)], (11, 0, 0): [(7, 7, 7)],
+                       (30, 30, 30): [(0, 0, 0)], (31, 30, 30): [(0, 0, 0)],
+                       (32, 30, 30): [(0, 0, 0)], (33, 30, 30): [(0, 0, 0)]})
+        r = run(src, dst, '--denoise', '--min-blocks', '4')
+        assert r.returncode == 0, r.stderr + r.stdout
+        audit = audit_lines(r.stdout)
+        assert len(audit) == 1, r.stdout
+        blocks, voxels, centre, extent = audit[0]
+        assert (blocks, voxels) == (2, 2), audit[0]
+        assert abs(centre[0] - 1.76) < 1e-6 and abs(centre[1] - 0.08) < 1e-6, centre
+        assert abs(extent[0][0] - 1.60) < 1e-6 and abs(extent[0][1] - 1.92) < 1e-6, extent
+        assert abs(extent[1][0] - 0.00) < 1e-6 and abs(extent[1][1] - 0.16) < 1e-6, extent
+        occ = occupied_voxels(dst)
+        assert (10, 0, 0) not in occ and (11, 0, 0) not in occ
+        assert all((30 + i, 30, 30) in occ for i in range(4)), '4-block component must survive'
 
 
 def test_self_check_passes_and_voxel_outside_box_survives():
@@ -160,6 +210,35 @@ def test_source_untouched_and_output_valid():
         tabs = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert 'tsdf_layer_data' in tabs and 'color_layer_metadata' in tabs
         con.close()
+
+
+def test_existing_dst_refused_without_force_and_overwritten_with_it():
+    with tempfile.TemporaryDirectory() as d:
+        src, dst = os.path.join(d, 'in.nvblx'), os.path.join(d, 'out.nvblx')
+        make_map(src, {(0, 0, 0): [(1, 1, 1)], (5, 5, 5): [(2, 2, 2)]})
+        r = run(src, dst, '--remove-box', '0,0.16,0,0.16,0,0.16')
+        assert r.returncode == 0, r.stderr
+        first = open(dst, 'rb').read()
+        # second run to the same dst: refused, and the verified output is untouched
+        r = run(src, dst, '--remove-box', '0.8,0.96,0.8,0.96,0.8,0.96')
+        assert r.returncode != 0, 'existing dst must be refused without --force'
+        assert 'already exists' in r.stderr, r.stderr
+        assert open(dst, 'rb').read() == first, 'refused run must not touch dst'
+        # with --force the new clean replaces it
+        r = run(src, dst, '--remove-box', '0.8,0.96,0.8,0.96,0.8,0.96', '--force')
+        assert r.returncode == 0, r.stderr
+        occ = occupied_voxels(dst)
+        assert (0, 0, 0) in occ and (5, 5, 5) not in occ, occ
+
+
+def test_dst_equal_to_src_refused_even_with_force():
+    with tempfile.TemporaryDirectory() as d:
+        src = os.path.join(d, 'in.nvblx')
+        make_map(src, {(0, 0, 0): [(1, 1, 1)]})
+        before = open(src, 'rb').read()
+        r = run(src, src, '--remove-box', '0,0.16,0,0.16,0,0.16', '--force')
+        assert r.returncode != 0, 'src as dst must be refused'
+        assert open(src, 'rb').read() == before, 'source map must be left untouched'
 
 
 def main():

@@ -281,6 +281,13 @@ A `.nvblx` is a SQLite DB; the tool zeroes the TSDF weight of voxels whose centr
 is inside a base_link box (voxel-precise) and drops small isolated blocks — no
 ROS, no rig (colocated `test_nvblx_clean.py`). cuMotion recomputes the ESDF it
 plans against from the TSDF, so editing the TSDF is what the planner sees. The
+tool refuses an output that already exists (`--force` replaces a previous cleaned
+map; the source file is never the target). `--denoise` prints one audit line per
+removed component (base_link centre, extent, block count): unobserved space reads
+as FREE to the planner, so confirm each one is mid-air speckle and not a real
+small object (a carton spans 1–3 blocks at 0.16 m), and protect anything real
+with `--keep-box=x0,x1,y0,y1,z0,z1`. Audit of the shipped cleaned map:
+`data/cell-clean-approach-v1/nvblx-clean-audit.txt`. The
 cleaned file becomes operational automatically (loaders take the newest
 `cell-*.nvblx`). ALWAYS re-verify before trusting it:
 
