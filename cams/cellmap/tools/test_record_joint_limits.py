@@ -288,6 +288,188 @@ def test_merged_file_regenerates_limited_model():
         os.rmdir(tmpdir)
 
 
+# --- CAPTAIN-DECLARED override mode ---------------------------------------
+
+def test_declare_widens_only_named_joint_keeps_others():
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base', date='2026-09-04')
+    tmin, tmax, slack = -2.6, 1.2, 1.0        # rad, rad, deg
+    out, entry = rec.declare_limits(base, 'shoulder_lift_joint', tmin, tmax, slack,
+                                    'covers the validated demo travel', date='2026-09-05')
+    # effective window = [tmin - slack, tmax + slack], encoded ref +- window_deg
+    ref = out['reference_pose_rad']['shoulder_lift_joint']
+    win = out['window_deg']['shoulder_lift_joint']
+    lo = ref - math.radians(win)
+    hi = ref + math.radians(win)
+    assert math.isclose(lo, tmin - math.radians(slack), abs_tol=1e-5)
+    assert math.isclose(hi, tmax + math.radians(slack), abs_tol=1e-5)
+    # declared provenance recorded, and it is NOT presented as measured
+    d = out['declared'][-1]
+    assert d['joint'] == 'shoulder_lift_joint' and d['date'] == '2026-09-05'
+    assert 'captain-declared' in d['source'] and 'NOT hand-swept' in d['source']
+    assert d['covers_travel_deg']['min'] == round(math.degrees(tmin), 3)
+    assert d['window_deg']['max'] == round(math.degrees(tmax + math.radians(slack)), 3)
+    # the joint's MEASURED extremes are left as measured (documenting the sweep)
+    assert out['measured']['extremes_rad']['shoulder_lift_joint'] == \
+        base['measured']['extremes_rad']['shoulder_lift_joint']
+    assert d['extended_from_measured_raw_deg'] == \
+        base['measured']['extremes_deg']['shoulder_lift_joint']
+    # every OTHER joint byte-for-byte, and there is exactly one declaration
+    for j in JOINTS:
+        if j == 'shoulder_lift_joint':
+            continue
+        assert out['reference_pose_rad'][j] == base['reference_pose_rad'][j]
+        assert out['window_deg'][j] == base['window_deg'][j]
+    assert len([x for x in out['declared'] if x['joint'] == 'shoulder_lift_joint']) == 1
+
+
+def test_declare_refuses_bad_input():
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    for bad in [('elbow_flange', -1.0, 1.0), ('elbow_joint', 1.0, 1.0),
+                ('elbow_joint', 1.0, -1.0)]:
+        try:
+            rec.declare_limits(base, bad[0], bad[1], bad[2], 1.0, 'x')
+        except ValueError:
+            continue
+        raise AssertionError(f'expected ValueError for {bad}')
+    # a non-measured file is refused
+    try:
+        rec.declare_limits({'window_deg': {}}, 'elbow_joint', -1.0, 1.0, 1.0, 'x')
+    except ValueError:
+        return
+    raise AssertionError('expected ValueError on a foreign file')
+
+
+def test_declare_reidempotent_replaces_prior_entry():
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    once, _ = rec.declare_limits(base, 'shoulder_lift_joint', -2.6, 1.0, 1.0, 'first')
+    twice, _ = rec.declare_limits(once, 'shoulder_lift_joint', -2.7, 1.1, 1.0, 'second')
+    sl = [d for d in twice['declared'] if d['joint'] == 'shoulder_lift_joint']
+    assert len(sl) == 1 and sl[0]['reason'] == 'second'
+
+
+def test_declared_file_round_trips_execute_plan_parser():
+    """The declared window must be read identically by execute_plan.py's own
+    lo/hi arithmetic — the whole point is that guard passes on it."""
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    tmin, tmax, slack = -2.6, 1.2, 1.0
+    out, _ = rec.declare_limits(base, 'shoulder_lift_joint', tmin, tmax, slack, 'demo')
+    fd, path = tempfile.mkstemp(suffix='.yaml', prefix='declared_limits_')
+    os.close(fd)
+    try:
+        rec.write_limits_file(path, out)
+        lim = yaml.safe_load(open(path))            # exactly what the consumers do
+        ref, win = lim['reference_pose_rad'], lim['window_deg']
+        lo = ref['shoulder_lift_joint'] - math.radians(win['shoulder_lift_joint'])
+        hi = ref['shoulder_lift_joint'] + math.radians(win['shoulder_lift_joint'])
+        assert math.isclose(lo, tmin - math.radians(slack), abs_tol=1e-5)
+        assert math.isclose(hi, tmax + math.radians(slack), abs_tol=1e-5)
+        # the declared block survives a write/read round-trip
+        assert lim['declared'][-1]['joint'] == 'shoulder_lift_joint'
+    finally:
+        os.unlink(path)
+
+
+def test_declared_file_regenerates_limited_model():
+    """A declared file must stay make_limited_urdf --frozen -regenerable."""
+    urdf_in = os.path.join(CUMOTION, 'ur10_calibrated.urdf')
+    xrdf_in = os.path.join(CUMOTION, 'ur10_map.xrdf')
+    script = os.path.join(CUMOTION, 'make_limited_urdf.py')
+    if not (os.path.exists(urdf_in) and os.path.exists(xrdf_in)):
+        print('SKIP declared round-trip: inputs missing')
+        return
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    tmin, tmax, slack = -2.6, 1.2, 1.0
+    out, _ = rec.declare_limits(base, 'shoulder_lift_joint', tmin, tmax, slack, 'demo')
+    fd, path = tempfile.mkstemp(suffix='.yaml', prefix='declared_limits_')
+    os.close(fd)
+    tmpdir = tempfile.mkdtemp(prefix='declurdf_')
+    out_urdf = os.path.join(tmpdir, 'out.urdf')
+    out_xrdf = os.path.join(tmpdir, 'out.xrdf')
+    try:
+        rec.write_limits_file(path, out)
+        r = subprocess.run(
+            [sys.executable, script, '--frozen', '--limits', path,
+             '--urdf', urdf_in, '--xrdf-in', xrdf_in,
+             '--out', out_urdf, '--xrdf-out', out_xrdf],
+            capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, f'make_limited_urdf on declared file failed:\n{r.stdout}\n{r.stderr}'
+        s = open(out_urdf).read()
+        m = re.search(r'<joint name="shoulder_lift_joint" type="revolute">.*?'
+                      r'<limit[^>]*lower="([-\d.eE+]+)"[^>]*upper="([-\d.eE+]+)"', s, re.S)
+        lo, hi = float(m.group(1)), float(m.group(2))
+        assert math.isclose(lo, tmin - math.radians(slack), abs_tol=1e-4)
+        assert math.isclose(hi, tmax + math.radians(slack), abs_tol=1e-4)
+    finally:
+        os.unlink(path)
+        for f in (out_urdf, out_xrdf):
+            if os.path.exists(f):
+                os.unlink(f)
+        os.rmdir(tmpdir)
+
+
+# --- make_limited_urdf.py --keep-world-collision --------------------------
+
+def test_make_limited_urdf_keep_world_collision():
+    """--keep-world-collision keeps the FULL sphere set for WORLD collision
+    (nothing dropped) but still moves the retract config inside the windows."""
+    urdf_in = os.path.join(CUMOTION, 'ur10_calibrated.urdf')
+    xrdf_in = os.path.join(CUMOTION, 'ur10_map.xrdf')
+    script = os.path.join(CUMOTION, 'make_limited_urdf.py')
+    if not (os.path.exists(urdf_in) and os.path.exists(xrdf_in)):
+        print('SKIP keep-world-collision: inputs missing')
+        return
+    path, mins, maxs, margin = _write_tmp_limits()
+    tmpdir = tempfile.mkdtemp(prefix='kwc_')
+    out_urdf = os.path.join(tmpdir, 'out.urdf')
+    out_xrdf = os.path.join(tmpdir, 'out.xrdf')
+    xin = yaml.safe_load(open(xrdf_in))
+    full = xin['collision']['geometry']
+    try:
+        r = subprocess.run(
+            [sys.executable, script, '--frozen', '--keep-world-collision',
+             '--limits', path, '--urdf', urdf_in, '--xrdf-in', xrdf_in,
+             '--out', out_urdf, '--xrdf-out', out_xrdf],
+            capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, f'make_limited_urdf failed:\n{r.stdout}\n{r.stderr}'
+        xd = yaml.safe_load(open(out_xrdf))
+        # world collision keeps the full set: no *_world_only geometry created,
+        # collision and self_collision point at the SAME full sphere set
+        assert xd['collision']['geometry'] == full, 'world collision must keep the full set'
+        assert xd['self_collision']['geometry'] == full
+        assert not any(k.endswith('_world_only') for k in xd['geometry']), \
+            'no reduced world-only sphere set should be created'
+        # both excluded links are still present in the world sphere set
+        for link in rec_make_exclude():
+            assert link in xd['geometry'][full]['spheres'], f'{link} must be kept'
+        # retract config still moved inside the windows
+        lim = yaml.safe_load(open(path))
+        for j in JOINTS:
+            assert math.isclose(float(xd['default_joint_positions'][j]),
+                                round(lim['reference_pose_rad'][j], 4), abs_tol=1e-3)
+    finally:
+        os.unlink(path)
+        for f in (out_urdf, out_xrdf):
+            if os.path.exists(f):
+                os.unlink(f)
+        os.rmdir(tmpdir)
+
+
+def rec_make_exclude():
+    """The links make_limited_urdf.py drops from world collision by DEFAULT —
+    read from the script so this test tracks it."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'mlu', os.path.join(CUMOTION, 'make_limited_urdf.py'))
+    mlu = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mlu)
+    return mlu.WORLD_COLLISION_EXCLUDE
+
+
 def _run_all():
     fns = [v for k, v in sorted(globals().items())
            if k.startswith('test_') and callable(v)]

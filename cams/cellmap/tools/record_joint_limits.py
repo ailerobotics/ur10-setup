@@ -183,8 +183,23 @@ HEADER = """\
 
 def write_limits_file(path, limits):
     body = yaml.safe_dump(limits, sort_keys=False, default_flow_style=False)
+    header = HEADER
+    if limits.get('declared'):
+        notes = ['#',
+                 '# CAPTAIN-DECLARED OVERRIDES (NOT hand-swept) — a window below was',
+                 '# widened by captain decision to cover a known-required travel the sweep',
+                 '# did not reach. Provenance for each is under `declared:`:']
+        for d in limits['declared']:
+            w = d['window_deg']
+            ex = d.get('extended_from_measured_raw_deg')
+            exs = (f'; extended from measured raw {ex["min"]}..{ex["max"]} deg'
+                   if ex else '')
+            notes.append(f'#   {d["joint"]} = {w["min"]}..{w["max"]} deg, declared '
+                         f'{d["date"]} — {d["reason"]}{exs}')
+        notes.append('#')
+        header = HEADER + '\n'.join(notes) + '\n'
     with open(path, 'w') as f:
-        f.write(HEADER)
+        f.write(header)
         f.write(body)
 
 
@@ -249,6 +264,69 @@ def merge_limits(existing, session_mins, session_maxs, joints, jitter_note, date
         'changed': changed,
     })
     return out, changed
+
+
+def declare_limits(existing, joint, tmin_rad, tmax_rad, slack_deg, reason, date=None):
+    """CAPTAIN-DECLARED override for ONE joint: set its window to
+    [travel_min - slack, travel_max + slack] to COVER a known-required travel
+    the hand-sweep did not reach, WITHOUT re-measuring.
+
+    This is NOT a measurement. It is a deliberate, reasoned widening the captain
+    takes responsibility for (e.g. shoulder_lift must cover a validated demo
+    plan whose swing exceeds what the freedrive sweep reached). It is recorded
+    separately from `measured:`, under a top-level `declared:` list, so the
+    provenance of every joint's window stays unambiguous — "5 measured, 1
+    declared" is readable straight from the file.
+
+    Only the named joint's reference_pose_rad + window_deg change; every other
+    joint (reference, window, and the whole `measured:` block) is copied through
+    byte-for-byte. The named joint's own measured.extremes_* are LEFT AS
+    MEASURED — they still document what the hand-sweep actually reached; the
+    `declared:` entry records what the window was widened to, by how much slack,
+    and why. The consumers (make_limited_urdf.py, execute_plan.py) read only
+    reference_pose_rad + window_deg, so they pick up the declared window and
+    ignore the extra provenance.
+
+    Raises ValueError on a missing/foreign file, an unknown joint, travel
+    min >= max, or a window that collapses to <= 0.
+    """
+    date = date or dt.date.today().isoformat()
+    if 'reference_pose_rad' not in existing or 'window_deg' not in existing \
+            or 'measured' not in existing:
+        raise ValueError('the file to declare into is not a measured-limits file '
+                         '(missing reference_pose_rad / window_deg / measured)')
+    if joint not in JOINTS:
+        raise ValueError(f'unknown joint {joint!r} (expected one of {JOINTS})')
+    tmin, tmax = float(tmin_rad), float(tmax_rad)
+    if tmin >= tmax:
+        raise ValueError(f'declared travel min ({math.degrees(tmin):.3f} deg) must be '
+                         f'below max ({math.degrees(tmax):.3f} deg)')
+    slack = math.radians(slack_deg)
+    lo, hi = tmin - slack, tmax + slack          # effective window bounds (rad)
+    half_deg = math.degrees(0.5 * (hi - lo))
+    if half_deg <= 0.0:
+        raise ValueError('declared window collapses to <= 0')
+    out = copy.deepcopy(existing)
+    prior = out['measured'].get('extremes_deg', {}).get(joint)
+    prior_deg = dict(prior) if prior else None    # a COPY, not a YAML alias
+    out['reference_pose_rad'][joint] = round(0.5 * (lo + hi), 6)
+    out['window_deg'][joint] = round(half_deg, 4)
+    entry = {
+        'joint': joint,
+        'source': 'captain-declared (NOT hand-swept)',
+        'date': date,
+        'reason': reason,
+        'covers_travel_deg': {'min': round(math.degrees(tmin), 3),
+                              'max': round(math.degrees(tmax), 3)},
+        'slack_deg': slack_deg,
+        'window_deg': {'min': round(math.degrees(lo), 3),
+                       'max': round(math.degrees(hi), 3)},
+        'extended_from_measured_raw_deg': prior_deg,
+    }
+    # idempotent: a re-declare of the same joint replaces the prior entry
+    out['declared'] = [d for d in out.get('declared', []) if d.get('joint') != joint]
+    out['declared'].append(entry)
+    return out, entry
 
 
 class Recorder(Node):
@@ -323,6 +401,50 @@ def print_table(mins, maxs, latest, recent_j, min_jitter_mdeg, elapsed):
     sys.stdout.flush()
 
 
+def _do_declare(a):
+    """--declare: a pure file edit — no ROS, no recording. Applies a
+    captain-declared window override to ONE joint in the existing --out file."""
+    if not a.reason.strip():
+        print('--declare requires --reason (why the window is widened by decision)',
+              file=sys.stderr)
+        return 2
+    try:
+        jspec, rng = a.declare.split('=', 1)
+        joint = normalize_joint(jspec)
+        parts = [p for p in rng.split(',') if p.strip()]
+        if len(parts) != 2:
+            raise ValueError('need exactly MIN,MAX')
+        tmin_d, tmax_d = float(parts[0]), float(parts[1])
+    except ValueError as e:
+        print(f'--declare expects JOINT=MIN,MAX in deg '
+              f'(e.g. shoulder_lift=-174.2,-12.2): {e}', file=sys.stderr)
+        return 2
+    if not os.path.exists(a.out):
+        print(f'--declare target {a.out} does not exist; nothing to declare into',
+              file=sys.stderr)
+        return 2
+    try:
+        existing = yaml.safe_load(open(a.out))
+    except Exception as e:                                   # noqa: BLE001
+        print(f'--declare target {a.out} is not readable YAML: {e}', file=sys.stderr)
+        return 2
+    try:
+        limits, entry = declare_limits(existing, joint, math.radians(tmin_d),
+                                       math.radians(tmax_d), a.declare_slack_deg,
+                                       a.reason.strip())
+    except ValueError as e:
+        print(f'REFUSING to declare: {e}', file=sys.stderr)
+        return 1
+    write_limits_file(a.out, limits)
+    w = entry['window_deg']
+    print(f'declared override for {joint} written to {a.out}')
+    print(f'  window {w["min"]}..{w["max"]} deg (covers travel '
+          f'{entry["covers_travel_deg"]["min"]}..{entry["covers_travel_deg"]["max"]} '
+          f'+- {a.declare_slack_deg} deg slack)')
+    print(f'  source: {entry["source"]}; reason: {entry["reason"]}')
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -351,7 +473,23 @@ def main(argv=None):
     ap.add_argument('--joints', default='',
                     help='merge mode only: comma-separated joints to update, short or full '
                          'name (e.g. "shoulder_lift,shoulder_pan").')
+    ap.add_argument('--declare', default=None, metavar='JOINT=MIN,MAX',
+                    help='CAPTAIN-DECLARED override (no rig, no recording): widen ONE joint '
+                         "in the EXISTING --out file to the window [MIN-slack, MAX+slack] deg "
+                         'so it COVERS a known-required travel the hand-sweep did not reach. '
+                         'MIN,MAX are the travel to cover, in deg (e.g. '
+                         'shoulder_lift=-174.2,-12.2). Records provenance under `declared:` '
+                         '(source=captain-declared, NOT hand-swept); every other joint stays '
+                         'measured, byte-identical. Requires --reason.')
+    ap.add_argument('--reason', default='',
+                    help='declare mode only: why this window is widened by decision.')
+    ap.add_argument('--declare-slack-deg', type=float, default=1.0,
+                    help='declare mode only: slack added on each side of the covered travel '
+                         '(default 1.0).')
     a = ap.parse_args(argv)
+
+    if a.declare:
+        return _do_declare(a)
 
     merge_joints = None
     existing_for_merge = None

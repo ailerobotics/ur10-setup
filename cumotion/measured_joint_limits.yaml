@@ -23,16 +23,22 @@
 # reachable travel changes. Re-run the recorder (see cams/cellmap/README.md
 # "Measuring real joint limits").
 #
+#
+# CAPTAIN-DECLARED OVERRIDES (NOT hand-swept) — a window below was
+# widened by captain decision to cover a known-required travel the sweep
+# did not reach. Provenance for each is under `declared:`:
+#   shoulder_lift_joint = -175.174..-11.233 deg, declared 2026-09-05 — covers the validated tag1->shelf demo travel (start_joints -174.17 deg to shelf standoff -12.23 deg); measured freedrive sweep reached only -173.8..-97.2, extended by captain declaration 2026-09-04, NOT hand-swept; extended from measured raw -173.8..-97.208 deg
+#
 reference_pose_rad:
   shoulder_pan_joint: 0.223385
-  shoulder_lift_joint: -2.364985
+  shoulder_lift_joint: -1.626713
   elbow_joint: 0.536284
   wrist_1_joint: 4.458966
   wrist_2_joint: 0.343505
   wrist_3_joint: 0.706048
 window_deg:
   shoulder_pan_joint: 73.1184
-  shoulder_lift_joint: 33.296
+  shoulder_lift_joint: 81.9703
   elbow_joint: 78.4983
   wrist_1_joint: 92.7289
   wrist_2_joint: 95.6854
@@ -82,3 +88,20 @@ measured:
     wrist_3_joint:
       min: -88.775
       max: 169.682
+declared:
+- joint: shoulder_lift_joint
+  source: captain-declared (NOT hand-swept)
+  date: '2026-09-05'
+  reason: covers the validated tag1->shelf demo travel (start_joints -174.17 deg to
+    shelf standoff -12.23 deg); measured freedrive sweep reached only -173.8..-97.2,
+    extended by captain declaration 2026-09-04, NOT hand-swept
+  covers_travel_deg:
+    min: -174.174
+    max: -12.233
+  slack_deg: 1.0
+  window_deg:
+    min: -175.174
+    max: -11.233
+  extended_from_measured_raw_deg:
+    min: -173.8
+    max: -97.208

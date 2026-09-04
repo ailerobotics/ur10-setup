@@ -73,6 +73,12 @@ def main():
     ap.add_argument('--xrdf-out', default=os.path.join(HERE, 'ur10_pneumatic.xrdf'))
     ap.add_argument('--frozen', action='store_true',
                     help='use the reference pose in the yaml instead of live /joint_states')
+    ap.add_argument('--keep-world-collision', action='store_true',
+                    help='keep the FULL collision sphere set for WORLD collision too (do NOT '
+                         'drop shoulder_link/upper_arm_link). Use with a CLEANED map that no '
+                         'longer contains the mounting pedestal — the exclusion existed only '
+                         'because the raw map carried the pedestal the arm is bolted to. The '
+                         'retract config is still moved inside the windows.')
     ap.add_argument('--write-limits', default=None, metavar='YAML',
                     help='also write the applied windows (reference_pose_rad = the pose used '
                          'here, window_deg) for plan_test.py --joint-limits / execute_plan.py --limits')
@@ -154,18 +160,32 @@ def main():
     # world collision on with its normal buffer.
     xd = yaml.safe_load(xr)
     full = xd['collision']['geometry']
-    world_set = full + '_world_only'
-    spheres = {k: v for k, v in xd['geometry'][full]['spheres'].items()
-               if k not in WORLD_COLLISION_EXCLUDE}
-    dropped = [k for k in xd['geometry'][full]['spheres'] if k in WORLD_COLLISION_EXCLUDE]
-    if sorted(dropped) != sorted(WORLD_COLLISION_EXCLUDE):
-        sys.exit(f'expected to drop {WORLD_COLLISION_EXCLUDE}, dropped {dropped}')
-    xd['geometry'][world_set] = {'spheres': spheres}
-    xd['collision']['geometry'] = world_set
-    xd['collision']['buffer_distance'] = {
-        k: v for k, v in xd['collision']['buffer_distance'].items()
-        if k not in WORLD_COLLISION_EXCLUDE}
-    assert xd['self_collision']['geometry'] == full, 'self-collision must keep the FULL sphere set'
+    if a.keep_world_collision:
+        # FULL world collision: every link keeps its world sphere set. Correct
+        # when the map has been CLEANED of the mounting pedestal (the only
+        # reason the two links were ever excluded); the arm is then checked
+        # against the world everywhere, as the executable plan should be.
+        world_note = (f'# - FULL collision sphere set kept for WORLD collision '
+                      f'(--keep-world-collision):\n'
+                      f'#   nothing dropped, because the map this is planned against has\n'
+                      f'#   been cleaned of the robot\'s own mounting pedestal.\n')
+    else:
+        world_set = full + '_world_only'
+        spheres = {k: v for k, v in xd['geometry'][full]['spheres'].items()
+                   if k not in WORLD_COLLISION_EXCLUDE}
+        dropped = [k for k in xd['geometry'][full]['spheres'] if k in WORLD_COLLISION_EXCLUDE]
+        if sorted(dropped) != sorted(WORLD_COLLISION_EXCLUDE):
+            sys.exit(f'expected to drop {WORLD_COLLISION_EXCLUDE}, dropped {dropped}')
+        xd['geometry'][world_set] = {'spheres': spheres}
+        xd['collision']['geometry'] = world_set
+        xd['collision']['buffer_distance'] = {
+            k: v for k, v in xd['collision']['buffer_distance'].items()
+            if k not in WORLD_COLLISION_EXCLUDE}
+        assert xd['self_collision']['geometry'] == full, 'self-collision must keep the FULL sphere set'
+        world_note = (f'# - {", ".join(WORLD_COLLISION_EXCLUDE)} excluded from WORLD collision only,\n'
+                      f'#   via the generated "{world_set}" sphere set: the map contains the\n'
+                      f'#   robot\'s own mounting pedestal. SELF-collision still uses the full\n'
+                      f'#   set, so the arm is checked against itself everywhere.\n')
     for j in JOINTS:
         xd['default_joint_positions'][j] = round(float(ref[j]), 4)
     xr = yaml.safe_dump(xd, sort_keys=False, default_flow_style=None)
@@ -174,10 +194,7 @@ def main():
           f'# - default_joint_positions moved to the pneumatic reference pose\n'
           f'#   (the stock retract config is outside the windows and cuMotion\n'
           f'#   rejects it as an invalid RobotDescription).\n'
-          f'# - {", ".join(WORLD_COLLISION_EXCLUDE)} excluded from WORLD collision only,\n'
-          f'#   via the generated "{world_set}" sphere set: the map contains the\n'
-          f'#   robot\'s own mounting pedestal. SELF-collision still uses the full\n'
-          f'#   set, so the arm is checked against itself everywhere.\n'
+          + world_note +
           f'# Do not edit by hand.\n') + xr
 
     open(a.xrdf_out, 'w').write(xr)

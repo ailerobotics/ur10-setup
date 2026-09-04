@@ -1,17 +1,16 @@
-# GENERATED 2026-09-04T17:15:14 by make_limited_urdf.py from ur10_map.xrdf.
+# GENERATED 2026-09-05T00:06:14 by make_limited_urdf.py from ur10_map.xrdf.
 # - default_joint_positions moved to the pneumatic reference pose
 #   (the stock retract config is outside the windows and cuMotion
 #   rejects it as an invalid RobotDescription).
-# - shoulder_link, upper_arm_link excluded from WORLD collision only,
-#   via the generated "ur10e_collision_spheres_world_only" sphere set: the map contains the
-#   robot's own mounting pedestal. SELF-collision still uses the full
-#   set, so the arm is checked against itself everywhere.
+# - FULL collision sphere set kept for WORLD collision (--keep-world-collision):
+#   nothing dropped, because the map this is planned against has
+#   been cleaned of the robot's own mounting pedestal.
 # Do not edit by hand.
 format: xrdf
 format_version: 1.0
 modifiers:
 - {set_base_frame: base_link}
-default_joint_positions: {shoulder_pan_joint: 0.2234, shoulder_lift_joint: -2.365,
+default_joint_positions: {shoulder_pan_joint: 0.2234, shoulder_lift_joint: -1.6267,
   elbow_joint: 0.5363, wrist_1_joint: 4.459, wrist_2_joint: 0.3435, wrist_3_joint: 0.706}
 cspace:
   joint_names: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint,
@@ -20,9 +19,9 @@ cspace:
   jerk_limits: [500.0, 500.0, 500.0, 500.0, 500.0, 500.0]
 tool_frames: [tool0]
 collision:
-  geometry: ur10e_collision_spheres_world_only
-  buffer_distance: {forearm_link: 0.04, wrist_1_link: 0.04, wrist_2_link: 0.04, wrist_3_link: 0.04,
-    tool0: 0.04}
+  geometry: ur10e_collision_spheres
+  buffer_distance: {shoulder_link: 0.02, upper_arm_link: 0.02, forearm_link: 0.04,
+    wrist_1_link: 0.04, wrist_2_link: 0.04, wrist_3_link: 0.04, tool0: 0.04}
 self_collision:
   geometry: ur10e_collision_spheres
   buffer_distance: {shoulder_link: 0.07, tool0: 0.05}
@@ -53,7 +52,7 @@ geometry:
         radius: 0.05
       - center: [-0.613, 0, 0.18]
         radius: 0.07
-      forearm_link: &id001
+      forearm_link:
       - center: [0, 0, 0.03]
         radius: 0.05
       - center: [-0.0951667, 0, 0.03]
@@ -68,24 +67,17 @@ geometry:
         radius: 0.05
       - center: [-0.571, -1.19904e-17, 0.03]
         radius: 0.05
-      wrist_1_link: &id002
+      wrist_1_link:
       - center: [0, 0, 0]
         radius: 0.05
-      wrist_2_link: &id003
+      wrist_2_link:
       - center: [0, 0, 0]
         radius: 0.05
-      wrist_3_link: &id004
+      wrist_3_link:
       - center: [0, 0, 0]
         radius: 0.05
       - center: [0, 0, 0.06]
         radius: 0.07
-      tool0: &id005
+      tool0:
       - center: [0, 0, 0.12]
         radius: 0.01
-  ur10e_collision_spheres_world_only:
-    spheres:
-      forearm_link: *id001
-      wrist_1_link: *id002
-      wrist_2_link: *id003
-      wrist_3_link: *id004
-      tool0: *id005
