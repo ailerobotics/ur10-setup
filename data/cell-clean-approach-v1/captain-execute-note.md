@@ -84,11 +84,18 @@ physical hard-stop.**
    + upper_arm_link from world collision). `ur10_measured.xrdf` keeps the full
    set (`--keep-world-collision`); confirm `collision.geometry ==
    self_collision.geometry == ur10e_collision_spheres`.
-2. **Live, jittering `/joint_states`.** Verify the feed is LIVE by encoder jitter
+2. **Robot reachable + live, jittering `/joint_states`.** Check the WIRED link to
+   the robot FIRST — `cat /sys/class/net/enp5s0/carrier` must read `1`. As of
+   2026-09-05 it reads **0 (link down)**: `enp5s0` operstate down, no IP on the
+   192.168.0.0/24 subnet, and the driver's RTDE sockets sit in `SYN-SENT` to
+   192.168.0.1:30001/30004 — the robot Ethernet has dropped (a recorded trap;
+   `ping` still "succeeds" over wifi, so bind the interface: `ping -I enp5s0
+   192.168.0.1`). **No driver restart fixes a dead physical link** — reseat the
+   robot Ethernet cable / check robot power until `carrier` reads 1 and RTDE
+   reaches `ESTAB`, THEN `systemctl --user restart ur10-driver` (one writer only —
+   RUNBOOK §6b). Only then verify `/joint_states` is LIVE by encoder jitter
    (~4–9 mdeg at rest), never by rate — a dropped RTDE link republishes the last
-   packet at a perfect 125 Hz. If it reads 0.000 mdeg (frozen), recover the
-   driver before anything else (`systemctl --user restart ur10-driver`, one writer
-   only — RUNBOOK §6b — then re-check jitter). `execute_plan.py` will also abort
+   packet at a perfect 125 Hz (0.000 mdeg = frozen). `execute_plan.py` also aborts
    if the live start is off, but do not rely on a frozen feed.
 3. **The arm must be AT the validated start.** `execute_plan.py` ABORTS if the
    live pose is > 0.57° off `start_joints`. Jog there on the pendant first.
