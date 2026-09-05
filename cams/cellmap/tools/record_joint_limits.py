@@ -294,8 +294,9 @@ def declare_limits(existing, joint, tmin_rad, tmax_rad, slack_deg, reason, date=
     takes responsibility for (e.g. shoulder_lift must cover a validated demo
     plan whose swing exceeds what the freedrive sweep reached). It is recorded
     separately from `measured:`, under a top-level `declared:` list, so the
-    provenance of every joint's window stays unambiguous — "5 measured, 1
-    declared" is readable straight from the file.
+    provenance of every joint's window stays unambiguous — which joints are
+    purely hand-swept and which carry a captain-declared bound is readable
+    straight from the file.
 
     ONLY EVER WIDENS. The applied window is the UNION of the joint's current
     window and [travel_min - slack, travel_max + slack], so a one-sided need

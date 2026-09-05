@@ -6,8 +6,10 @@
 > the tag 1 → shelf standoff demo. The plan is
 > **`cams/cellmap/plans/tag1-shelf-measlim.yaml`**, re-planned by cuMotion and
 > validated so that **every waypoint stays inside the measured joint windows**
-> (`cumotion/measured_joint_limits.yaml`) — 5 hand-swept joints + 3
-> captain-declared extensions (disclosed below). It supersedes, for execution,
+> (`cumotion/measured_joint_limits.yaml`): 3 joints carry a captain-declared bound
+> (shoulder_lift at both ends; elbow and wrist_2 floors only, their ceilings kept
+> as measured), and the other 3 (shoulder_pan, wrist_1, wrist_3) are purely
+> hand-swept (disclosed below). It supersedes, for execution,
 > the collision-evidence-only plan `tag1-shelf-cumotion.yaml`, which drove
 > wrist_1 to 355.1° and MUST NOT be run.
 >
@@ -44,8 +46,10 @@ Every waypoint passes the joint-window guard against
 
 ## Joint-limit provenance — plain-English disclosure
 
-The limits file `cumotion/measured_joint_limits.yaml` has **5 hand-swept
-(measured)** joints and **3 captain-declared** extensions. A *declared* window is
+In the limits file `cumotion/measured_joint_limits.yaml`, 3 joints carry a
+captain-declared bound (shoulder_lift at both ends; elbow and wrist_2 floors
+only, their ceilings kept as measured), and the other 3 (shoulder_pan, wrist_1,
+wrist_3) are purely hand-swept. A *declared* window is
 NOT a measurement: the captain widened it by decision to cover the travel this
 validated demo needs, taking responsibility for it; the raw hand-sweep extremes
 stay on record in the file (`measured:`), and each override is recorded under
