@@ -1,38 +1,28 @@
-# Captain execute note — AprilTag 1 → shelf approach, cleaned map (2026-09-04)
+# Captain execute note — AprilTag 1 → shelf approach, WITHIN measured+declared joint limits
 
-> ## ⛔ SUPERSEDED — EVIDENCE ONLY, NOT FOR EXECUTION
+> ## ✅ EXECUTABLE — re-validated inside the measured joint limits (2026-09-05)
 >
-> **This is a deliberate, firstmate-directed supersession.** The committed plan
-> `cams/cellmap/plans/tag1-shelf-cumotion.yaml` drives **wrist_1 to 355.1°**
-> (point 129 of 313; 100 of the 313 waypoints are above 350°). That is **4.9°
-> from the ±360° mechanical stop** and **EXCEEDS the wrist_1 bind of 353.2°
-> that the captain MEASURED by hand-sweep** in task joint-limits-freedrive-v1
-> (raw; 348.2° effective with its 5° margin; 61 waypoints sit above the raw
-> bind). Those figures come from that task's measurement, not from a file in
-> this branch: the measured-limits file is that task's deliverable and is NOT
-> committed here. **This plan MUST NOT be executed.** There is intentionally NO
-> runnable execute command anywhere in this note or this branch.
+> This note delivers the **executable** plan and the exact captain command for
+> the tag 1 → shelf standoff demo. The plan is
+> **`cams/cellmap/plans/tag1-shelf-measlim.yaml`**, re-planned by cuMotion and
+> validated so that **every waypoint stays inside the measured joint windows**
+> (`cumotion/measured_joint_limits.yaml`) — 5 hand-swept joints + 3
+> captain-declared extensions (disclosed below). It supersedes, for execution,
+> the collision-evidence-only plan `tag1-shelf-cumotion.yaml`, which drove
+> wrist_1 to 355.1° and MUST NOT be run.
 >
-> The executable plan and the exact captain command are delivered by task
-> **joint-limits-freedrive-v1**, which re-validates the route WITHIN the measured
-> limits. What stays valid here: the plan, its clearances (+13.7 cm shelf /
-> +4.8 cm table) and the renders, as the VALIDATED EVIDENCE that cuMotion routes
-> collision-free against the cleaned map (Part 3's demonstration). The
-> prerequisites and safety checklist below are kept as reference for that
-> successor deliverable.
+> **Physical execution is CAPTAIN-GATED.** No agent has moved the arm. Confirm
+> the prerequisites and the safety checklist below, then run the single command
+> yourself with the e-stop in hand.
 
-**Status: DRY-RUN VALIDATED for collision, plan-only. Nothing has moved.** An
-agent prepared and verified the plan without ever commanding arm motion. It was
-never validated against any joint window (`plan_test.py` ran without
-`--joint-limits`; the yaml carries no `pneumatic_margin_deg`), and the captain's
-hand-sweep measurement that arrived afterwards rules it out for execution — see
-the banner.
+**Status: DRY-RUN VALIDATED, plan-only. Nothing has moved.** An agent prepared
+and verified the plan and its guards without ever commanding arm motion.
 
-## What the plan is (validated collision evidence)
+## What the plan is
 
 A collision-aware cuMotion plan from a hover **above AprilTag 1** to a **standoff
-in front of the gondola shelf** where the 4 cartons are, against the cleaned map
-`cell-2026-09-04-cleaned.nvblx`. Tool orientation held as parked (no reorient, no
+in front of the gondola shelf**, against the cleaned map
+`cell-2026-09-04-cleaned.nvblx`, tool orientation held as parked (no reorient, no
 grasp — the gripper is not active). It stops **short of contact**.
 
 | | base_link (m) | |
@@ -40,94 +30,85 @@ grasp — the gripper is not active). It stops **short of contact**.
 | start (hover above tag 1) | tool0 (−0.506, −1.058, 0.25) | tag 1 centre is (−0.506, −1.058, −0.057) |
 | goal (shelf standoff) | tool0 (−0.10, 0.80, 0.95) | 0.33 m short of the nearest carton (y≈1.13) |
 
-Validated numbers (`cams/cellmap/plans/tag1-shelf-cumotion.yaml`): cuMotion
-`isaac_ros_cumotion`, 313 points, **31.2 s at 0.05 scaling**, tool path 2.575 m
-(1.27× straight line, 58 cm max deviation — it arcs up over the table and curves
-through the open cell), max joint delta 161.9° (< 170° guard). Clearances swept
-over ALL collision spheres + 0.04 m buffer, on the FULL collision model
-(`ur10_map.xrdf`): **+13.7 cm to the shelf/carton volume, +4.8 cm to the table**
-(both `--recheck --check-box` commands and their outputs:
-`plan-clearance-checks.md`). Cross-checked against live wrist-cam detections: the
-map's shelf front (y≈1.13) matches where the cartons actually are (depth-measured
-y≈1.13–1.32) — the plan approaches a real shelf, not a map artefact. Renders:
-`plan-over-cleaned-map-3d.png`, `plan-over-cleaned-map-ortho.png`,
-`plan-vs-straightline.png`.
+Validated numbers (`cams/cellmap/plans/tag1-shelf-measlim.yaml`): cuMotion
+`isaac_ros_cumotion`, **276 points, 27.4 s at 0.05 scaling**, tool path 2.715 m
+(1.34× straight line, 74.7 cm max deviation), max joint delta **161.9° (< 170°
+guard)**. Clearances swept over ALL collision spheres + 0.04 m buffer on the FULL
+collision model: **+13.7 cm to the shelf/carton volume, +4.8 cm to the table**
+(`plan-measlim-clearance-checks.md`, render `plan-measlim-vs-cumotion.png`).
+Every waypoint passes the joint-window guard against
+`cumotion/measured_joint_limits.yaml` (tightest margin 1.0° = the declared slack);
+`execute_plan.py --limits` dry-check passes.
 
-`start_joints` of the committed yaml (the hover above tag 1):
-`[1.2971, −3.0399, −0.2456, 5.9301, −1.1607, −0.5524]` rad.
+`start_joints`: `[1.2971, −3.0399, −0.2456, 5.9301, −1.1607, −0.5524]` rad.
 
-## Why it is not executable — joint excursions, checked offline against the yaml
+## Joint-limit provenance — plain-English disclosure
 
-- **wrist_1 peaks at 355.1°** (+6.197 rad, point 129/313); 100 waypoints > 350°,
-  61 waypoints > the captain-measured 353.2° bind, 116 > the 348.2° effective
-  limit (both figures from the joint-limits-freedrive-v1 hand sweep);
-  4.9° from the +360° stop of `cumotion/ur10_calibrated.urdf`. The executor's
-  tracking-error cancel threshold (0.15 rad = 8.6°) is wider than that margin.
-  The unapplied `cumotion/robotiq_limits_proposed.yaml` (wrist_1 ≤ 350°) would
-  also refuse it. cuMotion planned inside the URDF's ±360°, so the plan is
-  "valid" to the planner and unsafe for the real joint.
-- shoulder_pan stays at ≈ +65°..+84° (a 19° swing); shoulder_lift swings 162°
-  along the path. Against the 2026-08-28 proposal windows in
-  `cumotion/pneumatic_limits.yaml` (tied to that day's park pose; only the
-  shoulder_pan ±120° was captain-confirmed, the other five were an unsigned
-  proposal), **0 of the 313 waypoints** lie inside the shoulder_pan, elbow,
-  wrist_1, wrist_2 or wrist_3 windows, and no ±45° shoulder_lift window around
-  any park pose can admit a 162° swing. Whether the pneumatic air-line / wire
-  strap is on the arm, and whether that ±120° pan limit still stands, remain the
-  captain's call — the measured limits (task joint-limits-freedrive-v1)
-  supersede the proposal.
+The limits file `cumotion/measured_joint_limits.yaml` has **5 hand-swept
+(measured)** joints and **3 captain-declared** extensions. A *declared* window is
+NOT a measurement: the captain widened it by decision to cover the travel this
+validated demo needs, taking responsibility for it; the raw hand-sweep extremes
+stay on record in the file (`measured:`), and each override is recorded under
+`declared:` (source = captain-declared, NOT hand-swept, 2026-09-04/05).
 
-## Prerequisites — reference for the successor deliverable
+| joint | hand-swept raw (deg) | window applied (deg) | declared? | why |
+|---|---|---|---|---|
+| shoulder_pan | −65.3 … 90.9 | −60.3 … 85.9 | measured | 5° margin |
+| shoulder_lift | −173.8 … −97.2 | **−175.2 … −11.2** | **declared (both ends)** | sweep never reached the demo swing (−174.2 … −12.2); +1° slack |
+| elbow | −52.8 … 114.2 | **−62.7** … 109.2 | **declared (floor)** | demo floor −61.7 below the sweep floor −52.8; ceiling kept measured; +1° slack |
+| wrist_1 | 157.8 … 353.2 | 162.8 … 348.2 | measured (untouched) | the in-limits plan keeps wrist_1 ≤ 339.77°, inside the measured window — NOT extended |
+| wrist_2 | −81.0 … 120.4 | **−83.4** … 115.4 | **declared (floor)** | demo floor −82.4 below the sweep floor −81.0; ceiling kept measured; +1° slack |
+| wrist_3 | −88.8 … 169.7 | −83.8 … 164.7 | measured | 5° margin |
 
-1. Cleaned-map planner up, on the FULL collision model (the default
-   `ur10_map.xrdf`, 0.04 m buffer — what this plan was validated on):
+Note: the earlier evidence plan needed wrist_1 to **355.1°, 1.9° PAST the
+hand-swept physical bind (353.2°)**. The captain accepted extending wrist_1 only
+if still required — it was **not required**: this re-plan routes wrist_1 entirely
+inside its measured window, so **no joint here is declared past a measured
+physical hard-stop.**
+
+## Prerequisites
+
+1. **Cleaned-map planner up, on the FULL collision model.** For `--exact`
+   execution the planner is not re-queried (saved waypoints are sent with
+   reconstructed timing), so this matters for RE-VALIDATION / re-planning, not for
+   the `--exact` run itself. When you do re-plan, start it from a LIVE copy
+   (`~/ur10` after merge) or a task worktree — never a returned scratch worktree —
+   on the measured limited model with FULL world collision:
    ```bash
-   systemctl --user stop ur10-cumotion            # if the default planner is running
-   ~/ur10/cumotion/start_cumotion_map.sh cell-2026-09-04-cleaned.nvblx
-   # wait for: "cell map loaded … starting cuMotion (read_esdf_world=true, xrdf /cfg/ur10_map.xrdf)"
+   systemctl --user stop ur10-cumotion; docker stop ur10-cumotion   # the unit stop alone can orphan the container
+   ~/ur10/cumotion/start_cumotion_map.sh cell-2026-09-04-cleaned.nvblx \
+       urdf:=/cfg/ur10_measured.urdf xrdf:=/cfg/ur10_measured.xrdf
+   # wait for: "Robot description loaded successfully" + "MotionPlan action server initialized"
    ```
-   **Never start it on `ur10_pneumatic.urdf` / `ur10_pneumatic.xrdf`.** That XRDF
-   (generated by `make_limited_urdf.py`) drops `shoulder_link` and
-   `upper_arm_link` from WORLD collision — a workaround for the pedestal that the
-   2026-08-28 map contained and this cleaned map no longer does. On it the
-   planner would not check the upper arm against walls, ceiling, table or shelf.
-   Note that `make_limited_urdf.py`'s DEFAULT `--out` / `--xrdf-out` ARE those
-   repo files, `cumotion/ur10_pneumatic.urdf` / `.xrdf`, and `run_live.sh`
-   (`cams/cellmap/live.launch.py`) loads them as the live-avoidance planner's
-   robot description: any regeneration must pass explicit `--out` / `--xrdf-out`
-   to a fresh or `/tmp` path and must never overwrite the repo defaults
-   (RUNBOOK §10 "Reduced joint windows").
-2. **The arm must be AT the validated start** of whatever plan executes.
-   `execute_plan.py` ABORTS if the live pose is > 0.57° off the plan's start.
-   Bring the arm there first (jog on the pendant, or a separate validated leg).
-   The plan is only collision-checked from its own start.
-3. Robot RUNNING/NORMAL, external-control program up (RUNBOOK §4), one writer only
-   (RUNBOOK §6b).
-4. **The plan yaml that executes must be the committed, validated one for that
-   plan.** `plan_test.py` writes `plans/<label>.yaml` unconditionally, so a re-run
-   under a validated label silently replaces the validated waypoints with an
-   un-swept re-plan; always plan under a fresh label and check the executed yaml
-   is unmodified (`git -C ~/ur10 status --short <yaml>` must print nothing).
+   **Never start it on `ur10_pneumatic.urdf` / `.xrdf`** (those drop shoulder_link
+   + upper_arm_link from world collision). `ur10_measured.xrdf` keeps the full
+   set (`--keep-world-collision`); confirm `collision.geometry ==
+   self_collision.geometry == ur10e_collision_spheres`.
+2. **Live, jittering `/joint_states`.** Verify the feed is LIVE by encoder jitter
+   (~4–9 mdeg at rest), never by rate — a dropped RTDE link republishes the last
+   packet at a perfect 125 Hz. If it reads 0.000 mdeg (frozen), recover the
+   driver before anything else (`systemctl --user restart ur10-driver`, one writer
+   only — RUNBOOK §6b — then re-check jitter). `execute_plan.py` will also abort
+   if the live start is off, but do not rely on a frozen feed.
+3. **The arm must be AT the validated start.** `execute_plan.py` ABORTS if the
+   live pose is > 0.57° off `start_joints`. Jog there on the pendant first.
+4. Robot RUNNING/NORMAL, external-control program up (RUNBOOK §4), **one writer
+   only** (RUNBOOK §6b).
+5. **Restart the wrist-cam tray detector** so it runs during the move (captain
+   request). Inside the `shelfbot_ros` container:
+   ```bash
+   docker exec shelfbot_ros bash -lc 'source /opt/ros/jazzy/setup.bash && \
+     /opt/yolo_venv/bin/python3 /root/tray_wrist_probe.py --secs 0 \
+     --model /root/weights/tray_v5_best.pt --classes tray,broken_tray \
+     --base-tf=-0.776771,-0.154955,0.824915,-0.682359,0.197102,-0.105725,0.695960 \
+     --json /root/tray_probe.json --annot /root/tray_annot.png'
+   ```
+6. **The executed yaml must be the committed, validated one.**
+   `git status --short cams/cellmap/plans/tag1-shelf-measlim.yaml` must print
+   nothing. `plan_test.py` writes `plans/<label>.yaml` unconditionally, so never
+   re-run under this label before executing.
 
-## Joint windows — reference (no commands here)
-
-Every plan that will be executed must pass the joint-window guards with the
-MEASURED hand-sweep limits file, which is the deliverable of task
-joint-limits-freedrive-v1 and is NOT in this branch (it may not exist yet). It
-must be in the `reference_pose_rad` + `window_deg` schema the guards read
-(`plan_test.py --joint-limits`, `execute_plan.py --limits`; both refuse to start
-on any other schema, and `--limits` is mandatory — there is no bypass). The
-`make_limited_urdf.py --write-limits` proposal windows are superseded by the
-measured file; if ever regenerated, write to a NEW timestamped file (the
-generator refuses to overwrite an existing one) and explicit `/tmp` URDF/XRDF
-outputs as in RUNBOOK §10. Re-validate on a FRESH label on the FULL collision
-model, require BOTH `--check-box` sweeps (table-slab box and shelf/carton box,
-`plan-clearance-checks.md`) ≥ 0, and only then execute via
-`execute_plan.py --exact --limits <measured file>`. The exact commands live in
-RUNBOOK §10 and `cams/cellmap/README.md` §5; the executable deliverable is task
-joint-limits-freedrive-v1's, not this note's.
-
-## Safety checklist — reference, do not skip a line (from cams/approach/README.md)
+## Safety checklist — do not skip a line (from cams/approach/README.md)
 
 - [ ] E-stop in hand, thumb on it, for the whole motion.
 - [ ] Pendant speed slider ≤ 30 % (independent cap on top of the 0.05 code cap).
@@ -135,31 +116,36 @@ joint-limits-freedrive-v1's, not this note's.
 - [ ] Wrist camera USB cable has ≥ 0.7 m slack routed along the arm.
 - [ ] The camera is NOT in the arm's collision model — eyeball the arm path for
       the camera body's clearance too.
-- [ ] Nobody else is commanding the arm.
-- [ ] The plan being executed passed the joint-window guard against the
-      MEASURED limits file delivered by task joint-limits-freedrive-v1 (not in
-      this branch; `execute_plan.py --limits <that file>`) and both clearance
-      sweeps.
-- [ ] Planner is on `ur10_map.xrdf` (Prerequisite 1), not the pneumatic XRDF.
-- [ ] The executed yaml is the committed, validated one (Prerequisite 4).
+- [ ] Nobody else is commanding the arm (one writer — RUNBOOK §6b).
+- [ ] `/joint_states` is LIVE by jitter, not frozen (Prerequisite 2).
+- [ ] The plan passed the joint-window guard against
+      `cumotion/measured_joint_limits.yaml` and both clearance sweeps.
+- [ ] The executed yaml is the committed, unmodified one (Prerequisite 6).
 
-## Execution
+## Execution — the single command
 
-**None from this note — deliberately.** The execute block that used to be here
-was removed on firstmate direction: `tag1-shelf-cumotion.yaml` must not be sent
-to the arm (banner above). The captain command for the in-limits plan is the
-deliverable of task joint-limits-freedrive-v1; it must satisfy the
-prerequisites, joint-window reference and checklist above, and `execute_plan.py`
-keeps its own guards (live start must match, program running, every waypoint
-inside the mandatory `--limits` file, tracking excursion > 0.15 rad cancels the
-goal).
+Run from the repo root (`~/ur10` after this merges):
+
+```bash
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/execute_plan.py \
+    cams/cellmap/plans/tag1-shelf-measlim.yaml \
+    --exact --limits cumotion/measured_joint_limits.yaml
+```
+
+`--exact` executes the committed validated waypoints with reconstructed uniform
+timing (peak velocity 5.0 % of the joint limits — verified). `execute_plan.py`
+keeps its own guards, all of which abort before any motion: live start must match
+the plan's start, the robot must be RUNNING/NORMAL with its program up, and
+**every waypoint must lie inside `--limits`** (mandatory, no bypass). During
+motion a tracking excursion > 0.15 rad (8.6°) cancels the goal. There is **no**
+runnable command for any other plan in this branch.
 
 ## Notes
 
-- This demonstrates the collision-aware routing (tag 1 → a safe standoff). The
-  actual per-carton pick approach is the camera-driven `cams/approach/approach_demo.py`
-  model (typed-`yes` gate per leg); full per-carton YOLO confirmation lands during
-  that approach as the wrist reaches a shelf-facing pose (the eye-level parked view
-  boxes shelf boards, not cartons — the recorded viewpoint limitation).
-- Rollback: delete/rename `cell-2026-09-04-cleaned.nvblx` and the loaders fall back
-  to the 2026-09-03 scan.
+- This demonstrates collision-aware routing (tag 1 → a safe standoff). The
+  per-carton pick approach is the camera-driven `cams/approach/approach_demo.py`
+  model (typed-`yes` gate per leg).
+- Re-measure or re-declare the limits whenever the line is re-routed or the arm
+  is re-parked — see RUNBOOK §10 "Measuring / declaring real joint limits".
+- Rollback: delete/rename `cell-2026-09-04-cleaned.nvblx` and the loaders fall
+  back to the 2026-09-03 scan.

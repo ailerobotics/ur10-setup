@@ -323,6 +323,40 @@ def test_declare_widens_only_named_joint_keeps_others():
     assert len([x for x in out['declared'] if x['joint'] == 'shoulder_lift_joint']) == 1
 
 
+def test_declare_one_sided_keeps_the_other_measured_bound():
+    """A floor-only need must extend ONLY the floor and keep the measured
+    ceiling — the union semantic, so a declaration never narrows reach."""
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    j = 'elbow_joint'
+    cur_ref = base['reference_pose_rad'][j]
+    cur_half = math.radians(base['window_deg'][j])
+    cur_lo, cur_hi = cur_ref - cur_half, cur_ref + cur_half
+    # demo travel sits BELOW the floor but well inside the ceiling
+    tmin, tmax, slack = cur_lo - 0.3, cur_hi - 0.5, 1.0
+    out, entry = rec.declare_limits(base, j, tmin, tmax, slack, 'floor only')
+    ref = out['reference_pose_rad'][j]
+    win = out['window_deg'][j]
+    lo = ref - math.radians(win)
+    hi = ref + math.radians(win)
+    assert math.isclose(lo, tmin - math.radians(slack), abs_tol=1e-5), 'floor must extend'
+    assert math.isclose(hi, cur_hi, abs_tol=1e-5), 'ceiling must stay the measured bound'
+    assert entry['prior_window_deg']['max'] == round(math.degrees(cur_hi), 3)
+
+
+def test_declare_only_widens_never_narrows():
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    j = 'elbow_joint'
+    cur_ref = base['reference_pose_rad'][j]
+    cur_half = math.radians(base['window_deg'][j])
+    cur_lo, cur_hi = cur_ref - cur_half, cur_ref + cur_half
+    # a travel STRICTLY inside the current window must leave the window unchanged
+    out, _ = rec.declare_limits(base, j, cur_lo + 0.1, cur_hi - 0.1, 0.0, 'inside')
+    assert math.isclose(out['reference_pose_rad'][j], base['reference_pose_rad'][j], abs_tol=1e-6)
+    assert math.isclose(out['window_deg'][j], base['window_deg'][j], abs_tol=1e-4)
+
+
 def test_declare_refuses_bad_input():
     mins, maxs = _measured()
     base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')

@@ -1,4 +1,4 @@
-# GENERATED 2026-09-05T00:06:14 by make_limited_urdf.py from ur10_map.xrdf.
+# GENERATED 2026-09-05T16:01:43 by make_limited_urdf.py from ur10_map.xrdf.
 # - default_joint_positions moved to the pneumatic reference pose
 #   (the stock retract config is outside the windows and cuMotion
 #   rejects it as an invalid RobotDescription).
@@ -11,7 +11,7 @@ format_version: 1.0
 modifiers:
 - {set_base_frame: base_link}
 default_joint_positions: {shoulder_pan_joint: 0.2234, shoulder_lift_joint: -1.6267,
-  elbow_joint: 0.5363, wrist_1_joint: 4.459, wrist_2_joint: 0.3435, wrist_3_joint: 0.706}
+  elbow_joint: 0.4063, wrist_1_joint: 4.459, wrist_2_joint: 0.2793, wrist_3_joint: 0.706}
 cspace:
   joint_names: [shoulder_pan_joint, shoulder_lift_joint, elbow_joint, wrist_1_joint,
     wrist_2_joint, wrist_3_joint]

@@ -27,21 +27,23 @@
 # CAPTAIN-DECLARED OVERRIDES (NOT hand-swept) — a window below was
 # widened by captain decision to cover a known-required travel the sweep
 # did not reach. Provenance for each is under `declared:`:
-#   shoulder_lift_joint = -175.174..-11.233 deg, declared 2026-09-05 — covers the validated tag1->shelf demo travel (start_joints -174.17 deg to shelf standoff -12.23 deg); measured freedrive sweep reached only -173.8..-97.2, extended by captain declaration 2026-09-04, NOT hand-swept; extended from measured raw -173.8..-97.208 deg
+#   shoulder_lift_joint = -175.174..-11.233 deg, declared 2026-09-05 — covers the validated tag1->shelf demo travel (start -174.17 deg to shelf standoff -12.23 deg); measured freedrive sweep reached only -173.8..-97.2, extended by captain declaration 2026-09-04, NOT hand-swept; extended from measured raw -173.8..-97.208 deg
+#   elbow_joint = -62.669..109.225 deg, declared 2026-09-05 — covers the validated tag1->shelf demo elbow floor -61.67 deg (measured freedrive sweep floor only -52.8); floor extended by captain decision 2026-09-05, NOT hand-swept; measured ceiling kept; extended from measured raw -52.771..114.225 deg
+#   wrist_2_joint = -83.357..115.367 deg, declared 2026-09-05 — covers the validated tag1->shelf demo wrist_2 floor -82.36 deg (measured freedrive sweep floor only -81.0); floor extended by captain decision 2026-09-05, NOT hand-swept; measured ceiling kept; extended from measured raw -81.004..120.367 deg
 #
 reference_pose_rad:
   shoulder_pan_joint: 0.223385
   shoulder_lift_joint: -1.626713
-  elbow_joint: 0.536284
+  elbow_joint: 0.406275
   wrist_1_joint: 4.458966
-  wrist_2_joint: 0.343505
+  wrist_2_joint: 0.279341
   wrist_3_joint: 0.706048
 window_deg:
   shoulder_pan_joint: 73.1184
   shoulder_lift_joint: 81.9703
-  elbow_joint: 78.4983
+  elbow_joint: 85.9473
   wrist_1_joint: 92.7289
-  wrist_2_joint: 95.6854
+  wrist_2_joint: 99.3617
   wrist_3_joint: 124.2285
 measured:
   source: captain freedrive hand-sweep
@@ -92,16 +94,57 @@ declared:
 - joint: shoulder_lift_joint
   source: captain-declared (NOT hand-swept)
   date: '2026-09-05'
-  reason: covers the validated tag1->shelf demo travel (start_joints -174.17 deg to
-    shelf standoff -12.23 deg); measured freedrive sweep reached only -173.8..-97.2,
-    extended by captain declaration 2026-09-04, NOT hand-swept
+  reason: covers the validated tag1->shelf demo travel (start -174.17 deg to shelf
+    standoff -12.23 deg); measured freedrive sweep reached only -173.8..-97.2, extended
+    by captain declaration 2026-09-04, NOT hand-swept
   covers_travel_deg:
     min: -174.174
     max: -12.233
   slack_deg: 1.0
+  prior_window_deg:
+    min: -168.8
+    max: -102.208
   window_deg:
     min: -175.174
     max: -11.233
   extended_from_measured_raw_deg:
     min: -173.8
     max: -97.208
+- joint: elbow_joint
+  source: captain-declared (NOT hand-swept)
+  date: '2026-09-05'
+  reason: covers the validated tag1->shelf demo elbow floor -61.67 deg (measured freedrive
+    sweep floor only -52.8); floor extended by captain decision 2026-09-05, NOT hand-swept;
+    measured ceiling kept
+  covers_travel_deg:
+    min: -61.669
+    max: -14.069
+  slack_deg: 1.0
+  prior_window_deg:
+    min: -47.771
+    max: 109.225
+  window_deg:
+    min: -62.669
+    max: 109.225
+  extended_from_measured_raw_deg:
+    min: -52.771
+    max: 114.225
+- joint: wrist_2_joint
+  source: captain-declared (NOT hand-swept)
+  date: '2026-09-05'
+  reason: covers the validated tag1->shelf demo wrist_2 floor -82.36 deg (measured
+    freedrive sweep floor only -81.0); floor extended by captain decision 2026-09-05,
+    NOT hand-swept; measured ceiling kept
+  covers_travel_deg:
+    min: -82.357
+    max: -66.501
+  slack_deg: 1.0
+  prior_window_deg:
+    min: -76.004
+    max: 115.367
+  window_deg:
+    min: -83.357
+    max: 115.367
+  extended_from_measured_raw_deg:
+    min: -81.004
+    max: 120.367

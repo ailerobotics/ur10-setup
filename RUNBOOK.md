@@ -343,6 +343,47 @@ both `--check-box` sweeps ≥ 0 (`cams/cellmap/README.md` §5), and execute only
 with `execute_plan.py --exact --limits <that file>`. `--frozen` centres the
 windows on the yaml's 2026-08-28 reference pose — never use it for execution.
 
+### Measuring / declaring real joint limits (joint-limits-freedrive-v1)
+
+The authoritative limits file is `cumotion/measured_joint_limits.yaml`: per-joint
+windows from a captain **freedrive hand-sweep**, same `reference_pose_rad` +
+`window_deg` schema the guards read. Two kinds of window live in it, and the
+provenance of each is explicit in the file:
+
+- **measured** — the hand-swept extremes shrunk by `margin_deg` (default 5°),
+  recorded under `measured:`. This is the real reachable travel.
+- **declared** — a window the captain widened *by decision* to cover a validated
+  demo's required travel that the sweep did not reach (recorded under `declared:`,
+  `source: captain-declared (NOT hand-swept)`). A declaration only ever WIDENS
+  (union with the current window), so it never narrows a joint; the raw measured
+  extremes stay on record. Declaring a window PAST a hand-measured physical bind
+  is a captain call and a safety red flag — disclose it in the execute note.
+
+**Re-measure / re-declare whenever the line is re-routed or the arm is
+re-parked** (the reachable travel changes). Tools (all host, domain 0, plan-only —
+none command motion):
+
+```bash
+# full sweep: captain hand-drives each joint to its physical extreme in freedrive
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/freedrive.py on   # 4 Hz deadman; leave running
+FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/record_joint_limits.py \
+    --out cumotion/measured_joint_limits.yaml           # Ctrl-C writes; jitter-gated (refuses a frozen feed)
+# targeted re-sweep of only some joints (extends, never narrows):
+#   record_joint_limits.py --merge --joints shoulder_lift,wrist_1 --out <file>
+# captain-declared widening (no rig, no sweep) to cover a known demo travel:
+#   record_joint_limits.py --declare elbow=-61.7,-14.1 --reason "…" --out <file>
+
+# limited model for the CLEANED map (keeps full world collision), explicit outputs:
+python3 cumotion/make_limited_urdf.py --frozen --keep-world-collision \
+    --limits cumotion/measured_joint_limits.yaml \
+    --out cumotion/ur10_measured.urdf --xrdf-out cumotion/ur10_measured.xrdf
+```
+
+The offline test `cams/cellmap/tools/test_record_joint_limits.py` covers the
+recorder/declare/merge maths and round-trips through both consumers (no rig). The
+executable plan and the definitive captain command are in
+`data/cell-clean-approach-v1/captain-execute-note.md`.
+
 ### When to re-scan
 
 - Anything the arm can reach was moved, added or removed. The map is a

@@ -278,17 +278,23 @@ def declare_limits(existing, joint, tmin_rad, tmax_rad, slack_deg, reason, date=
     provenance of every joint's window stays unambiguous — "5 measured, 1
     declared" is readable straight from the file.
 
+    ONLY EVER WIDENS. The applied window is the UNION of the joint's current
+    window and [travel_min - slack, travel_max + slack], so a one-sided need
+    (extend the floor to cover a low demo swing) keeps the measured bound on the
+    other side instead of collapsing it. A declaration can therefore never
+    silently narrow a joint's reach.
+
     Only the named joint's reference_pose_rad + window_deg change; every other
     joint (reference, window, and the whole `measured:` block) is copied through
     byte-for-byte. The named joint's own measured.extremes_* are LEFT AS
     MEASURED — they still document what the hand-sweep actually reached; the
-    `declared:` entry records what the window was widened to, by how much slack,
-    and why. The consumers (make_limited_urdf.py, execute_plan.py) read only
-    reference_pose_rad + window_deg, so they pick up the declared window and
+    `declared:` entry records the prior window, what it was widened to, the
+    slack, and why. The consumers (make_limited_urdf.py, execute_plan.py) read
+    only reference_pose_rad + window_deg, so they pick up the declared window and
     ignore the extra provenance.
 
-    Raises ValueError on a missing/foreign file, an unknown joint, travel
-    min >= max, or a window that collapses to <= 0.
+    Raises ValueError on a missing/foreign file, an unknown joint, or travel
+    min >= max.
     """
     date = date or dt.date.today().isoformat()
     if 'reference_pose_rad' not in existing or 'window_deg' not in existing \
@@ -302,11 +308,15 @@ def declare_limits(existing, joint, tmin_rad, tmax_rad, slack_deg, reason, date=
         raise ValueError(f'declared travel min ({math.degrees(tmin):.3f} deg) must be '
                          f'below max ({math.degrees(tmax):.3f} deg)')
     slack = math.radians(slack_deg)
-    lo, hi = tmin - slack, tmax + slack          # effective window bounds (rad)
-    half_deg = math.degrees(0.5 * (hi - lo))
-    if half_deg <= 0.0:
-        raise ValueError('declared window collapses to <= 0')
     out = copy.deepcopy(existing)
+    # current effective window of this joint (what "measured bound" means here)
+    cur_ref = float(out['reference_pose_rad'][joint])
+    cur_half = math.radians(float(out['window_deg'][joint]))
+    cur_lo, cur_hi = cur_ref - cur_half, cur_ref + cur_half
+    # UNION — widen only the side(s) the required travel needs
+    lo = min(cur_lo, tmin - slack)
+    hi = max(cur_hi, tmax + slack)
+    half_deg = math.degrees(0.5 * (hi - lo))
     prior = out['measured'].get('extremes_deg', {}).get(joint)
     prior_deg = dict(prior) if prior else None    # a COPY, not a YAML alias
     out['reference_pose_rad'][joint] = round(0.5 * (lo + hi), 6)
@@ -319,6 +329,8 @@ def declare_limits(existing, joint, tmin_rad, tmax_rad, slack_deg, reason, date=
         'covers_travel_deg': {'min': round(math.degrees(tmin), 3),
                               'max': round(math.degrees(tmax), 3)},
         'slack_deg': slack_deg,
+        'prior_window_deg': {'min': round(math.degrees(cur_lo), 3),
+                             'max': round(math.degrees(cur_hi), 3)},
         'window_deg': {'min': round(math.degrees(lo), 3),
                        'max': round(math.degrees(hi), 3)},
         'extended_from_measured_raw_deg': prior_deg,
