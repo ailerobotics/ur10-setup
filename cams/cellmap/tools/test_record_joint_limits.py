@@ -11,6 +11,10 @@ Covers, per the task's acceptance:
       - execute_plan.py's lo/hi window arithmetic
       - make_limited_urdf.py --frozen, run for real against the committed
         ur10_calibrated.urdf / ur10_map.xrdf (frozen mode needs no ROS)
+  * --merge after --declare: a re-sweep can only widen, never narrow a
+    declared bound, and the `declared:` entry always describes the applied window
+  * a multi-line --reason still yields a parseable file
+  * --declare (and a clean refusal to record) with NO ROS stack importable
 
 Run standalone: python3 test_record_joint_limits.py
 Or under pytest: pytest test_record_joint_limits.py
@@ -444,6 +448,156 @@ def test_declared_file_regenerates_limited_model():
             if os.path.exists(f):
                 os.unlink(f)
         os.rmdir(tmpdir)
+
+
+def _window(lim, j):
+    ref = lim['reference_pose_rad'][j]
+    half = math.radians(lim['window_deg'][j])
+    return ref - half, ref + half
+
+
+def test_merge_after_declare_keeps_declared_bound_and_refreshes_entry():
+    """A targeted re-sweep of a joint that carries a captain-declared override
+    must UNION with the declared window: a sweep INSIDE it changes nothing, a
+    sweep BEYOND it widens further, and the `declared:` entry (which the header
+    is printed from) always states the window actually applied."""
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    j = 'shoulder_lift_joint'
+    tmin, tmax, slack = -2.6, 0.0, 1.0            # floor well below measured
+    declared, _ = rec.declare_limits(base, j, tmin, tmax, slack, 'demo floor')
+    d_lo, d_hi = _window(declared, j)
+    assert math.isclose(d_lo, tmin - math.radians(slack), abs_tol=1e-5)
+
+    # re-sweep INSIDE both the measured and the declared window
+    smins, smaxs = list(mins), list(maxs)
+    smins[1], smaxs[1] = -2.0, 0.4
+    inside, changed = rec.merge_limits(declared, smins, smaxs, [j], 'resweep-inside')
+    lo, hi = _window(inside, j)
+    assert math.isclose(lo, d_lo, abs_tol=1e-5), 'declared floor must NOT narrow'
+    assert math.isclose(hi, d_hi, abs_tol=1e-5), 'measured ceiling must stay'
+    assert inside['measured']['extremes_rad'][j] == base['measured']['extremes_rad'][j]
+    de = [d for d in inside['declared'] if d['joint'] == j][0]
+    assert de['window_deg'] == {'min': round(math.degrees(lo), 3),
+                                'max': round(math.degrees(hi), 3)}
+    assert changed[j]['window_deg'] == de['window_deg']
+
+    # re-sweep BEYOND the declared floor (by more than the margin): widens
+    smins[1] = -3.0
+    beyond, changed = rec.merge_limits(declared, smins, smaxs, [j], 'resweep-beyond')
+    lo2, hi2 = _window(beyond, j)
+    assert math.isclose(lo2, -3.0 + math.radians(5.0), abs_tol=1e-5), 'must widen past declared'
+    assert lo2 < d_lo
+    assert math.isclose(hi2, d_hi, abs_tol=1e-5)
+    er = beyond['measured']['extremes_rad'][j]
+    assert er['min'] == round(-3.0, 6) and er['max'] == round(0.5, 6)
+    de2 = [d for d in beyond['declared'] if d['joint'] == j][0]
+    assert de2['window_deg'] == {'min': round(math.degrees(lo2), 3),
+                                 'max': round(math.degrees(hi2), 3)}
+    assert de2['extended_from_measured_raw_deg'] == beyond['measured']['extremes_deg'][j]
+    assert de2['reason'] == 'demo floor'
+    # every OTHER joint untouched
+    for k in JOINTS:
+        if k != j:
+            assert beyond['reference_pose_rad'][k] == declared['reference_pose_rad'][k]
+            assert beyond['window_deg'][k] == declared['window_deg'][k]
+
+    # the invariant survives the write boundary: what the consumers read as the
+    # applied window equals what the declared block claims
+    fd, path = tempfile.mkstemp(suffix='.yaml', prefix='merged_declared_')
+    os.close(fd)
+    try:
+        rec.write_limits_file(path, beyond)
+        lim = yaml.safe_load(open(path))
+        flo, fhi = _window(lim, j)
+        dd = [d for d in lim['declared'] if d['joint'] == j][0]
+        assert math.isclose(math.degrees(flo), dd['window_deg']['min'], abs_tol=2e-3)
+        assert math.isclose(math.degrees(fhi), dd['window_deg']['max'], abs_tol=2e-3)
+    finally:
+        os.unlink(path)
+
+
+def test_merge_on_undeclared_joint_equals_measured_minus_margin():
+    """Without a declaration the union is a no-op: the applied window is
+    exactly the merged measured extremes shrunk by the file's margin."""
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    smins, smaxs = list(mins), list(maxs)
+    smins[2], smaxs[2] = -1.6, 1.5
+    merged, _ = rec.merge_limits(base, smins, smaxs, ['elbow_joint'], 'x')
+    lo, hi = _window(merged, 'elbow_joint')
+    assert math.isclose(lo, -1.6 + math.radians(5.0), abs_tol=1e-5)
+    assert math.isclose(hi, 1.5 - math.radians(5.0), abs_tol=1e-5)
+    assert 'declared' not in merged
+
+
+def test_declare_reason_with_newlines_writes_parseable_file():
+    """A multi-line --reason must never leak a header line without a leading
+    '#': the file must still parse and carry the same windows."""
+    mins, maxs = _measured()
+    base = rec.build_limits(mins, maxs, 5.0, 'base', 'base')
+    j = 'shoulder_lift_joint'
+    ugly = 'covers the demo\r\n   second line\n\tthird'
+    out, entry = rec.declare_limits(base, j, -2.6, 1.2, 1.0, ugly)
+    fd, path = tempfile.mkstemp(suffix='.yaml', prefix='reason_nl_')
+    os.close(fd)
+    try:
+        rec.write_limits_file(path, out)
+        lim = yaml.safe_load(open(path))
+        assert lim['reference_pose_rad'] == out['reference_pose_rad']
+        assert lim['window_deg'] == out['window_deg']
+        assert lim['declared'][-1]['joint'] == j
+        # and the CLI path stores the reason as one line
+        path2, _, _, _ = _write_tmp_limits()
+        try:
+            rc = rec.main(['--declare', 'shoulder_lift=-174.2,-12.2', '--reason', ugly,
+                           '--out', path2])
+            assert rc == 0, f'--declare returned {rc}'
+            lim2 = yaml.safe_load(open(path2))
+            d = lim2['declared'][-1]
+            assert d['reason'] == 'covers the demo second line third'
+            lo, hi = _window(lim2, j)
+            assert math.isclose(math.degrees(lo), -175.2, abs_tol=2e-3)
+        finally:
+            os.unlink(path2)
+    finally:
+        os.unlink(path)
+
+
+def test_declare_and_refusal_work_without_ros_stack():
+    """--declare is a pure file edit: it must run on a host where rclpy /
+    sensor_msgs cannot be imported. Recording on such a host must refuse
+    cleanly (exit 2, no traceback)."""
+    driver = (
+        'import sys\n'
+        "for m in ('rclpy', 'rclpy.node', 'sensor_msgs', 'sensor_msgs.msg'):\n"
+        '    sys.modules[m] = None\n'
+        f'sys.path.insert(0, {HERE!r})\n'
+        'import record_joint_limits as rec\n'
+        'sys.exit(rec.main(sys.argv[1:]))\n')
+    path, mins, maxs, margin = _write_tmp_limits()
+    try:
+        r = subprocess.run(
+            [sys.executable, '-c', driver, '--declare', 'elbow=-100.0,10.0',
+             '--reason', 'no ros needed', '--out', path],
+            capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, f'--declare without ROS failed:\n{r.stdout}\n{r.stderr}'
+        lim = yaml.safe_load(open(path))
+        d = lim['declared'][-1]
+        assert d['joint'] == 'elbow_joint' and d['reason'] == 'no ros needed'
+        lo, hi = _window(lim, 'elbow_joint')
+        assert math.isclose(math.degrees(lo), -101.0, abs_tol=2e-3), 'floor must extend'
+        assert math.isclose(hi, maxs[2] - math.radians(margin), abs_tol=1e-5), \
+            'measured ceiling must stay'
+
+        r = subprocess.run(
+            [sys.executable, '-c', driver, '--check', '--out', path],
+            capture_output=True, text=True, timeout=60)
+        assert r.returncode == 2, f'expected clean refusal, got {r.returncode}:\n{r.stderr}'
+        assert 'Traceback' not in r.stderr
+        assert 'rclpy' in r.stderr
+    finally:
+        os.unlink(path)
 
 
 # --- make_limited_urdf.py --keep-world-collision --------------------------

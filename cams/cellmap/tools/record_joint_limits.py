@@ -58,10 +58,7 @@ import sys
 import time
 
 import numpy as np
-import rclpy
 import yaml
-from rclpy.node import Node
-from sensor_msgs.msg import JointState
 
 # Order the consumers (make_limited_urdf.py, execute_plan.py) use.
 JOINTS = ['shoulder_pan_joint', 'shoulder_lift_joint', 'elbow_joint',
@@ -175,8 +172,8 @@ HEADER = """\
 # default (live-pose) mode would centre the windows in the wrong place.
 #
 # REGENERATE whenever the line is re-routed or the arm re-parked — the real
-# reachable travel changes. Re-run the recorder (see cams/cellmap/README.md
-# "Measuring real joint limits").
+# reachable travel changes. Re-run the recorder (see RUNBOOK.md section 10,
+# "Measuring / declaring real joint limits").
 #
 """
 
@@ -195,12 +192,19 @@ def write_limits_file(path, limits):
             exs = (f'; extended from measured raw {ex["min"]}..{ex["max"]} deg'
                    if ex else '')
             notes.append(f'#   {d["joint"]} = {w["min"]}..{w["max"]} deg, declared '
-                         f'{d["date"]} — {d["reason"]}{exs}')
+                         f'{d["date"]} — {one_line(d["reason"])}{exs}')
         notes.append('#')
         header = HEADER + '\n'.join(notes) + '\n'
     with open(path, 'w') as f:
         f.write(header)
         f.write(body)
+
+
+def one_line(text):
+    """Collapse newlines / carriage returns / runs of whitespace to single
+    spaces, so free text (the --reason) can sit on ONE '#' header line and can
+    never break the YAML that follows it."""
+    return ' '.join(str(text).split())
 
 
 def normalize_joint(name):
@@ -217,12 +221,17 @@ def merge_limits(existing, session_mins, session_maxs, joints, jitter_note, date
     """Targeted re-sweep merge: EXTEND only `joints` to cover the new session
     extremes, keep every other joint exactly as it was.
 
-    The re-swept joints' raw window becomes the UNION of the file's existing
-    measured extremes and this session's extremes (min of mins, max of maxs) —
-    a re-sweep only ever widens, so a partial re-sweep can never silently
-    narrow a joint that was already measured further. Windows are recomputed
-    from those merged extremes using the FILE's own margin, so all joints keep
-    one consistent margin. Untouched joints (reference, window, provenance) are
+    The re-swept joints' raw measured extremes become the UNION of the file's
+    existing measured extremes and this session's extremes (min of mins, max of
+    maxs). The measured window recomputed from those merged extremes (with the
+    FILE's own margin, so all joints keep one consistent margin) is then
+    UNIONED with the joint's CURRENT applied window (reference_pose_rad +-
+    window_deg, which already carries any captain `declared:` override). A
+    re-sweep therefore only ever widens: it can neither narrow a joint that was
+    already measured further nor silently discard a declared bound. A matching
+    `declared:` entry is refreshed to the window actually applied (and to the
+    measured raw it now extends), so the provenance block always describes the
+    window in effect. Untouched joints (reference, window, provenance) are
     copied through byte-for-byte. The merge is recorded under
     measured.resweeps so the history survives.
 
@@ -235,27 +244,37 @@ def merge_limits(existing, session_mins, session_maxs, joints, jitter_note, date
         raise ValueError('the file to merge into is not a measured-limits file '
                          '(missing reference_pose_rad / window_deg / measured)')
     margin = float(existing['measured']['margin_deg'])
+    margin_rad = math.radians(margin)
     out = copy.deepcopy(existing)
     ex_rad = out['measured'].setdefault('extremes_rad', {})
     ex_deg = out['measured'].setdefault('extremes_deg', {})
+    declared_by_joint = {d.get('joint'): d for d in (out.get('declared') or [])
+                         if isinstance(d, dict)}
     changed = {}
     for j in joints:
         i = JOINTS.index(j)
         old_lo = float(ex_rad[j]['min'])
         old_hi = float(ex_rad[j]['max'])
-        lo = min(old_lo, float(session_mins[i]))
-        hi = max(old_hi, float(session_maxs[i]))
-        half_deg = math.degrees(0.5 * (hi - lo))
-        w = half_deg - margin
-        if w <= 0.0:
-            raise ValueError(f'{j}: merged range {math.degrees(hi-lo):.1f} deg <= 2*margin '
+        m_lo = min(old_lo, float(session_mins[i]))
+        m_hi = max(old_hi, float(session_maxs[i]))
+        if math.degrees(0.5 * (m_hi - m_lo)) - margin <= 0.0:
+            raise ValueError(f'{j}: merged range {math.degrees(m_hi-m_lo):.1f} deg <= 2*margin '
                              f'({2*margin:.1f}); the margin would invert the window')
+        cur_ref = float(out['reference_pose_rad'][j])
+        cur_half = math.radians(float(out['window_deg'][j]))
+        lo = min(m_lo + margin_rad, cur_ref - cur_half)
+        hi = max(m_hi - margin_rad, cur_ref + cur_half)
         out['reference_pose_rad'][j] = round(0.5 * (lo + hi), 6)
-        out['window_deg'][j] = round(w, 4)
-        ex_rad[j] = {'min': round(lo, 6), 'max': round(hi, 6)}
-        ex_deg[j] = {'min': round(math.degrees(lo), 3), 'max': round(math.degrees(hi), 3)}
+        out['window_deg'][j] = round(math.degrees(0.5 * (hi - lo)), 4)
+        ex_rad[j] = {'min': round(m_lo, 6), 'max': round(m_hi, 6)}
+        ex_deg[j] = {'min': round(math.degrees(m_lo), 3), 'max': round(math.degrees(m_hi), 3)}
+        applied_deg = {'min': round(math.degrees(lo), 3), 'max': round(math.degrees(hi), 3)}
+        if j in declared_by_joint:
+            declared_by_joint[j]['window_deg'] = dict(applied_deg)
+            declared_by_joint[j]['extended_from_measured_raw_deg'] = dict(ex_deg[j])
         changed[j] = {'old_deg': [round(math.degrees(old_lo), 3), round(math.degrees(old_hi), 3)],
-                      'new_deg': ex_deg[j]}
+                      'new_deg': dict(ex_deg[j]),
+                      'window_deg': dict(applied_deg)}
     out['measured'].setdefault('resweeps', []).append({
         'date': date,
         'joints': list(joints),
@@ -341,54 +360,74 @@ def declare_limits(existing, joint, tmin_rad, tmax_rad, slack_deg, reason, date=
     return out, entry
 
 
-class Recorder(Node):
-    def __init__(self):
-        super().__init__('record_joint_limits')
-        self.latest = None            # last full 6-vector (JOINTS order)
-        self.recent = collections.deque(maxlen=400)  # (t, 6-vec) for freeze check
-        self.create_subscription(JointState, '/joint_states', self._cb, 50)
+LINK_CHECK = (
+    "Check the robot's WIRED link first: `cat /sys/class/net/enp5s0/carrier` must "
+    'read 1 — if it reads 0 the robot Ethernet is down and NO driver restart helps '
+    '(reseat the robot Ethernet cable / check robot power until carrier reads 1). '
+    'Only once the link is up: `systemctl --user restart ur10-driver`.')
 
-    def _cb(self, msg):
-        m = dict(zip(msg.name, msg.position))
-        if all(j in m for j in JOINTS):
-            v = [float(m[j]) for j in JOINTS]
-            self.latest = v
-            self.recent.append((time.time(), v))
 
-    def gate_live(self, secs, discovery, min_jitter_mdeg):
-        """Block until the feed is proven live by jitter, or fail with the
-        exact remedy. The measuring window starts only once the first message
-        lands (DDS matching takes a second or two)."""
-        buf = []
-        t0 = time.time()
-        while not self.recent and time.time() - t0 < discovery:
-            rclpy.spin_once(self, timeout_sec=0.1)
-        if not self.recent:
-            return False, (f'no /joint_states within {discovery:.0f}s of subscribing — '
-                           'driver down? `systemctl --user status ur10-driver`'), 0.0
-        t0 = time.time()
-        while time.time() - t0 < secs:
-            rclpy.spin_once(self, timeout_sec=0.1)
-            if self.latest is not None:
-                buf.append(self.latest)
-        if len(buf) < 20:
-            return False, f'only {len(buf)} /joint_states in {secs:.0f}s — feed stalling', 0.0
-        j = jitter_mdeg(buf)
-        if j <= min_jitter_mdeg:
-            return False, (f'/joint_states is FROZEN ({j:.3f} mdeg jitter over {len(buf)} '
-                           'samples <= threshold) — the RTDE link is down and the values '
-                           'are stale. Fix: `systemctl --user restart ur10-driver`. '
-                           'REFUSING to record a frozen feed.'), j
-        return True, f'{len(buf)} samples, {j:.3f} mdeg jitter', j
+def make_recorder():
+    """Import the ROS 2 stack on demand and build the Recorder node class on
+    it. Recording is the ONLY thing that needs rclpy / sensor_msgs: --declare is
+    a pure file edit and the offline tests import this module, so neither is
+    imported at module load. Returns (rclpy, Recorder); raises ImportError
+    when the ROS Python stack is absent."""
+    import rclpy
+    from rclpy.node import Node
+    from sensor_msgs.msg import JointState
 
-    def recent_jitter_mdeg(self, window_s=1.0):
-        """Jitter over roughly the last window_s of samples — for the live
-        freeze indicator in the table."""
-        if not self.recent:
-            return None
-        now = time.time()
-        rows = [v for (t, v) in self.recent if now - t <= window_s]
-        return jitter_mdeg(rows) if len(rows) >= 2 else None
+    class Recorder(Node):
+        def __init__(self):
+            super().__init__('record_joint_limits')
+            self.latest = None            # last full 6-vector (JOINTS order)
+            self.recent = collections.deque(maxlen=400)  # (t, 6-vec) for freeze check
+            self.create_subscription(JointState, '/joint_states', self._cb, 50)
+
+        def _cb(self, msg):
+            m = dict(zip(msg.name, msg.position))
+            if all(j in m for j in JOINTS):
+                v = [float(m[j]) for j in JOINTS]
+                self.latest = v
+                self.recent.append((time.time(), v))
+
+        def gate_live(self, secs, discovery, min_jitter_mdeg):
+            """Block until the feed is proven live by jitter, or fail with the
+            exact remedy. The measuring window starts only once the first message
+            lands (DDS matching takes a second or two)."""
+            buf = []
+            t0 = time.time()
+            while not self.recent and time.time() - t0 < discovery:
+                rclpy.spin_once(self, timeout_sec=0.1)
+            if not self.recent:
+                return False, (f'no /joint_states within {discovery:.0f}s of subscribing — '
+                               'driver down? `systemctl --user status ur10-driver`. '
+                               f'{LINK_CHECK}'), 0.0
+            t0 = time.time()
+            while time.time() - t0 < secs:
+                rclpy.spin_once(self, timeout_sec=0.1)
+                if self.latest is not None:
+                    buf.append(self.latest)
+            if len(buf) < 20:
+                return False, f'only {len(buf)} /joint_states in {secs:.0f}s — feed stalling', 0.0
+            j = jitter_mdeg(buf)
+            if j <= min_jitter_mdeg:
+                return False, (f'/joint_states is FROZEN ({j:.3f} mdeg jitter over {len(buf)} '
+                               'samples <= threshold) — the RTDE link is down and the values '
+                               f'are stale. {LINK_CHECK} '
+                               'REFUSING to record a frozen feed.'), j
+            return True, f'{len(buf)} samples, {j:.3f} mdeg jitter', j
+
+        def recent_jitter_mdeg(self, window_s=1.0):
+            """Jitter over roughly the last window_s of samples — for the live
+            freeze indicator in the table."""
+            if not self.recent:
+                return None
+            now = time.time()
+            rows = [v for (t, v) in self.recent if now - t <= window_s]
+            return jitter_mdeg(rows) if len(rows) >= 2 else None
+
+    return rclpy, Recorder
 
 
 def print_table(mins, maxs, latest, recent_j, min_jitter_mdeg, elapsed):
@@ -416,7 +455,8 @@ def print_table(mins, maxs, latest, recent_j, min_jitter_mdeg, elapsed):
 def _do_declare(a):
     """--declare: a pure file edit — no ROS, no recording. Applies a
     captain-declared window override to ONE joint in the existing --out file."""
-    if not a.reason.strip():
+    reason = one_line(a.reason)
+    if not reason:
         print('--declare requires --reason (why the window is widened by decision)',
               file=sys.stderr)
         return 2
@@ -443,7 +483,7 @@ def _do_declare(a):
     try:
         limits, entry = declare_limits(existing, joint, math.radians(tmin_d),
                                        math.radians(tmax_d), a.declare_slack_deg,
-                                       a.reason.strip())
+                                       reason)
     except ValueError as e:
         print(f'REFUSING to declare: {e}', file=sys.stderr)
         return 1
@@ -529,6 +569,12 @@ def main(argv=None):
         print(f'MERGE mode: re-sweeping {merge_joints}; every other joint in {a.out} '
               'is kept exactly as-is.')
 
+    try:
+        rclpy, Recorder = make_recorder()
+    except ImportError as e:
+        print(f'recording needs the ROS 2 Python stack (rclpy, sensor_msgs): {e}. '
+              'Only --declare works without it.', file=sys.stderr)
+        return 2
     rclpy.init()
     node = Recorder()
     try:
@@ -588,8 +634,9 @@ def main(argv=None):
             write_limits_file(a.out, limits)
             print(f'merged re-swept joints into {a.out}')
             for j, c in changed.items():
-                print(f'  {j}: window extremes {c["old_deg"]} -> '
-                      f'[{c["new_deg"]["min"]}, {c["new_deg"]["max"]}] deg')
+                print(f'  {j}: measured extremes {c["old_deg"]} -> '
+                      f'[{c["new_deg"]["min"]}, {c["new_deg"]["max"]}] deg; applied window '
+                      f'[{c["window_deg"]["min"]}, {c["window_deg"]["max"]}] deg')
         else:
             try:
                 limits = build_limits(mins, maxs, a.margin_deg, jitter_note,
