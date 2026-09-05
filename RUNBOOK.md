@@ -314,8 +314,9 @@ be executed must be checked against per-joint windows in the
 `reference_pose_rad` + `window_deg` schema of `cumotion/pneumatic_limits.yaml`
 (`plan_test.py --joint-limits`, `execute_plan.py --limits`; both refuse to start
 on any other schema). PREFERRED source: the MEASURED hand-sweep limits file
-(task joint-limits-freedrive-v1, once it exists — its definitive command belongs
-here). Otherwise regenerate the proposal windows around the LIVE park pose:
+`cumotion/measured_joint_limits.yaml` (next section, "Measuring / declaring
+real joint limits"). Only if that file is unusable, regenerate the proposal
+windows around the LIVE park pose:
 
 ```bash
 # reads live /joint_states (no motion); writes a NEW timestamped windows file and
@@ -324,9 +325,11 @@ here). Otherwise regenerate the proposal windows around the LIVE park pose:
 # DEFAULTS are the repo files cumotion/ur10_pneumatic.urdf/.xrdf, which
 # run_live.sh (cams/cellmap/live.launch.py) loads as the live-avoidance
 # planner's robot description — never overwrite them. Do NOT start the map
-# planner on the generated XRDF either: it drops shoulder_link/upper_arm_link
+# planner on the generated XRDF either unless it was made with
+# --keep-world-collision: by default it drops shoulder_link/upper_arm_link
 # from world collision (a pedestal workaround, obsolete on a cleaned map). The
-# map planner stays on ur10_map.xrdf.
+# map planner stays on ur10_map.xrdf, or on the measured limited model of the
+# next section for anything that will be executed.
 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 ~/ur10/cumotion/make_limited_urdf.py \
     --out /tmp/ur10_pneumatic.urdf --xrdf-out /tmp/ur10_pneumatic.xrdf \
     --write-limits ~/ur10/cumotion/pneumatic_limits_live-$(date +%Y%m%d-%H%M).yaml
@@ -340,8 +343,10 @@ xrdf:=/cfg/ur10_map.xrdf`) is a captain decision and is not changed here.
 
 Then re-validate on a FRESH label with `--joint-limits <that file>` and require
 both `--check-box` sweeps ≥ 0 (`cams/cellmap/README.md` §5), and execute only
-with `execute_plan.py --exact --limits <that file>`. `--frozen` centres the
-windows on the yaml's 2026-08-28 reference pose — never use it for execution.
+with `execute_plan.py --exact --limits <that file>`. `--frozen` against
+`pneumatic_limits.yaml` centres the windows on its 2026-08-28 reference pose —
+never use that for execution. (The measured file is the opposite case: its
+reference pose is absolute, so it MUST be used with `--frozen` — next section.)
 
 ### Measuring / declaring real joint limits (joint-limits-freedrive-v1)
 

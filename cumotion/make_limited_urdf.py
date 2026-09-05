@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Write ur10_pneumatic.urdf: ur10_calibrated.urdf with the six arm joints
-clamped to the pneumatic-line windows in pneumatic_limits.yaml.
+Write a joint-limited URDF + XRDF (default ur10_pneumatic.urdf/.xrdf):
+ur10_calibrated.urdf with the six arm joints clamped to the windows of a
+limits yaml (default pneumatic_limits.yaml).
 
 Why a URDF and not a post-hoc check: cuMotion (cuRobo) reads its joint
 limits from the URDF it is launched with, so tightening them here means the
@@ -20,9 +21,18 @@ because one guard is not a guard.
       # so the guards check the same windows the planner was given. Refuses to
       # overwrite an existing limits file (a MEASURED one must never be
       # replaced) unless --force is given.
+  python3 cumotion/make_limited_urdf.py --frozen --keep-world-collision \
+      --limits cumotion/measured_joint_limits.yaml \
+      --out cumotion/ur10_measured.urdf --xrdf-out cumotion/ur10_measured.xrdf
+      # the MEASURED hand-sweep file: its windows are absolute, so --frozen is
+      # mandatory; --keep-world-collision keeps the full sphere set for world
+      # collision (correct on a map cleaned of the mounting pedestal). RUNBOOK
+      # §10 "Measuring / declaring real joint limits".
 The live read needs the rig's DDS transport (FASTDDS_BUILTIN_TRANSPORTS=UDPv4)
 like every other ROS-talking command; without it discovery fails and the script
-exits — do not fall back to --frozen for anything that will be executed.
+exits — with pneumatic_limits.yaml, do not fall back to --frozen for anything
+that will be executed (it recentres the windows on the stale 2026-08-28 park
+pose; the measured file is the opposite case, see above).
 
 The DEFAULT --out / --xrdf-out are this directory's ur10_pneumatic.urdf / .xrdf,
 which run_live.sh (cams/cellmap/live.launch.py) loads as the live-avoidance
@@ -165,10 +175,10 @@ def main():
         # when the map has been CLEANED of the mounting pedestal (the only
         # reason the two links were ever excluded); the arm is then checked
         # against the world everywhere, as the executable plan should be.
-        world_note = (f'# - FULL collision sphere set kept for WORLD collision '
-                      f'(--keep-world-collision):\n'
-                      f'#   nothing dropped, because the map this is planned against has\n'
-                      f'#   been cleaned of the robot\'s own mounting pedestal.\n')
+        world_note = ('# - FULL collision sphere set kept for WORLD collision '
+                      '(--keep-world-collision):\n'
+                      '#   nothing dropped, because the map this is planned against has\n'
+                      '#   been cleaned of the robot\'s own mounting pedestal.\n')
     else:
         world_set = full + '_world_only'
         spheres = {k: v for k, v in xd['geometry'][full]['spheres'].items()
@@ -195,7 +205,7 @@ def main():
           f'#   (the stock retract config is outside the windows and cuMotion\n'
           f'#   rejects it as an invalid RobotDescription).\n'
           + world_note +
-          f'# Do not edit by hand.\n') + xr
+          '# Do not edit by hand.\n') + xr
 
     open(a.xrdf_out, 'w').write(xr)
 

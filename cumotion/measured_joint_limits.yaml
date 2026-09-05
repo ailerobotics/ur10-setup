@@ -20,8 +20,8 @@
 # default (live-pose) mode would centre the windows in the wrong place.
 #
 # REGENERATE whenever the line is re-routed or the arm re-parked — the real
-# reachable travel changes. Re-run the recorder (see cams/cellmap/README.md
-# "Measuring real joint limits").
+# reachable travel changes. Re-run the recorder (see RUNBOOK.md section 10,
+# "Measuring / declaring real joint limits").
 #
 #
 # CAPTAIN-DECLARED OVERRIDES (NOT hand-swept) — a window below was
