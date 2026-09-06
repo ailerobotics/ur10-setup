@@ -40,6 +40,7 @@ recorded in `cellmap-report.html` as they happen.
 | `../../cumotion/ur10_map.xrdf` | container | world buffers 0.04 m on forearm/wrists/tool, 0.02 on shoulder/upper arm (why: below) |
 | `tools/nvblx_clean.py` (+ `tools/test_nvblx_clean.py`) | host, no ROS | clean a saved `.nvblx` in place: voxel-precise `--remove-box` crop-out + isolated-block `--denoise`, NEW file, `--self-check`; offline test on a synthetic map (§5, `RUNBOOK.md` §10) |
 | `tools/plan_test.py` | host | plan-only legs (joint or **pose** goal, `--start-from` chaining), FK tool path, arm-sweep clearance vs a box, plots |
+| `tools/record_joint_limits.py` (+ `tools/test_record_joint_limits.py`) | host, domain 0 (`--declare`: no ROS) | passive recorder of the REAL per-joint travel during a captain freedrive hand-sweep → `cumotion/measured_joint_limits.yaml` (jitter-gated, refuses a frozen feed; `--merge` targeted re-sweep, `--declare` captain widening); offline test, no rig (`RUNBOOK.md` §10 "Measuring / declaring real joint limits") |
 | `tools/fake_depth.py` | host | synthetic depth camera + TF for the bench rehearsal |
 
 ## Frame chain
@@ -523,8 +524,11 @@ FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
 #   checks exactly its start -> goal wherever the arm is parked. (The original
 #   run used --start-pose=-0.506,-1.058,0.25, which solves IK from the LIVE
 #   joints and can pick a different branch — use that only for a NEW route.)
-#   pneumatic line on the arm? add --joint-limits <windows yaml> (RUNBOOK §10
-#   "Reduced joint windows"); the planner stays on ur10_map.xrdf regardless.
+#   ur10_map.xrdf + no --joint-limits is the collision-EVIDENCE setup only. Any
+#   plan that will be EXECUTED needs the planner on the measured limited model
+#   (urdf:=/cfg/ur10_measured.urdf xrdf:=/cfg/ur10_measured.xrdf) and
+#   --joint-limits cumotion/measured_joint_limits.yaml (RUNBOOK §10 "Measuring
+#   / declaring real joint limits").
 # Then BOTH arm-sweep clearances on that label must be >= 0 (each run overwrites
 # the label's single box_check slot):
 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 cams/cellmap/tools/plan_test.py \
@@ -542,11 +546,14 @@ commands + outputs, and why the yaml keeps only the last one:
 wrist-cam carton detections (base_link y≈1.13–1.32) — the map shelf is where
 the cartons really are. That yaml is the collision-validated EVIDENCE for the
 demo, NOT an executable plan: it drives wrist_1 to 355.1° (100 of 313 waypoints
-above 350°, 61 above the 353.2° bind the captain measured by hand-sweep in task
-joint-limits-freedrive-v1 — that task's measured-limits file is its deliverable
-and is not in this branch), so it must not be sent to the arm; the executable
-plan and captain command come from that task. Re-runs must use a different
-label.
+above 350°, 61 above the 353.2° bind the captain measured by hand-sweep,
+`cumotion/measured_joint_limits.yaml`), so it must not be sent to the arm. The
+EXECUTABLE successor is `plans/tag1-shelf-measlim.yaml` (2026-09-05): same
+start and standoff pose, re-planned on the measured limited model with full
+world collision, every waypoint inside the measured+declared windows (wrist_1
+stays inside its measured window), clearances unchanged — evidence
+`data/cell-clean-approach-v1/plan-measlim-clearance-checks.md`. Re-runs of
+either must use a different label.
 
 `plans/tag1-shelf-ompl.yaml` is the failed MAP-BLIND OMPL baseline for the same
 tag 1 → shelf start/goal, planned minutes before the cuMotion run: OMPL rewound
@@ -564,10 +571,10 @@ the mount TF is not up (`zz_rigcams` runs without it), restore it with
 --key tool0_to_camera_color_optical_frame` (TF only, touches no camera). The
 eye-level parked view boxes shelf *boards* as `tray`, not the cartons (recorded
 viewpoint limitation) — per-carton confirmation lands during the captain's
-approach. Captain execute + safety checklist: prepared per run in the task's
-`data/cell-clean-approach-v1/captain-execute-note.md` — SUPERSEDED for execution
-(wrist_1 exceeds the measured bind); kept as the collision-evidence record and
-safety-checklist reference for task joint-limits-freedrive-v1's executable plan.
+approach. Captain execute + safety checklist:
+`data/cell-clean-approach-v1/captain-execute-note.md` — the definitive
+executable note for `plans/tag1-shelf-measlim.yaml` (single command,
+prerequisites, plain-English disclosure of every captain-declared limit).
 
 ## Traps hit
 

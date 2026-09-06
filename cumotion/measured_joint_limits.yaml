@@ -1,0 +1,150 @@
+# Measured UR10 joint limits — captain freedrive hand-sweep.
+#
+# HOW: the captain hand-drove each joint to its real physical extreme in ROS
+# freedrive (tools/freedrive.py) while tools/record_joint_limits.py recorded
+# the running per-joint [min, max] from /joint_states. No motion was ever
+# commanded; the feed was verified LIVE by encoder jitter, not by rate (a
+# dropped RTDE link republishes a frozen packet at a perfect 125 Hz).
+#
+# FORMAT — identical to cumotion/pneumatic_limits.yaml so the same consumers
+# read it: make_limited_urdf.py (limits -> limited URDF/XRDF) and
+# execute_plan.py --limits (per-waypoint window guard). Each window is
+#   reference_pose_rad +- radians(window_deg)
+# and here reference is the MIDPOINT of the measured [min, max] and window_deg
+# is half the measured range minus the safety margin, so the effective window
+# is exactly [measured_min + margin, measured_max - margin]. The raw measured
+# extremes and the margin are under `measured:` below.
+#
+# make_limited_urdf.py MUST be run with --frozen against this file: these are
+# ABSOLUTE measured joint positions, not a window around the live pose, so the
+# default (live-pose) mode would centre the windows in the wrong place.
+#
+# REGENERATE whenever the line is re-routed or the arm re-parked — the real
+# reachable travel changes. Re-run the recorder (see RUNBOOK.md section 10,
+# "Measuring / declaring real joint limits").
+#
+#
+# CAPTAIN-DECLARED OVERRIDES (NOT hand-swept) — a window below was
+# widened by captain decision to cover a known-required travel the sweep
+# did not reach. Provenance for each is under `declared:`:
+#   shoulder_lift_joint = -175.174..-11.233 deg, declared 2026-09-05 — covers the validated tag1->shelf demo travel (start -174.17 deg to shelf standoff -12.23 deg); measured freedrive sweep reached only -173.8..-97.2, extended by captain declaration 2026-09-04, NOT hand-swept; extended from measured raw -173.8..-97.208 deg
+#   elbow_joint = -62.669..109.225 deg, declared 2026-09-05 — covers the validated tag1->shelf demo elbow floor -61.67 deg (measured freedrive sweep floor only -52.8); floor extended by captain decision 2026-09-05, NOT hand-swept; measured ceiling kept; extended from measured raw -52.771..114.225 deg
+#   wrist_2_joint = -83.357..115.367 deg, declared 2026-09-05 — covers the validated tag1->shelf demo wrist_2 floor -82.36 deg (measured freedrive sweep floor only -81.0); floor extended by captain decision 2026-09-05, NOT hand-swept; measured ceiling kept; extended from measured raw -81.004..120.367 deg
+#
+reference_pose_rad:
+  shoulder_pan_joint: 0.223385
+  shoulder_lift_joint: -1.626713
+  elbow_joint: 0.406275
+  wrist_1_joint: 4.458966
+  wrist_2_joint: 0.279341
+  wrist_3_joint: 0.706048
+window_deg:
+  shoulder_pan_joint: 73.1184
+  shoulder_lift_joint: 81.9703
+  elbow_joint: 85.9473
+  wrist_1_joint: 92.7289
+  wrist_2_joint: 99.3617
+  wrist_3_joint: 124.2285
+measured:
+  source: captain freedrive hand-sweep
+  method: global per-joint [min,max] over the session
+  date: '2026-09-04'
+  margin_deg: 5.0
+  jitter_evidence: 'startup gate: 251 samples, 6.202 mdeg jitter; min recent jitter
+    while recording: 4.808 mdeg'
+  extremes_rad:
+    shoulder_pan_joint:
+      min: -1.140037
+      max: 1.586808
+    shoulder_lift_joint:
+      min: -3.033376
+      max: -1.696594
+    elbow_joint:
+      min: -0.921036
+      max: 1.993605
+    wrist_1_joint:
+      min: 2.753274
+      max: 6.164658
+    wrist_2_joint:
+      min: -1.413787
+      max: 2.100797
+    wrist_3_joint:
+      min: -1.549414
+      max: 2.96151
+  extremes_deg:
+    shoulder_pan_joint:
+      min: -65.319
+      max: 90.917
+    shoulder_lift_joint:
+      min: -173.8
+      max: -97.208
+    elbow_joint:
+      min: -52.771
+      max: 114.225
+    wrist_1_joint:
+      min: 157.751
+      max: 353.209
+    wrist_2_joint:
+      min: -81.004
+      max: 120.367
+    wrist_3_joint:
+      min: -88.775
+      max: 169.682
+declared:
+- joint: shoulder_lift_joint
+  source: captain-declared (NOT hand-swept)
+  date: '2026-09-05'
+  reason: covers the validated tag1->shelf demo travel (start -174.17 deg to shelf
+    standoff -12.23 deg); measured freedrive sweep reached only -173.8..-97.2, extended
+    by captain declaration 2026-09-04, NOT hand-swept
+  covers_travel_deg:
+    min: -174.174
+    max: -12.233
+  slack_deg: 1.0
+  prior_window_deg:
+    min: -168.8
+    max: -102.208
+  window_deg:
+    min: -175.174
+    max: -11.233
+  extended_from_measured_raw_deg:
+    min: -173.8
+    max: -97.208
+- joint: elbow_joint
+  source: captain-declared (NOT hand-swept)
+  date: '2026-09-05'
+  reason: covers the validated tag1->shelf demo elbow floor -61.67 deg (measured freedrive
+    sweep floor only -52.8); floor extended by captain decision 2026-09-05, NOT hand-swept;
+    measured ceiling kept
+  covers_travel_deg:
+    min: -61.669
+    max: -14.069
+  slack_deg: 1.0
+  prior_window_deg:
+    min: -47.771
+    max: 109.225
+  window_deg:
+    min: -62.669
+    max: 109.225
+  extended_from_measured_raw_deg:
+    min: -52.771
+    max: 114.225
+- joint: wrist_2_joint
+  source: captain-declared (NOT hand-swept)
+  date: '2026-09-05'
+  reason: covers the validated tag1->shelf demo wrist_2 floor -82.36 deg (measured
+    freedrive sweep floor only -81.0); floor extended by captain decision 2026-09-05,
+    NOT hand-swept; measured ceiling kept
+  covers_travel_deg:
+    min: -82.357
+    max: -66.501
+  slack_deg: 1.0
+  prior_window_deg:
+    min: -76.004
+    max: 115.367
+  window_deg:
+    min: -83.357
+    max: 115.367
+  extended_from_measured_raw_deg:
+    min: -81.004
+    max: 120.367
