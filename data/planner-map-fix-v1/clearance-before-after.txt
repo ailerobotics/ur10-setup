@@ -1,0 +1,27 @@
+############ BEFORE — original cell-2026-09-04-cleaned.nvblx ############
+map: /home/manishsaini/ur10/cumotion/maps/cell-2026-09-04-cleaned.nvblx
+occupied voxels (w>=0.1 & d<=0): 249337
+
+[PARK start state]
+  worst sphere: forearm_link  esdf_surf=8.88 cm  r=5.0 buf=4.0
+  nearest voxel: [-0.670, 0.130, 0.250]
+  WORST CLEARANCE (with buffer): -0.12 cm
+  worst un-buffered clearance:   +3.88 cm
+
+[PARK -> TAG1-HOVER  (naive linear interp, 101 samples)]
+  WORST CLEARANCE along path: -3.92 cm  (sphere upper_arm_link, at t=0.14)
+  path plan.: IN COLLISION for naive straight line
+
+############ AFTER — parkpose-fix-cell-2026-09-04-despeck.nvblx ############
+map: /home/manishsaini/ur10/cumotion/maps/parkpose-fix-cell-2026-09-04-despeck.nvblx
+occupied voxels (w>=0.1 & d<=0): 249336
+
+[PARK start state]
+  worst sphere: wrist_3_link  esdf_surf=14.23 cm  r=7.0 buf=4.0
+  nearest voxel: [-0.710, 0.350, 1.030]
+  WORST CLEARANCE (with buffer): +3.23 cm
+  worst un-buffered clearance:   +7.23 cm
+
+[PARK -> TAG1-HOVER  (naive linear interp, 101 samples)]
+  WORST CLEARANCE along path: +0.95 cm  (sphere forearm_link, at t=0.11)
+  path plan.: CLEAR for naive straight line
