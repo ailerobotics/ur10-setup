@@ -1,0 +1,13 @@
+original:   /home/manishsaini/ur10/cumotion/maps/cell-2026-09-04-cleaned.nvblx
+despeckled: /home/manishsaini/ur10/cumotion/maps/parkpose-fix-cell-2026-09-04-despeck.nvblx
+blocks: original=11247  despeckled=11247
+blocks only in original: 0   only in despeckled: 0
+occupied voxels (w>=0.1 & d<=0): original=249337  despeckled=249336  delta=1
+
+TOTAL voxels whose (distance,weight) bytes changed at all: 1
+occupied -> unobserved (removed): 1
+unobserved -> occupied (added):   0
+
+  REMOVED block(-5, 0, 1) L=436 centre=(-0.670,0.130,0.250) before(d,w)=(-0.015621424, 1.0) after(d,w)=(-0.015621424, 0.0)
+
+VERDICT: PASS — exactly one occupied voxel removed, no other voxel changed
