@@ -1,0 +1,87 @@
+# cumotion/collision_force_limits.yaml
+# ============================================================================
+# THE single home for this cell's collision-FORCE thresholds. If you want the
+# arm to give up sooner (or later) on unexpected contact, this file, plus the
+# pendant setting it documents, are the only two places to touch.
+#
+# Read data/collision-force-v1/decision.md for the full evidence and the
+# captain bring-up note (what changes, first-run watch, nuisance vs genuine
+# protective stop, and one-step revert).
+#
+# ---------------------------------------------------------------------------
+# BACKGROUND — why there are TWO thresholds, only one of them in this repo
+# ---------------------------------------------------------------------------
+# This arm is a UR10 CB3 (PolyScope 3.15.8) with NO wrist force/torque sensor.
+# Contact force is ESTIMATED from joint currents (tens-of-newtons accuracy),
+# carries a ~13.6 N standing bias that cannot be zeroed (zero_ftsensor is
+# e-Series only), and drifts with pose. Two independent things can stop the arm
+# on contact, and they live in completely different places:
+#
+#   1. The robot's own SAFETY-RATED protective stop — the real "collision-force
+#      threshold". On a CB3 this is the pendant Safety Configuration
+#      (Safety > Safety Limits > Force, in newtons). It is safety-rated,
+#      password-protected, and CANNOT be set from ROS, MoveIt, the driver, or
+#      this repository. Only the captain can change it, on the teach pendant.
+#      Documented below under `pendant_safety_force` FOR THE RECORD ONLY — no
+#      code here reads or writes it.
+#
+#   2. A ROS-SIDE SOFTWARE backstop that cancels the running trajectory when the
+#      estimated external force jumps. This is NOT safety-rated (it runs on the
+#      PC, above the driver) — it is a coarse secondary net. It IS controlled by
+#      this repository: `ros_contact_force_backstop_n` below, consumed by
+#      cams/cellmap/tools/loop_tags.py via cams/cellmap/tools/collision_force.py.
+#
+# On this CB3 the estimated-force signal is too noisy to be a SENSITIVE contact
+# detector (clean motion with nothing touching the arm has been measured up to
+# 151.8 N of deviation; a 150 N backstop false-tripped a clean cycle). So the
+# repo backstop can only ever be a GROSS-contact catch, and sensitive contact
+# protection has to come from #1 (the pendant) plus a correct payload. Lowering
+# #2 is a real but limited improvement; #1 is where the protection actually is.
+# ============================================================================
+
+schema_version: 1
+
+# ---------------------------------------------------------------------------
+# (2) ROS-SIDE software contact-force backstop  —  REPOSITORY-CONTROLLED
+# ---------------------------------------------------------------------------
+# Newtons of force DEVIATION from a short rolling baseline (see class Force in
+# loop_tags.py) that cancels the running trajectory. This is the only
+# collision-force threshold this repository can set.
+#
+#   old value : 300.0 N  (loop_tags.py --max-force-n argparse default, pre-2026-09-10)
+#   new value : 200.0 N  (this file)
+#
+# WHY 200 N: it must stay clear of the worst clean-motion deviation ever measured
+# on this arm (151.8 N, 2026-08-28, nothing touching it) or it nuisance-trips.
+# 200 N is 1.32x that peak (the old 300 N was ~2x), so the arm now aborts on
+# gross contact at ~200 N instead of ~300 N — about a third less push before this
+# backstop fires — while staying above the measured clean envelope. It is NOT a
+# sensitive people-protecting threshold; that is the pendant limit below.
+#
+# Range guard (enforced by test_collision_force.py): must be > 160 N (clears the
+# 151.8 N clean peak with margin) and <= 300 N (this task only ever LOWERS the
+# push before a stop, never raises it).
+ros_contact_force_backstop_n: 200.0
+
+# ---------------------------------------------------------------------------
+# (1) ROBOT safety-rated protective-stop Force limit  —  PENDANT-ONLY
+# ---------------------------------------------------------------------------
+# FOR THE RECORD. No code reads this block. It documents the setting the captain
+# must make on the teach pendant, and the value we recommend he enter.
+pendant_safety_force:
+  units: N
+  repo_settable: false           # safety-rated; teach-pendant only
+  location: "PolyScope 3.x  ->  Installation  ->  Safety  ->  Safety Limits  ->  Force (Normal mode)"
+  cb3_min_n: 100.0               # CB3 will not accept a Force limit below this
+  cb3_max_normal_n: 250.0        # top of the adjustable Normal-mode range on CB3
+  recommended_target_n: 100.0    # start at the CB3 floor (most protective); tune UP only if it nuisance-trips
+  current_value_n: null          # UNKNOWN from this repo — captain reads it on the pendant
+  depends_on_payload: true       # a too-high payload desensitises this; set the real Robotiq 2F-85 payload first
+  note: >
+    Start at the 100 N floor in Normal mode with the correct payload set in
+    Installation -> General -> Payload (the Robotiq 2F-85 is ~0.9-1.0 kg; add the
+    coupling and the heaviest tray the arm carries). The cell runs at 5% velocity
+    and acceleration scaling and handles light trays, so dynamic forces are small
+    and 100 N should hold without nuisance-tripping. Raise it a little only if it
+    does trip during clean work. Full procedure and reasoning:
+    data/collision-force-v1/decision.md.

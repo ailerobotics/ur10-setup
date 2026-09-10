@@ -33,6 +33,7 @@ from geometry_msgs.msg import WrenchStamped
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from execute_plan import Exec, JOINTS, SPEED           # noqa: E402
+from collision_force import contact_force_backstop_n   # noqa: E402
 
 HOME = [-4.3076, -1.3337, 1.5676, 2.9386, 4.3670, -1.5911]
 TAG0 = [-2.2472, -1.1492, 1.8986, 3.5012, 4.6681, -1.6669]
@@ -185,7 +186,7 @@ def run_leg(n, name, goal, lo, hi, a, force=None):
                   f'final error {err:.2f} deg{fpk}')
 
 
-def main():
+def build_parser():
     ap = argparse.ArgumentParser()
     ap.add_argument('--limits', required=True)
     ap.add_argument('--cycles', type=int, default=0, help='0 = until stopped')
@@ -204,23 +205,31 @@ def main():
     # arm — buries any light push entirely. A 150 N threshold false-tripped a
     # clean cycle. Any threshold high enough to be quiet is far less sensitive
     # than the robot's own safety Force limit, so force is demoted to a gross
-    # -contact backstop at 300 N and the real ROS-side guard is tracking
-    # error. Sensitive contact detection on CB3 has to come from the pendant
-    # safety limits and a correct payload, not from this signal.
+    # -contact backstop (default now 200 N, sourced from
+    # cumotion/collision_force_limits.yaml — was a hard-coded 300 N) and the
+    # real ROS-side guard is tracking error. Sensitive contact detection on CB3
+    # has to come from the pendant safety limits and a correct payload, not from
+    # this signal. See data/collision-force-v1/decision.md.
     ap.add_argument('--max-track-rad', type=float, default=0.08,
                     help='rad of tracking error that stops the arm (default 0.08 = 4.6 '
                          'deg: 1.6x the measured clean maximum of 2.9 deg, about half '
                          'the >=8.6 deg a hand push produces). 0.05 was tried and '
                          'false-tripped a clean cycle.')
-    ap.add_argument('--max-force-n', type=float, default=300.0,
+    ap.add_argument('--max-force-n', type=float, default=contact_force_backstop_n(),
                     help='N of force deviation from the rolling baseline — GROSS contact '
                          'backstop only (clean motion already reaches 152 N on this CB3); '
-                         '0 disables it. See class Force.')
+                         '0 disables it. See class Force. Default comes from '
+                         'cumotion/collision_force_limits.yaml (200 N); pass a value here '
+                         'to override for one run.')
     ap.add_argument('--settle', type=float, default=1.0)
     ap.add_argument('--grace', type=float, default=1.0,
                     help='s at the start of a leg before tracking is judged (the '
                          'controller begins slightly after the goal is sent)')
-    a = ap.parse_args()
+    return ap
+
+
+def main():
+    a = build_parser().parse_args()
 
     lim = yaml.safe_load(open(a.limits))
     ref, win = lim['reference_pose_rad'], lim['window_deg']
