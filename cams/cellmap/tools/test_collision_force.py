@@ -28,8 +28,6 @@ import sys
 import tempfile
 import types
 
-import yaml
-
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import collision_force as cf  # noqa: E402
