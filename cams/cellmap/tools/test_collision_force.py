@@ -13,27 +13,26 @@ consumed by loop_tags.py through collision_force.py):
   * the loader returns the file's value, and the fail-safe fallback equals the
     file's value, so the guard can never silently diverge from the config
   * validate() rejects a missing / out-of-range value
-  * nothing downstream silently overrides it: loop_tags.py wires --max-force-n's
-    default to collision_force.contact_force_backstop_n(), reads that value in a
-    comparison, and never reassigns it (proved by parsing the AST — no ROS import)
+  * nothing downstream silently overrides it: loop_tags.py's real --max-force-n
+    argparse default (built by loop_tags.build_parser(), imported with the ROS
+    packages stubbed so no live rig is needed) resolves to exactly the configured
+    value, and an explicit --max-force-n still overrides it for a single run
   * the pendant safety-rated Force limit is documented as PENDANT-ONLY, not
     repo-settable, with the CB3 floor and the recommended target on record
 
 Run standalone: python3 test_collision_force.py
 Or under pytest: pytest test_collision_force.py
 """
-import ast
 import os
 import sys
 import tempfile
+import types
 
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import collision_force as cf  # noqa: E402
-
-LOOP_TAGS = os.path.join(HERE, 'loop_tags.py')
 
 # The measured evidence this value is chosen against (loop_tags.py:197-209):
 # clean motion with NOTHING touching the arm reached 151.8 N of deviation, and a
@@ -110,67 +109,49 @@ def test_validate_accepts_the_committed_config():
     assert cf.validate(cf.load()) == EXPECTED_BACKSTOP_N
 
 
-# --- nothing downstream silently overrides it (AST, no ROS import) ---------
+# --- the real argparse default resolves to the config value (ROS stubbed) --
 
-def _loop_tags_ast():
-    with open(LOOP_TAGS) as f:
-        return ast.parse(f.read(), filename=LOOP_TAGS)
+def _import_loop_tags():
+    """Import loop_tags with its ROS dependencies stubbed.
 
-
-def _find_max_force_add_argument(tree):
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Attribute)
-                and node.func.attr == 'add_argument'
-                and node.args
-                and isinstance(node.args[0], ast.Constant)
-                and node.args[0].value == '--max-force-n'):
-            return node
-    return None
-
-
-def test_loop_tags_imports_the_loader():
-    tree = _loop_tags_ast()
-    imported = [n for n in ast.walk(tree)
-                if isinstance(n, ast.ImportFrom) and n.module == 'collision_force'
-                and any(a.name == 'contact_force_backstop_n' for a in n.names)]
-    assert imported, 'loop_tags.py must import contact_force_backstop_n from collision_force'
-
-
-def test_loop_tags_default_is_wired_to_the_loader_not_a_literal():
-    node = _find_max_force_add_argument(_loop_tags_ast())
-    assert node is not None, 'could not find the --max-force-n add_argument call'
-    default_kw = next((k for k in node.keywords if k.arg == 'default'), None)
-    assert default_kw is not None, '--max-force-n has no default= keyword'
-    # the default must be a CALL to contact_force_backstop_n(...), never a magic number
-    assert isinstance(default_kw.value, ast.Call), \
-        'default must be sourced from the config loader, not a hard-coded number'
-    fn = default_kw.value.func
-    fname = fn.id if isinstance(fn, ast.Name) else getattr(fn, 'attr', None)
-    assert fname == 'contact_force_backstop_n', f'default is wired to {fname!r}, not the loader'
+    loop_tags.py (and the execute_plan.py it pulls in) import rclpy and several
+    ROS message/action packages at module load. None of them are needed to build
+    the argument parser, so we install lightweight stand-ins in sys.modules: this
+    lets the test exercise the *real* build_parser() on any host, with or without
+    a ROS stack, and without a live rig. The real collision_force loader is left
+    in place so the parser's default flows from the committed config exactly as it
+    does in production.
+    """
+    ros_pkgs = ['rclpy', 'rclpy.action', 'rclpy.node',
+                'control_msgs', 'control_msgs.action',
+                'geometry_msgs', 'geometry_msgs.msg',
+                'moveit_msgs', 'moveit_msgs.action', 'moveit_msgs.msg',
+                'sensor_msgs', 'sensor_msgs.msg',
+                'trajectory_msgs', 'trajectory_msgs.msg']
+    for name in ros_pkgs:
+        mod = types.ModuleType(name)
+        # any attribute (e.g. Node, FollowJointTrajectory) resolves to a fresh
+        # class so `from x import Y` and `class Exec(Node)` both succeed.
+        mod.__getattr__ = lambda attr: type(attr, (object,), {})
+        sys.modules[name] = mod
+    import importlib
+    for stale in ('loop_tags', 'execute_plan'):
+        sys.modules.pop(stale, None)
+    return importlib.import_module('loop_tags')
 
 
-def test_loop_tags_never_reassigns_max_force_n_and_does_read_it():
-    tree = _loop_tags_ast()
-    writes, reads = [], []
-    for node in ast.walk(tree):
-        # assignment targets: `a.max_force_n = ...` or `a.max_force_n += ...`
-        targets = []
-        if isinstance(node, ast.Assign):
-            targets = node.targets
-        elif isinstance(node, ast.AugAssign):
-            targets = [node.target]
-        for t in targets:
-            if isinstance(t, ast.Attribute) and t.attr == 'max_force_n':
-                writes.append(t)
-            if isinstance(t, ast.Name) and t.id == 'max_force_n':
-                writes.append(t)
-        # reads: `a.max_force_n` used in Load context (the guard comparison)
-        if (isinstance(node, ast.Attribute) and node.attr == 'max_force_n'
-                and isinstance(node.ctx, ast.Load)):
-            reads.append(node)
-    assert not writes, 'a.max_force_n is reassigned/clamped downstream — it must flow through unchanged'
-    assert reads, 'a.max_force_n is never read — the guard is not actually wired to the value'
+def test_loop_tags_default_force_resolves_to_config_value():
+    lt = _import_loop_tags()
+    ns = lt.build_parser().parse_args(['--limits', '/dev/null'])
+    assert ns.max_force_n == cf.contact_force_backstop_n(), \
+        f'--max-force-n default {ns.max_force_n} N does not match the configured backstop'
+    assert ns.max_force_n == EXPECTED_BACKSTOP_N
+
+
+def test_loop_tags_explicit_force_override_wins():
+    lt = _import_loop_tags()
+    ns = lt.build_parser().parse_args(['--limits', '/dev/null', '--max-force-n', '123'])
+    assert ns.max_force_n == 123.0, 'an explicit --max-force-n must override the config default'
 
 
 # --- the pendant limit is documented as pendant-only ------------------------

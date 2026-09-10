@@ -186,7 +186,7 @@ def run_leg(n, name, goal, lo, hi, a, force=None):
                   f'final error {err:.2f} deg{fpk}')
 
 
-def main():
+def build_parser():
     ap = argparse.ArgumentParser()
     ap.add_argument('--limits', required=True)
     ap.add_argument('--cycles', type=int, default=0, help='0 = until stopped')
@@ -225,7 +225,11 @@ def main():
     ap.add_argument('--grace', type=float, default=1.0,
                     help='s at the start of a leg before tracking is judged (the '
                          'controller begins slightly after the goal is sent)')
-    a = ap.parse_args()
+    return ap
+
+
+def main():
+    a = build_parser().parse_args()
 
     lim = yaml.safe_load(open(a.limits))
     ref, win = lim['reference_pose_rad'], lim['window_deg']
