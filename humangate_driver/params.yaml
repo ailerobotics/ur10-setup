@@ -1,0 +1,48 @@
+# Driver-backed human-safety gate — driver/interlock parameters (Phase 3).
+#
+# The DECISION thresholds (zones, dwell, heartbeat, speed fractions) still live in
+# humangate/gate_params.yaml and are loaded by the gate core unchanged. This file
+# documents ONLY the driver-side and arming parameters this package adds. All are
+# provisional and SIMULATION-oriented; the owner-present phase re-derives the
+# safety-relevant ones from measurement (report §8 / §10 Phase 4).
+
+human_gate_driver:
+  ros__parameters:
+    # --- arming interlock (report §10 Phase 3; task brief item 3) --------- #
+    # DISARMED by default. All three must hold to arm, and none can reach the
+    # real robot: arm:=true, ROS_DOMAIN_ID not in {0,42}, and robot_ip loopback
+    # or Docker-internal (never 192.168.0.1, never a physical-NIC address).
+    arm: false
+    robot_ip: "127.0.0.1"          # loopback (mock) or a docker-internal URSim IP
+
+    # --- primary lever confirmation -------------------------------------- #
+    # Speed slider is the primary lever. If the commanded fraction is not
+    # reflected on the scaling topic within this deadline, it is logged
+    # unconfirmed; the ENFORCED response is the gate/watcher backstop.
+    confirm_deadline_s: 0.5
+    # Applied scaling at/below this fraction counts as an effected STOP. Kept in
+    # FRACTION units (the driver_io ScalingMonitor normalises the mock 0..100
+    # percent scale to 0..1).
+    stop_scaling_threshold: 0.05
+
+    # RUN slider fraction on the sim. 1.0 makes the freeze/resume unmistakable in
+    # URSim; on the real arm this stays capped low (report §11.2 — cap speed near
+    # people), and trajectory-level 5% scaling still applies on top.
+    operating_speed_fraction: 1.0
+
+    fjt_action: "/scaled_joint_trajectory_controller/follow_joint_trajectory"
+
+human_gate_backstop_watcher:
+  ros__parameters:
+    arm: false
+    robot_ip: "127.0.0.1"
+    # The watcher's OWN timeouts (independent of the gate's). Slightly looser than
+    # the gate's own (gate heartbeat 0.3 s) so the gate acts first in the healthy
+    # case and the watcher is the independent net, not a racing duplicate.
+    state_heartbeat_timeout_s: 0.5
+    gate_heartbeat_timeout_s: 0.5
+    stop_effect_deadline_s: 0.7
+    stop_scaling_threshold: 0.05
+    startup_grace_s: 3.0
+    tick_hz: 25.0
+    fjt_action: "/scaled_joint_trajectory_controller/follow_joint_trajectory"

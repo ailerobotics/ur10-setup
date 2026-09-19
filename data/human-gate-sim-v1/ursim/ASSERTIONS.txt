@@ -1,0 +1,21 @@
+=== end-to-end assertions (ursim) ===
+gate action sequence: STOP BACKSTOP RUN STOP BACKSTOP STOP RUN SLOW STOP BACKSTOP RUN STOP BACKSTOP STOP RUN SLOW STOP BACKSTOP RUN STOP BACKSTOP
+longest trajectory-progress stall: 0.00s
+
+  [PASS] gate produced decisions  (2873 decisions)
+  [PASS] SLOW seen (person approaching)
+  [PASS] STOP seen (person close)
+  [PASS] RUN seen (clear+dwell)
+  [PASS] RUN follows an approach STOP (resume, not run-from-start)  (first RUN idx 278, first STOP idx 0)
+  [PASS] never RUN on presence-only / SLOW demand
+  [PASS] vanish-close: does NOT resume on a person vanishing  (held via LOST_CLOSE provenance)
+  [PASS] heartbeat loss -> STOP
+  [PASS] stale evidence stamp -> STOP
+  [PASS] fault reported with CLEAR zone -> STOP
+  [PASS] trajectory moved (mover advanced)  (max tps 0.045)
+  [PASS] speed slider is EFFECTIVE (scaling took a commanded SLOW value)  (observed scalings [0.1, 1.0])
+  [PASS] command-to-effect delay for a SLOW slider change measured  (50 ms)
+  [PASS] STOP effected by the backstop (CB3 slider floors > 0)  (gate BACKSTOP=True, watcher cancels=132)
+  [PASS] independent watcher recorded a cancel  (132 watcher cancels)
+
+15/15 checks passed

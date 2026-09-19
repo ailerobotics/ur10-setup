@@ -1,0 +1,73 @@
+[WARN] [1789818214.246888924] [human_gate_driver]: ARMED for a SIMULATED arm: robot_ip=192.168.98.2 (docker-internal), domain=79. This must NEVER point at real hardware (report §10 Phase 3).
+[INFO] [1789818214.765417283] [human_gate_driver]: human_gate_driver up: sub /human_safety/state, pub /human_gate/decision, FJT /scaled_joint_trajectory_controller/follow_joint_trajectory. Speed slider is the PRIMARY lever; trajectory cancel is the BACKSTOP. SIMULATED arm only.
+[INFO] [1789818214.815655725] [human_gate_driver]: slider -> 0.00 (startup: no camera-state received yet)
+[WARN] [1789818215.365592236] [human_gate_driver]: slider effect NOT confirmed: commanded 0.00, scaling 1.000 after 0.50s
+[INFO] [1789818216.865478546] [human_gate_driver]: slider -> 1.00 (CLEAR healthy for 2.00 s >= dwell 2.00 s)
+[INFO] [1789818217.165646022] [human_gate_driver]: slider -> 0.10 (camera zone SLOW, nearest person 2.40 m)
+[INFO] [1789818219.165567788] [human_gate_driver]: slider -> 0.00 (camera zone STOP, nearest person 1.20 m)
+[WARN] [1789818219.665990407] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818219.666513972] [human_gate_driver]: slider effect NOT confirmed: commanded 0.00, scaling 0.100 after 0.50s
+[WARN] [1789818220.715621794] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818221.715641229] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818222.765659965] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818223.765775465] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818224.765702323] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (camera zone SLOW, nearest person 2.30 m)
+[WARN] [1789818225.815628904] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (camera zone SLOW, nearest person 2.30 m)
+[WARN] [1789818226.815751196] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR dwell 0.15/2.00 s — holding until the dwell completes)
+[WARN] [1789818227.865650097] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR dwell 1.20/2.00 s — holding until the dwell completes)
+[INFO] [1789818228.715574418] [human_gate_driver]: slider -> 1.00 (CLEAR healthy for 2.05 s >= dwell 2.00 s (resume requires a fresh plan after backstop))
+[INFO] [1789818231.165867656] [human_gate_driver]: slider -> 0.00 (camera zone STOP, nearest person 1.00 m)
+[WARN] [1789818231.715650135] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818231.716024106] [human_gate_driver]: slider effect NOT confirmed: commanded 0.00, scaling 1.000 after 0.50s
+[WARN] [1789818232.765752647] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818233.765785918] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818234.766046998] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818235.815976160] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818236.815751902] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818237.815956215] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (camera zone SLOW, nearest person 2.20 m)
+[WARN] [1789818238.815951397] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (camera zone SLOW, nearest person 2.20 m)
+[WARN] [1789818239.865722856] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818240.915633536] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818241.965737489] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818242.965811739] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818243.965762370] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818244.965809402] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818246.015771923] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818247.015713829] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (camera zone SLOW, nearest person unknown)
+[WARN] [1789818248.065732159] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (camera zone SLOW, nearest person unknown)
+[WARN] [1789818249.065854541] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818250.115643800] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818251.115660645] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818252.165825160] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818253.165726268] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818254.165850768] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818255.215741353] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818256.265587980] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (CLEAR not trusted: last person was lost close to the robot, not tracked leaving — holding until a clean tracked departure)
+[WARN] [1789818257.265731607] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (stale state: evidence 214 ms old)
+[WARN] [1789818258.265809857] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818259.315656054] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818260.315765517] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818261.365978116] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818262.366003628] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818263.415740594] [human_gate_driver]: BACKSTOP: cancel trajectory + slider->0 (primary STOP not confirmed within 0.50 s (arm still moving) — escalating to backstop)
+[WARN] [1789818264.008365726] [human_gate_driver]: slider -> 0 (node shutdown — leaving slider at zero)
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:423
+Traceback (most recent call last):
+  File "/home/manishsaini/.treehouse/ur10-setup-5940d0/2/ur10-setup/humangate_driver/sim/../gate_driver_node.py", line 241, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/manishsaini/.treehouse/ur10-setup-5940d0/2/ur10-setup/humangate_driver/sim/../gate_driver_node.py", line 225, in main
+    rclpy.spin(node)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+    executor.spin_once()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 926, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 907, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 877, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 785, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException

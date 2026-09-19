@@ -1,0 +1,3 @@
+# raw 20 Hz decision streams are regenerable via the e2e scripts; keep the
+# compact decisions_transitions.jsonl + ASSERTIONS.txt committed instead.
+decisions.jsonl
