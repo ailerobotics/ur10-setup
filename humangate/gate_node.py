@@ -94,7 +94,7 @@ class GateNode(Node):
             # a malformed state is not a clearance: log and let the watchdog STOP
             self.get_logger().warn(f"ignoring malformed camera state: {e}")
             return
-        self.gate.on_state(state, time.monotonic())
+        self.gate.on_state(state, time.monotonic(), time.time())
 
     # --- decide loop -------------------------------------------------------
 

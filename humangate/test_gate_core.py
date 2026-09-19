@@ -106,21 +106,33 @@ def test_unknown_distance_present_person_never_runs():
     assert d.action == gc.SLOW
 
 
-# --- rule: any health flag forces non-CLEAR --------------------------------
+# --- rule: health fault -> never trust CLEAR; SLOW stays SLOW, else STOP ----
+# The camera side forces a non-clear zone on any fault it detects, so a fault
+# reported together with CLEAR is internally inconsistent and cannot be trusted;
+# the gate fails toward stop on anything it cannot confirm.
 
-def test_health_fault_downgrades_clear_to_slow():
+def test_health_fault_with_clear_zone_is_stop():
     g = gc.HumanGate(cfg())
     g.on_state(clear(stamp=0.0, seq=1, health_ok=False), now=0.0)
     d = g.decide(now=0.0, now_wall=0.0)
-    assert d.action == gc.SLOW
+    assert d.action == gc.STOP
     assert "health" in d.reason
 
 
-def test_health_flag_present_forces_non_clear_even_if_health_ok_true():
+def test_health_flag_with_clear_zone_is_stop():
     g = gc.HumanGate(cfg())
     g.on_state(clear(stamp=0.0, seq=1, health_ok=True, flags=("STALE_CAM",)), now=0.0)
     d = g.decide(now=0.0, now_wall=0.0)
-    assert d.action != gc.RUN and d.action == gc.SLOW
+    assert d.action == gc.STOP
+
+
+def test_health_fault_with_slow_zone_stays_slow():
+    # camera judged itself degraded but is still tracking (SLOW) -> stay SLOW.
+    g = gc.HumanGate(cfg())
+    g.on_state(zone(ZONE_SLOW, stamp=0.0, dist=2.4, seq=1, health_ok=False), now=0.0)
+    d = g.decide(now=0.0, now_wall=0.0)
+    assert d.action == gc.SLOW
+    assert "health" in d.reason
 
 
 def test_health_fault_with_stop_zone_is_stop():
@@ -163,6 +175,31 @@ def test_run_resets_to_stop_when_person_reappears():
     g.on_state(zone(ZONE_STOP, stamp=2.0, dist=1.0, seq=99), now=2.0)
     d = g.decide(now=2.0, now_wall=2.0)
     assert d.action == gc.STOP
+
+
+def test_dwell_continuity_resets_on_nonclear_between_ticks():
+    # regression: continuity must be observed on EVERY received message, not only
+    # at decide ticks. When the camera publishes faster than the gate decides, a
+    # single non-clear frame arriving and being overwritten by a CLEAR before the
+    # next tick must still reset the dwell — otherwise RUN is granted early.
+    g = gc.HumanGate(cfg(clear_dwell_s=1.0))
+    t, seq = 0.0, 1
+    while t < 0.95:                       # accumulate ~0.9 s of clear dwell
+        g.on_state(clear(stamp=t, seq=seq), now=t, now_wall=t)
+        d = g.decide(now=t, now_wall=t)
+        t = round(t + 0.1, 9)
+        seq += 1
+    assert d.action == gc.STOP            # not yet at the 1.0 s dwell
+    # two messages arrive before the next decide tick: a non-clear frame, then a
+    # CLEAR that overwrites it. The gate never decides on the SLOW frame.
+    g.on_state(zone(ZONE_SLOW, stamp=1.0, dist=2.0, seq=seq), now=1.0, now_wall=1.0)
+    seq += 1
+    g.on_state(clear(stamp=1.02, seq=seq), now=1.02, now_wall=1.02)
+    # next tick lands past the original dwell target; had the SLOW frame not reset
+    # the timer, dwell would read >1.0 s and this would RUN.
+    d = g.decide(now=1.05, now_wall=1.05)
+    assert d.action == gc.STOP, "an intermediate non-clear message must reset the dwell"
+    assert d.clear_dwell_s < 1.0
 
 
 # --- rule: resume refused when person LOST close (not tracked leaving) ------
@@ -232,6 +269,31 @@ def test_lost_close_recovers_after_new_tracked_pass():
     d = g.decide(0.1, 0.1)
     assert d.provenance == gc.PROV_LOST_CLOSE and d.action == gc.STOP
     # a new person walks cleanly in and out: SLOW -> CLEAR (tracked leaving)
+    g.on_state(zone(ZONE_SLOW, stamp=0.2, dist=2.3, seq=3), now=0.2)
+    g.decide(0.2, 0.2)
+    t, seq, ran = 0.3, 4, False
+    while t < 1.5:
+        g.on_state(clear(stamp=t, seq=seq), now=t)
+        d = g.decide(now=t, now_wall=t)
+        ran = ran or d.action == gc.RUN
+        t = round(t + 0.1, 9)
+        seq += 1
+    assert ran and d.provenance == gc.PROV_TRACKED_LEAVING
+
+
+def test_lost_close_flag_recovers_after_new_tracked_pass():
+    # regression: a lost-close FLAG episode must not latch LOST_CLOSE forever.
+    g = gc.HumanGate(cfg(clear_dwell_s=0.5))
+    # a SLOW frame carries the explicit lost-close flag, then CLEAR: even though
+    # the last non-clear zone was SLOW, the flag makes this LOST_CLOSE.
+    g.on_state(zone(ZONE_SLOW, stamp=0.0, dist=1.5, seq=1,
+                    flags=(HEALTH_TRACK_LOST_CLOSE,)), now=0.0)
+    g.decide(0.0, 0.0)
+    g.on_state(clear(stamp=0.1, seq=2), now=0.1)
+    d = g.decide(0.1, 0.1)
+    assert d.provenance == gc.PROV_LOST_CLOSE and d.action == gc.STOP
+    # a new person walks cleanly in and out: SLOW -> CLEAR (tracked leaving); the
+    # flag must NOT persist into this fresh episode, so resume is allowed.
     g.on_state(zone(ZONE_SLOW, stamp=0.2, dist=2.3, seq=3), now=0.2)
     g.decide(0.2, 0.2)
     t, seq, ran = 0.3, 4, False

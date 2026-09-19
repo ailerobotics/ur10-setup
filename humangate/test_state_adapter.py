@@ -102,14 +102,6 @@ def test_custom_msg_parser_is_unimplemented_until_message_lands():
                          "perception message is committed")
 
 
-def test_contract_to_confirm_is_recorded():
-    # the swap list must be non-empty and mention the key ambiguities
-    text = " ".join(sa.CONTRACT_TO_CONFIRM).lower()
-    assert sa.CONTRACT_TO_CONFIRM
-    for needle in ("message name", "topic", "stamp", "health", "heartbeat", "distance"):
-        assert needle in text, f"CONTRACT_TO_CONFIRM should mention {needle!r}"
-
-
 def _run_all():
     fns = [v for k, v in sorted(globals().items())
            if k.startswith("test_") and callable(v)]

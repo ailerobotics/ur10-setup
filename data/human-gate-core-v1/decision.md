@@ -46,6 +46,29 @@ injection harness, and offline + one ROS integration test. Full module map in
    all); leave STOP only after the gate observes `clear_dwell_s` of continuous
    healthy CLEAR itself (defence in depth over the camera-side dwell).
 
+   **Health fault x zone (fail toward stop on the untrusted):** the camera side
+   forces a non-clear zone on any fault it detects, so a fault reported *with a
+   CLEAR zone* is internally inconsistent and cannot be trusted -> **STOP**; a
+   fault *with SLOW* (camera judged itself degraded but is still tracking) is
+   trusted enough to stay **SLOW**; a fault *with STOP* stays **STOP**. Only the
+   fault-with-SLOW case keeps the arm moving (slowly); every other fault stops
+   it. (Total perception loss is separately caught by the heartbeat / staleness
+   watchdogs -> STOP.)
+
+   **Dwell continuity is per-message, not per-tick:** the continuous-healthy-
+   CLEAR dwell is evaluated on *every received state message* (`on_state`), not
+   only at decide ticks -- any message that is non-clear, unhealthy, or
+   stale/skewed resets the resume timer immediately, so a non-clear frame that
+   arrives and is overwritten by a CLEAR between two decide ticks (publish rate
+   above decide rate) can never grant an early RUN.
+
+   **Lost-close flag is scoped to its episode:** the `TRACK_LOST_CLOSE` flag
+   classifies only the non-clear episode it was seen in; it is cleared once that
+   episode's CLEAR entry is classified, so a later genuine tracked departure
+   (...->SLOW->CLEAR) still recovers to `TRACKED_LEAVING` -- the flag path
+   recovers exactly like the non-flag STOP path, rather than latching STOP
+   forever.
+
 3. **Resume refusal on "person lost close" (report §5 #9).** The core classifies
    how each CLEAR was reached: a CLEAR entered directly from STOP (or with an
    explicit `TRACK_LOST_CLOSE` health flag) is `LOST_CLOSE` and **never** enables

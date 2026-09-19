@@ -75,7 +75,7 @@ def run_scenario(tl: Timeline, cfg: Optional[GateConfig] = None,
     out: List[Tuple[float, Decision]] = []
     for tt in schedule:
         if tt in msgs:
-            gate.on_state(msgs[tt], tt)
+            gate.on_state(msgs[tt], tt, tl.wall_from_mono(tt))
         if tt in faults:
             gate.inject_self_fault(faults[tt])
         d = gate.decide(tt, tl.wall_from_mono(tt), tl.driver_stopped_fn(tt))

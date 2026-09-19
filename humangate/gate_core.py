@@ -92,8 +92,11 @@ class HumanGate:
 
     # ---- inputs -----------------------------------------------------------
 
-    def on_state(self, state: CameraState, now: float) -> None:
-        """Ingest one freshly-arrived camera state (now = monotonic seconds)."""
+    def on_state(self, state: CameraState, now: float,
+                 now_wall: Optional[float] = None) -> None:
+        """Ingest one freshly-arrived camera state (now = monotonic seconds;
+        now_wall = the wall/ROS clock the evidence stamp is in, used for the
+        per-message staleness/skew part of the dwell-continuity check)."""
         self._ever_received = True
         self._latest = state
         self._latest_arrival = now
@@ -104,12 +107,32 @@ class HumanGate:
         # resume-provenance: classify the STOP->CLEAR transition character.
         self._update_provenance(state)
         self._prev_zone = state.zone
+        # Dwell continuity is a property of EVERY received message, not only of
+        # the states sampled at decide ticks: any message that is not a fresh,
+        # healthy CLEAR breaks the continuous-CLEAR run and resets the resume
+        # timer at once, even if a later CLEAR overwrites it before the next tick.
+        if not self._is_trusted_clear(state, now_wall):
+            self._clear_since = None
 
     def inject_self_fault(self, reason: str) -> None:
         """The node flags an internal fault (e.g. its decide loop overran or an
         exception was caught). Forces BACKSTOP until a healthy resume (report §5
         #11)."""
         self._self_fault = reason
+
+    def _is_trusted_clear(self, state: CameraState, now_wall: Optional[float]) -> bool:
+        """A state that counts toward the continuous healthy-CLEAR dwell: a CLEAR
+        zone, fully healthy, and — when the wall clock is known — neither stale
+        nor skewed into the future. Anything else breaks the dwell."""
+        if not state.is_clear:
+            return False
+        if now_wall is not None:
+            age = now_wall - state.stamp
+            if age > self.cfg.state_max_age_s:
+                return False
+            if age < -self.cfg.clock_skew_tolerance_s:
+                return False
+        return True
 
     # ---- provenance -------------------------------------------------------
 
@@ -124,19 +147,25 @@ class HumanGate:
         if self._prev_zone == ZONE_CLEAR:
             return  # a run of CLEARs is not a transition; keep the provenance
 
-        # transition INTO CLEAR: classify how we got here.
+        # transition INTO CLEAR: classify how we got here, using only the
+        # just-ended non-clear episode. The lost-close flag is scoped to that
+        # episode and is cleared below once it has been consumed, so a LATER
+        # genuine tracked departure can still reach the TRACKED_LEAVING branch.
         if self._prev_zone == ZONE_STOP or self._lost_close_flag_seen:
             # jumped straight from STOP to CLEAR, or a lost-close flag was raised
             # during the episode -> the person was lost close, not tracked out.
-            # This LATCHES: it stays until a genuine tracked departure clears it.
+            # This provenance holds through the whole clear run; it is only
+            # displaced by a subsequent …->SLOW->CLEAR tracked departure.
             self._provenance = PROV_LOST_CLOSE
         elif self._prev_zone == ZONE_SLOW:
             # …->SLOW->CLEAR: a genuine tracked departure. This is the ONLY way
             # a prior LOST_CLOSE can be cleared without an operator reset.
             self._provenance = PROV_TRACKED_LEAVING
-            self._lost_close_flag_seen = False
         else:  # self._prev_zone is None: the first-ever state is CLEAR
             self._provenance = PROV_CLEAN_START
+        # the flag described exactly the episode just classified; drop it so the
+        # next non-clear episode is judged on its own evidence.
+        self._lost_close_flag_seen = False
 
     # ---- decision ---------------------------------------------------------
 
@@ -160,11 +189,16 @@ class HumanGate:
         if age < -c.clock_skew_tolerance_s:
             return STOP, False, f"clock skew: stamp {(-age) * 1e3:.0f} ms in the future"
 
-        # fresh + live. Health forces non-CLEAR; the camera zone drives the rest.
+        # fresh + live. Health forces non-CLEAR. The camera side forces a
+        # non-clear zone on any fault it detects, so a fault reported alongside a
+        # CLEAR zone is internally inconsistent and cannot be trusted -> STOP
+        # (fail toward stop on anything the gate cannot confirm). Only a fault
+        # WITH a SLOW zone (camera judged itself degraded but is still tracking)
+        # is trusted enough to stay SLOW; a fault with STOP stays STOP.
         if not s.health_ok or s.health_flags:
-            if s.zone == ZONE_STOP:
-                return STOP, True, f"health fault forcing STOP {sorted(s.health_flags)}"
-            return SLOW, True, f"health fault forcing non-CLEAR {sorted(s.health_flags)}"
+            if s.zone == ZONE_SLOW:
+                return SLOW, True, f"health fault, camera still tracking (SLOW) {sorted(s.health_flags)}"
+            return STOP, True, f"health fault forcing STOP {sorted(s.health_flags)}"
         if s.zone == ZONE_STOP:
             return STOP, True, self._zone_reason("STOP", s)
         if s.zone == ZONE_SLOW:
