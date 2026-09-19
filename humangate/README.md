@@ -57,7 +57,7 @@ Everything fails toward stop. Hard rules implemented in `gate_core.py`:
 | State older than `state_max_age_s` by its own **evidence** stamp (§7.2) | STOP |
 | No message within `heartbeat_timeout_s`, or `heartbeat_seq` stops advancing (§7.3) | STOP |
 | Clock skew: stamp in the future beyond tolerance (§5 #6) | STOP |
-| Any health fault / flag forcing non-CLEAR (§5, §7.4) | never CLEAR → at least SLOW |
+| Any health fault / flag (§5, §7.4) | fault with a SLOW zone stays SLOW (camera degraded but still tracking); a fault with a CLEAR or STOP zone → STOP |
 | Unknown distance is never "far" (§7.5) | distance is not on the path to RUN at all |
 | Leaving STOP (§3, §7.6) | only after the gate itself observes `clear_dwell_s` of continuous healthy CLEAR (re-checked even though the camera side also dwells) |
 | Person **lost close** vs **tracked leaving** (§5 #9) | a CLEAR reached by a person vanishing while close does **not** enable resume; only a tracked departure (…→SLOW→CLEAR) does |
