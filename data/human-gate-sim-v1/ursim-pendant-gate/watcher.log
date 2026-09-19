@@ -1,0 +1,23 @@
+[WARN] [1789826138.562800795] [human_gate_backstop_watcher]: backstop watcher up (INDEPENDENT process). Cancels the trajectory on camera-state or gate heartbeat loss, on BACKSTOP, or on an ineffective STOP. SIMULATED arm only.
+[ERROR] [1789826217.366036191] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: camera-state heartbeat lost (505 ms silent)
+[ERROR] [1789826218.406009146] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: camera-state heartbeat lost (505 ms silent)
+[ERROR] [1789826219.406048615] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: camera-state heartbeat lost (505 ms silent)
+Traceback (most recent call last):
+  File "/home/manishsaini/.treehouse/ur10-setup-5940d0/2/ur10-setup/humangate_driver/sim/../backstop_watcher_node.py", line 159, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/manishsaini/.treehouse/ur10-setup-5940d0/2/ur10-setup/humangate_driver/sim/../backstop_watcher_node.py", line 144, in main
+    rclpy.spin(node)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+    executor.spin_once()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 926, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 907, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 877, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 785, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException

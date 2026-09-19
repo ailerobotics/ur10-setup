@@ -36,6 +36,36 @@ and `DriverFeedback` bases from `../humangate`.
   can cancel a trajectory they did NOT start. Terminal — a resume needs a fresh
   plan. Driven by a SEPARATE watcher process.
 
+## Selectable STOP strategy (pendant-pause task)
+
+How a full STOP is effected and whether a RESUME continues the SAME trajectory is a
+selectable strategy (`stop_strategy` in `params.yaml`); the slider stays the SLOW
+lever and the goal-cancel backstop stays the independent net in BOTH:
+
+- **`cancel` (DEFAULT — how this cell runs today, HEADLESS):** STOP drives the slider
+  toward zero and the goal-cancel backstop delivers the real full stop
+  (stop-then-replan). `SLIDER_ZERO_FINDING.md`, `PAUSE_RESUME_FINDING.md`.
+- **`pendant_pause` (opt-in — only for a cell running a pendant-LOADED External Control
+  program, non-headless):** STOP issues a dashboard **pause** (freezes the arm on its
+  planned path, scaling→0, the running goal survives) and a healthy CLEAR+dwell RESUME
+  issues **play** (continues the SAME trajectory, no replan). Measured on URSim CB3 in
+  `PENDANT_PAUSE_FINDING.md`. It resumes only on the gate's own RUN, refuses to resume
+  once the pause is older than `resume_max_pause_s` (→ cancel + replan), and re-pauses
+  on a foreign play. Do NOT select it on the cell's headless bring-up (pause is
+  rejected there).
+
+A pendant pause freezes over ~1.8 s (far slower than the slider), so BOTH the gate's
+STOP→BACKSTOP deadline and the independent watcher's stop-effect deadline must outlast
+it. A SINGLE knob, `pendant_freeze_confirm_s`, sizes both: `params.yaml` expresses it
+(and `stop_strategy`) once via a YAML anchor shared by both process sections, and the
+watcher — given the same `stop_strategy` — auto-sizes its effective deadline to
+`max(stop_effect_deadline_s, pendant_freeze_confirm_s)`. The watcher stays a fully
+independent process (its own timer and its own camera-state heartbeat); as a runtime
+guard it also cross-checks the strategy the gate ANNOUNCES on `/human_gate/decision`
+against its own configured one, and on any mismatch reports it loudly and repeatedly
+(log + `/human_gate/watcher_status`) while STILL cancelling at its own deadline — the arm
+always ends stopped.
+
 ## Modules
 
 | File | Role |
@@ -44,9 +74,10 @@ and `DriverFeedback` bases from `../humangate`.
 | `sole_writer.py` | PURE: detects a foreign speed-slider write (scaling moved to an uncommanded value) vs an inert slider (mock). |
 | `watcher_core.py` | PURE: the independent backstop decision (heartbeat losses, BACKSTOP, ineffective STOP). |
 | `driver_io.py` | ROS clients: slider service, scaling monitor (normalises the mock 0..100 scale), joint-motion rest detector, FJT cancel, host-subnet enumeration. |
-| `driver_port.py` | `DriverCommandPort` (primary + backstop + fail-to-zero) and `DriverFeedbackFromTopics` (STOP confirmed only when scaling ~0). |
-| `gate_driver_node.py` | armed gate node: interlock -> HumanGate core -> DriverCommandPort. |
-| `backstop_watcher_node.py` | the INDEPENDENT watcher process (own timer, own state heartbeat). |
+| `driver_port.py` | `DriverCommandPort` (primary + backstop + fail-to-zero + per-tick `apply` dispatch to the STOP strategy) and `DriverFeedbackFromTopics` (STOP confirmed only when scaling ~0). |
+| `stop_strategy.py` | PURE: the selectable STOP strategy — `CancelHoldStrategy` (default) and `PendantPauseStrategy` (dashboard pause/play, resume window, re-pause on foreign play). |
+| `gate_driver_node.py` | armed gate node: interlock -> HumanGate core -> DriverCommandPort (+ DashboardClient when `stop_strategy=pendant_pause`). |
+| `backstop_watcher_node.py` | the INDEPENDENT watcher process (own timer, own state heartbeat); publishes `/human_gate/watcher_status` and cross-checks the gate's announced `stop_strategy`. |
 | `params.yaml` | driver/interlock params (decision thresholds still live in `../humangate/gate_params.yaml`). |
 | `sim/` | the end-to-end proofs + scripted states + analyzer (below). |
 | `tests/` | offline unit tests for the interlock, sole-writer and watcher core. |
@@ -67,7 +98,8 @@ cd humangate_driver
 python3 tests/test_arming_interlock.py
 python3 tests/test_sole_writer.py
 python3 tests/test_watcher_core.py
-python3 tests/test_pause_investigation.py   # analyzer + regression guard for the pause finding
+python3 tests/test_stop_strategy.py          # cancel vs pendant_pause strategy, resume window, re-pause
+python3 tests/test_pause_investigation.py    # analyzer + regression guard for the pause findings (headless + pendant)
 # or: pytest -q tests
 ```
 
@@ -97,6 +129,13 @@ bash sim/measure_slider_ursim.sh   # -> data/human-gate-sim-v1/ursim/slider_meas
 #     pause/play against a running scaled-JTC trajectory. Self-asserts the finding.
 #     Runs on ROS_DOMAIN_ID=81 (the pause-investigation task's isolated domain).
 bash sim/investigate_pause_ursim.sh   # -> data/human-gate-sim-v1/ursim-pause/
+
+# (d) the pendant-pause task (ROS_DOMAIN_ID=82): the SAME probe against a
+#     pendant-LOADED External Control program (non-headless). Here pause DOES
+#     freeze-and-continue (PENDANT_PAUSE_FINDING.md).
+MODE=pendant bash sim/investigate_pause_ursim.sh    # -> data/human-gate-sim-v1/ursim-pendant-pause/
+bash sim/run_pendant_pause_matrix.sh                # durability 5s/60s/10min + every failure case
+bash sim/run_pendant_gate_e2e.sh                    # the real gate driving pause/play -> ursim-pendant-gate/
 ```
 
 `sim/assert_e2e.py` analyses the run logs and prints PASS/FAIL plus the
@@ -107,7 +146,9 @@ published in the REAL camera wire format (`../humangate/state_adapter.build_stat
 
 `../data/human-gate-sim-v1/decision.md` (design decisions, the adapter/real-message
 mapping, the interlock rationale), `SLIDER_ZERO_FINDING.md` (whether slider zero
-fully halts on CB3, and why the goal-cancel backstop is not optional), and
+fully halts on CB3, and why the goal-cancel backstop is not optional),
 `PAUSE_RESUME_FINDING.md` (whether "pause the robot program" can freeze-and-continue
 the SAME motion — measured NO on headless CB3, so the STOP stays the goal-cancel
-backstop / stop-then-replan).
+backstop / stop-then-replan), and `PENDANT_PAUSE_FINDING.md` (the same question with a
+pendant-LOADED External Control program — measured YES, so the opt-in `pendant_pause`
+STOP strategy; headless-cancel stays the default).

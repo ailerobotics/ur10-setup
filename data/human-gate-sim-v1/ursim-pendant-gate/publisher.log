@@ -1,0 +1,2 @@
+[INFO] [1789826136.970801471] [scripted_state_publisher]: publishing scenario 'pendant_pause_demo' (80s) on /human_safety/state at 10 Hz
+[INFO] [1789826216.960297634] [scripted_state_publisher]: scenario complete

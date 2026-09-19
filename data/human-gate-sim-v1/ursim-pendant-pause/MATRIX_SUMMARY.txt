@@ -1,0 +1,7 @@
+pause_play_5s          rc=0  13/13 checks passed — pendant finding holds (action=pause_play).
+pause_play_60s         rc=0  13/13 checks passed — pendant finding holds (action=pause_play).
+pause_play_600s        rc=0  13/13 checks passed — pendant finding holds (action=pause_play).
+pause_only_20s         rc=0  8/8 checks passed — pendant finding holds (action=pause_only).
+foreign_play_5s        rc=0  7/7 checks passed — pendant finding holds (action=foreign_play).
+stop_instead_5s        rc=0  6/6 checks passed — pendant finding holds (action=stop_instead).
+pause_no_program_5s    rc=0  6/6 checks passed — pendant finding holds (action=pause_no_program).

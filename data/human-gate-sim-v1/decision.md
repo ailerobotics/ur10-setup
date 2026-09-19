@@ -166,6 +166,38 @@ regression guard are in `humangate_driver/PAUSE_RESUME_FINDING.md`
 (analyzer + guard: `sim/assert_pause_investigation.py`, offline-tested in
 `tests/test_pause_investigation.py`).
 
+## Pendant-pause STOP strategy (pendant-pause task, ROS_DOMAIN_ID=82)
+
+The captain asked to "load the program on the pendant and then try pausing it" — the
+follow-up to the headless `PAUSE_RESUME_FINDING.md` (where pause is rejected because
+headless has no loaded program). Measured on URSim CB3 with an External Control program
+LOADED and PLAYING on the (simulated) pendant, driver NON-headless: **dashboard `pause`
+gives a true freeze-and-continue** — the arm freezes on its path in ~1.8 s, applied
+scaling → 0 (a *confirmable* stop, unlike slider-zero's ~10 % floor), the running
+`FollowJointTrajectory` goal SURVIVES, and `play` continues the SAME goal to `code 0`
+with no replan. Durability held at 5 s / 60 s / 10 min holds; the failure cases each
+still end stopped. Full measurements, side-by-side with headless, and the operational
+implications of running the cell pendant-loaded: `humangate_driver/PENDANT_PAUSE_FINDING.md`.
+
+Decision: **add pendant-pause as a SELECTABLE STOP strategy** behind the command port
+(`humangate_driver/stop_strategy.py`, chosen by `stop_strategy` in `params.yaml`):
+
+- `cancel` (DEFAULT, unchanged): STOP = slider→0 + goal-cancel backstop (stop-then-replan).
+  This is how the cell runs today (headless); nothing in the shipped stop path changes.
+- `pendant_pause` (opt-in): STOP = dashboard pause (freeze on path); a healthy CLEAR+dwell
+  RESUME = dashboard play (continue the same trajectory). The slider stays the SLOW lever
+  and the independent goal-cancel backstop stays the net in BOTH. The strategy resumes
+  only on the gate's own RUN, refuses resume beyond `resume_max_pause_s` (→ cancel + replan),
+  and re-pauses on a foreign play. Pure + unit-tested (`tests/test_stop_strategy.py`);
+  proven end to end through the real gate node (`sim/run_pendant_gate_e2e.sh`).
+
+Running the cell pendant-loaded instead of headless is an OWNER decision, NOT changed
+here (`ur-bringup.sh` untouched, default `cancel`): someone must start the program, the
+`ur-rearm-watchdog.sh` re-arm conflicts with a pause-STOP (it plays `program_running`
+back up) and must be made pause-aware or disabled in that mode, and the pendant's
+External Control host IP must point at the workstation. Recommendation and options are
+in `PENDANT_PAUSE_FINDING.md`.
+
 ## What is NOT done here (later phases)
 
 - No real-robot motion, no real-robot arming (Phase 4, owner present — see

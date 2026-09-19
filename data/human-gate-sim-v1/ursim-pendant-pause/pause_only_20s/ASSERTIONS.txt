@@ -1,0 +1,12 @@
+
+=== dashboard pause/resume investigation (pendant CB3, loaded External Control program) ===
+  [PASS] External Control program was LOADED before motion  (/ursim/programs/external_control.urp)
+  [PASS] scaled_joint_trajectory_controller was ACTIVE  (active / active)
+  [PASS] trajectory goal was accepted
+  [PASS] arm was clearly moving before the pause call  (0.05892 rad/s)
+  [PASS] dashboard PAUSE executed  (Pausing program)
+  [PASS] arm FROZE on its path  (t_freeze=1.807s)
+  [PASS] arm STAYED stopped for the whole hold (no drift/run-away)  (drift over 20.0s hold = 0.0 rad)
+  [PASS] applied scaling stayed ~0 for the whole hold  (min scaling = 0.0)
+
+8/8 checks passed — pendant finding holds (action=pause_only).

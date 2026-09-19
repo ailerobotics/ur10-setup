@@ -6,7 +6,14 @@ to **pause and resume the robot program** via the driver's dashboard interface.
 This file records whether that — or any freeze-and-continue mechanism — exists on
 this cell's controller, with the measurements, and the resulting decision.
 
-**Answer: no true freeze-and-continue exists on this cell's controller.** On the
+> **Follow-up (pendant-pause task):** the natural next question — "load the program on
+> the pendant and pause THAT" — was subsequently measured and the answer flips: with an
+> External Control program LOADED and PLAYING on the pendant (non-headless), dashboard
+> `pause` DOES give a true freeze-and-continue. See `PENDANT_PAUSE_FINDING.md` and the
+> opt-in `stop_strategy: pendant_pause`. This headless finding is unchanged and remains
+> the DEFAULT (`cancel`), because this cell runs headless today.
+
+**Answer (HEADLESS, this cell today): no true freeze-and-continue exists.** On the
 CB3 driver as this cell runs it (HEADLESS — `ur-bringup.sh`: `headless_mode:=true`),
 dashboard `pause`/`play` are *rejected by the robot*, the speed slider floors above
 zero, and a goal cancel is terminal. So the gate's STOP stays the goal-cancel
@@ -172,8 +179,10 @@ freeze became available. Offline-tested in `tests/test_pause_investigation.py`.
 ## Implication for the live test
 
 On the real headless CB3 the same is expected but must be re-checked with the owner
-present (`LIVE_TEST.md`): confirm dashboard `pause` is still rejected (or, if the
+present (`LIVE_TEST.md`): confirm dashboard `pause` is still rejected. The "if the
 real installation runs a loaded External Control URCap program rather than headless
-injection, re-measure whether `pause`/`play` then give a clean freeze-and-continue —
-in which case revisit this decision). Until then, the commissioned STOP is the
-goal-cancel backstop and a resume after STOP is a fresh plan.
+injection, re-measure whether `pause`/`play` then give a clean freeze-and-continue"
+case **was measured** (`PENDANT_PAUSE_FINDING.md`) and confirmed — it does — and is now
+available as the opt-in `pendant_pause` strategy. For the cell as it runs today
+(headless), the commissioned STOP is the goal-cancel backstop and a resume after STOP
+is a fresh plan.

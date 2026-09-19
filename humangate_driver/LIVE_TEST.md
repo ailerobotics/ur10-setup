@@ -104,6 +104,55 @@ Feed these back into `humangate/gate_params.yaml`, re-deriving the provisional
 zone radii / dwell / latency budget (report §3). Tune UP only if a measurement
 demands it; never loosen below a measured-safe value.
 
+## Pendant-pause commissioning (owner-present; written, NOT run)
+
+This section is ONLY for a cell that will run `stop_strategy: pendant_pause` (a
+pendant-LOADED External Control program, non-headless). The default `cancel` strategy
+does NOT need it. It re-checks on the real CB3 what `PENDANT_PAUSE_FINDING.md` measured
+on URSim. **Do this with the owner present, e-stop in hand, at 5 % trajectory scaling,
+after the sim proofs are green.** It is NOT a certified safety function.
+
+Before starting, decide the re-arm question (report + finding): a pendant-pause STOP
+sets `program_running=false`, and `ur-rearm-watchdog.sh` re-arms on that after 5 s —
+which would fight the gate's STOP. **Stop the `ur10-rearm` unit (or make it pause-aware)
+before this test**, or the arm will resume under you.
+
+What to LOAD: on the pendant, load the External Control program (the one whose
+External Control installation host IP is set to the workstation's robot-network address
+`192.168.0.2`, port `50002`, and that connects to the running driver). Confirm the
+dashboard shows it loaded and `PLAYING`, and the driver logs "Robot connected to the
+reverse interface".
+
+What to PRESS / watch (arm the gate with `stop_strategy:=pendant_pause`, start a slow
+`loop_tags` leg):
+1. Walk from outside the SLOW ring toward the arm to the STOP ring. Watch: the arm
+   **slows** (slider) then **freezes on its path** (dashboard pause) — `program_state`
+   PAUSED, applied scaling 0, the trajectory goal NOT aborted. Log photon→standstill
+   time and the stopping distance.
+2. Stay close for a while (test 5 s, then ~60 s), then withdraw past the CLEAR
+   boundary and stay out for the full clear dwell. Watch: the arm **resumes the SAME
+   trajectory** on `play` and the original goal completes with no replan.
+3. Force a **foreign play**: while still inside a ring (gate wants STOP), have a second
+   session press `play` on the pendant. The gate must **re-pause** within a cycle and
+   surface the conflict; the arm must not stay moving.
+4. Force a **long pause**: stay close past `resume_max_pause_s`. On the next CLEAR+dwell
+   the gate must **refuse the same-trajectory resume** and instead cancel + require a
+   fresh plan (the frozen plan is treated as stale).
+
+Pass criteria (all): pause freezes the arm on its path (scaling 0, goal not aborted);
+play continues the SAME goal with no replan within the measured-safe pause duration;
+a foreign play is re-paused; a pause older than `resume_max_pause_s` becomes a
+cancel+replan; every fault (kill the state publisher, drop the dashboard, protective
+stop) still ends the arm STOPPED (the goal-cancel backstop remains the net).
+
+Measure and record on the real arm: whether `pause` freezes and `play` continues the
+same goal (or a floor/abort appears), the real stopping time/distance, and the safe
+maximum pause duration; feed the safe max into `resume_max_pause_s` (tune DOWN only).
+
+Abort: any resume while a person is inside a ring; any pause that does NOT freeze the
+arm; any protective stop; any case where a foreign play is NOT re-paused. Abort action:
+e-stop, or the `loop_tags` STOP file; the gate leaves the slider at zero on shutdown.
+
 ## Abort conditions (any -> abort, investigate before continuing)
 
 - Any protective stop / pendant popup.

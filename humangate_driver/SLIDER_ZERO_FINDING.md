@@ -72,9 +72,16 @@ this cell runs it: **no** — dashboard `pause`/`play` are rejected by the robot
 to pause. Full measurements, root cause, the other mechanisms evaluated, and the
 resulting decision (stop path unchanged; goal-cancel STOP = stop-then-replan) are in
 **`PAUSE_RESUME_FINDING.md`** (repeatable via `sim/investigate_pause_ursim.sh`).
-Together these two findings establish that **no freeze-and-continue full STOP exists
-on this controller**; the slider does graded SLOW + same-trajectory resume above the
-floor, and the goal-cancel backstop delivers the full STOP.
+Together these two findings establish that **no freeze-and-continue full STOP exists on
+this controller as the cell runs it today (HEADLESS)**; the slider does graded SLOW +
+same-trajectory resume above the floor, and the goal-cancel backstop delivers the full
+STOP.
+
+**Update (pendant-pause task):** running the driver NON-headless against a
+pendant-LOADED External Control program changes this — dashboard `pause` there DOES
+freeze-and-continue (scaling→0, the goal survives, `play` continues the same
+trajectory). See **`PENDANT_PAUSE_FINDING.md`** and the opt-in `stop_strategy:
+pendant_pause`. Headless-cancel stays the default because this cell runs headless.
 
 ## Implication for the live test
 

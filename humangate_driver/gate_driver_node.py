@@ -43,10 +43,12 @@ import gate_core as gc  # noqa: E402
 import state_adapter as sa  # noqa: E402
 from arming_interlock import evaluate_arming  # noqa: E402
 from driver_io import (  # noqa: E402
-    FJT_ACTION_DEFAULT, JointMotionMonitor, ProgramMonitor, ScalingMonitor,
-    SpeedSliderClient, TrajectoryCanceller, enumerate_host_subnets)
+    DashboardClient, FJT_ACTION_DEFAULT, JointMotionMonitor, ProgramMonitor,
+    ScalingMonitor, SpeedSliderClient, TrajectoryCanceller, enumerate_host_subnets)
 from driver_port import DriverCommandPort, DriverFeedbackFromTopics  # noqa: E402
 from sole_writer import SoleWriterMonitor  # noqa: E402
+from stop_strategy import (  # noqa: E402
+    STRAT_CANCEL, STRAT_PENDANT_PAUSE, PendantPauseParams)
 
 DECISION_TOPIC_DEFAULT = "/human_gate/decision"
 
@@ -79,7 +81,19 @@ class GateDriverNode(Node):
         cfg = gate_config.load_or_default(self._p("params_file", gate_config.CONFIG_PATH))
         # allow a per-node operating-fraction override (default keeps the file's)
         op = float(self._p("operating_speed_fraction", cfg.operating_speed_fraction))
-        cfg = gate_config.GateConfig(**{**cfg.__dict__, "operating_speed_fraction": op}).validate()
+        overrides = {"operating_speed_fraction": op}
+        # PENDANT-PAUSE deadline: a dashboard pause freezes the arm over ~1.8 s on CB3
+        # (PENDANT_PAUSE_FINDING.md), far slower than the slider's ~50 ms. The gate
+        # core escalates STOP -> BACKSTOP (cancel) if the arm is not confirmed stopped
+        # within backstop_deadline_s; with the default 0.5 s that would cancel EVERY
+        # pause before it freezes. So in pendant mode the confirm deadline is widened to
+        # pendant_freeze_confirm_s (must exceed the measured freeze time); the backstop
+        # still fires if the pause has not effected a stop by then. The independent
+        # watcher's stop_effect_deadline_s must be widened to match (params.yaml).
+        strategy_name = str(self._p("stop_strategy", STRAT_CANCEL))
+        if strategy_name == STRAT_PENDANT_PAUSE:
+            overrides["backstop_deadline_s"] = float(self._p("pendant_freeze_confirm_s", 2.5))
+        cfg = gate_config.GateConfig(**{**cfg.__dict__, **overrides}).validate()
         self.cfg = cfg
         self.gate = gc.HumanGate(cfg)
 
@@ -93,11 +107,29 @@ class GateDriverNode(Node):
         self.canceller = TrajectoryCanceller(self, action_ns)
         self.sole_writer = SoleWriterMonitor()
         self.feedback = DriverFeedbackFromTopics(self.joints, self.scaling, stop_thresh)
+
+        # STOP strategy: `cancel` (default; how this cell runs today, headless) or
+        # `pendant_pause` (opt-in; only for a cell running a pendant-LOADED External
+        # Control program — PENDANT_PAUSE_FINDING.md). pendant_pause is the ONLY path
+        # that touches the dashboard, so the dashboard client is created only then.
+        # (strategy_name was read above to size the backstop confirm deadline.)
+        dashboard = None
+        pendant_params = None
+        if strategy_name == STRAT_PENDANT_PAUSE:
+            dashboard = DashboardClient(self)
+            pendant_params = PendantPauseParams(
+                resume_max_pause_s=float(self._p("resume_max_pause_s", 120.0))).validate()
+            self.get_logger().warn(
+                "STOP strategy = pendant_pause: STOP will PAUSE a pendant-loaded "
+                "program (freeze on path) and a healthy RESUME will PLAY it. Requires "
+                "a loaded, playing External Control program (non-headless).")
         self.port = DriverCommandPort(
             self.slider, self.scaling, self.canceller, self.sole_writer,
             logger=self.get_logger(),
             confirm_deadline_s=float(self._p("confirm_deadline_s", 0.5)),
-            stop_scaling_threshold=stop_thresh)
+            stop_scaling_threshold=stop_thresh,
+            stop_strategy=strategy_name, dashboard=dashboard,
+            pendant_params=pendant_params)
 
         # A short, non-blocking availability check only — do NOT stall __init__
         # waiting for services, or the node will not start spinning and will miss
@@ -120,9 +152,8 @@ class GateDriverNode(Node):
         self.create_subscription(String, state_topic, self._on_state, 10)
         self.create_timer(1.0 / cfg.decide_rate_hz, self._tick)
 
-        self._last_action = None
-        self._last_fraction = None
-        self._last_cancel_t = 0.0
+        self._conflict_surfaced = False
+        self._replan_surfaced = False
         self._shutdown_zeroed = False
         self._last_cam_zone = None
         self._last_cam_health_ok = None
@@ -166,28 +197,36 @@ class GateDriverNode(Node):
         self._log(d, now)
 
     def _apply(self, d, now):
-        if d.action == gc.BACKSTOP:
-            # rising edge, then re-assert cheaply while latched
-            if self._last_action != gc.BACKSTOP or (now - self._last_cancel_t) > 1.0:
-                self.port.cancel_and_hold(d.reason, now)
-                self._last_cancel_t = now
-            self._last_fraction = 0.0
-        else:
-            # RUN/SLOW/STOP: write the slider only when the target changes.
-            if (self._last_fraction is None
-                    or abs(d.speed_fraction - self._last_fraction) > 1e-6):
-                self.port.set_speed_fraction(d.speed_fraction, d.reason, now)
-                self._last_fraction = d.speed_fraction
-        self._last_action = d.action
+        # One entry point per tick: the selected STOP strategy owns the slider /
+        # pause / play / cancel edges and the re-pause-on-foreign-play enforcement.
+        self.port.apply(d, now, program_running=self.program.running)
+        # Surface the pendant-pause strategy's latched signals (re-pause on a foreign
+        # play; a resume refused because the frozen plan was too old -> replan).
+        strat = self.port.strategy
+        if getattr(strat, "conflict", False) and not self._conflict_surfaced:
+            self.get_logger().error(f"STOP CONFLICT: {strat.conflict_reason}")
+            self._conflict_surfaced = True
+        elif not getattr(strat, "conflict", False):
+            self._conflict_surfaced = False
+        if getattr(strat, "resume_needs_replan", False) and not self._replan_surfaced:
+            self.get_logger().warn("RESUME refused (frozen plan too old) — the mover "
+                                   "must plan afresh; the frozen trajectory was cancelled")
+            self._replan_surfaced = True
+        elif not getattr(strat, "resume_needs_replan", False):
+            self._replan_surfaced = False
 
     def _publish(self, d, now):
         import json
+        strat = self.port.strategy
         self.pub.publish(String(data=json.dumps({
             "action": d.action, "reason": d.reason,
             "speed_fraction": d.speed_fraction, "demand": d.demand,
             "provenance": d.provenance, "clear_dwell_s": round(d.clear_dwell_s, 3),
             "healthy": d.healthy, "t_mono": round(now, 3),
             "observed_scaling": self.scaling.value,
+            "stop_strategy": strat.name,
+            "paused": bool(getattr(strat, "paused", False)),
+            "conflict": bool(getattr(strat, "conflict", False)),
         })))
 
     def _log(self, d, now):
@@ -195,6 +234,7 @@ class GateDriverNode(Node):
             return
         import json
         with open(self._decision_log, "a") as f:
+            strat = self.port.strategy
             f.write(json.dumps({
                 "t_mono": now, "action": d.action, "reason": d.reason,
                 "speed_fraction": d.speed_fraction, "demand": d.demand,
@@ -202,7 +242,11 @@ class GateDriverNode(Node):
                 "healthy": d.healthy, "observed_scaling": self.scaling.value,
                 "arm_stopped": self.feedback.arm_stopped(),
                 "cam_zone": self._last_cam_zone,
-                "cam_health_ok": self._last_cam_health_ok}) + "\n")
+                "cam_health_ok": self._last_cam_health_ok,
+                "stop_strategy": strat.name,
+                "paused": bool(getattr(strat, "paused", False)),
+                "conflict": bool(getattr(strat, "conflict", False)),
+                "program_running": self.program.running}) + "\n")
 
     # ---- fail-to-zero on shutdown --------------------------------------- #
     def on_shutdown(self):

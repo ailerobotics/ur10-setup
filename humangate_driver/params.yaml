@@ -32,6 +32,39 @@ human_gate_driver:
 
     fjt_action: "/scaled_joint_trajectory_controller/follow_joint_trajectory"
 
+    # --- STOP strategy (pendant-pause task) ------------------------------ #
+    # How a full STOP is effected and whether a RESUME continues the SAME trajectory:
+    #   "cancel"        (DEFAULT — how THIS cell runs today, HEADLESS): STOP drives the
+    #                   slider toward zero; the real full stop is the goal-cancel
+    #                   backstop (slider zero floors ~10% on CB3), so a resume is a
+    #                   fresh plan (stop-then-replan). See PAUSE_RESUME_FINDING.md.
+    #   "pendant_pause" (OPT-IN — only for a cell running a pendant-LOADED External
+    #                   Control program, non-headless): STOP issues a dashboard PAUSE
+    #                   (freeze on path, scaling->0, goal survives) and a healthy
+    #                   CLEAR+dwell RESUME issues PLAY (continues the SAME goal, no
+    #                   replan). See PENDANT_PAUSE_FINDING.md. Do NOT select this on the
+    #                   cell's headless bring-up — pause is rejected there.
+    # The slider stays the SLOW lever and the goal-cancel backstop stays the
+    # independent net in BOTH strategies.
+    # Anchored so the SAME value configures the independent watcher below (a YAML
+    # alias, not a second number that can silently drift out of step with this one).
+    stop_strategy: &stop_strategy "cancel"
+    # pendant_pause only: refuse to RESUME (play) once the pause has lasted longer than
+    # this — the frozen plan is treated as stale and the resume becomes a fresh plan
+    # (cancel). Provisional; set at/below the pause duration measured safe in sim
+    # (PENDANT_PAUSE_FINDING.md). Tune DOWN only, never above measured-safe.
+    resume_max_pause_s: 120.0
+    # pendant_pause only: a dashboard PAUSE freezes the arm over ~1.8 s on CB3 (much
+    # slower than the slider's ~50 ms). The gate core escalates STOP -> BACKSTOP if the
+    # arm is not confirmed stopped within backstop_deadline_s; in pendant mode that
+    # deadline is overridden to THIS value so a pause is not cancelled before it
+    # freezes. It MUST exceed the measured freeze time; the backstop still fires if the
+    # pause has not effected a stop by then. The independent watcher (below) shares this
+    # SAME anchored value and sizes its own stop-effect deadline from it under
+    # pendant_pause, so the two processes cannot drift. Both are re-measured on the real
+    # arm (LIVE_TEST.md).
+    pendant_freeze_confirm_s: &pendant_freeze_confirm_s 2.5
+
 human_gate_backstop_watcher:
   ros__parameters:
     arm: false
@@ -41,6 +74,20 @@ human_gate_backstop_watcher:
     # case and the watcher is the independent net, not a racing duplicate.
     state_heartbeat_timeout_s: 0.5
     gate_heartbeat_timeout_s: 0.5
+    # The watcher runs the SAME STOP strategy as the gate, expressed ONCE above via the
+    # anchor (change it in one place and both processes move together). The watcher also
+    # cross-checks this against the strategy the gate ANNOUNCES on /human_gate/decision
+    # at runtime and, on any mismatch, reports it loudly and repeatedly (log +
+    # /human_gate/watcher_status) while STILL cancelling at its own deadline.
+    stop_strategy: *stop_strategy
+    pendant_freeze_confirm_s: *pendant_freeze_confirm_s
+    # After a STOP is demanded, the applied scaling must fall below the threshold
+    # within this deadline, else the watcher cancels (the STOP did not take effect).
+    # DEFAULT 0.7 s suits the `cancel` strategy (slider ~50 ms). Under `pendant_pause`
+    # the pause freezes over ~1.8 s, so the EFFECTIVE deadline is auto-sized to
+    # max(this, pendant_freeze_confirm_s) — no separate number to hand-tune (that is the
+    # coupling fix; previously stop_effect_deadline_s had to be raised by hand and could
+    # be forgotten). PENDANT_PAUSE_FINDING.md.
     stop_effect_deadline_s: 0.7
     stop_scaling_threshold: 0.05
     startup_grace_s: 3.0

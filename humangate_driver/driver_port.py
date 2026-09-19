@@ -32,16 +32,38 @@ from typing import Optional
 # reuse the abstract bases from the plan-only package (siblings on disk).
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "humangate"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from command_port import CommandPort  # noqa: E402
 from driver_feedback import DriverFeedback  # noqa: E402
+from stop_strategy import (  # noqa: E402
+    STRAT_CANCEL, PendantPauseParams, make_stop_strategy)
+
+
+class _SliderBookkeeping:
+    """Adapter handed to the stop strategy as its ``slider``: every slider write the
+    strategy makes still records the command with the sole-writer monitor and arms
+    the confirmation bookkeeping, exactly as the old direct slider path did. Uses the
+    port's current tick time (set at the top of ``apply``)."""
+
+    def __init__(self, port):
+        self._port = port
+
+    def set(self, fraction: float) -> None:
+        self._port._commanded_slider(float(fraction))
 
 
 class DriverCommandPort(CommandPort):
-    """Speed-slider primary + trajectory-cancel backstop, against the driver."""
+    """Speed-slider primary + trajectory-cancel backstop, against the driver, with a
+    selectable STOP strategy (``cancel`` default, or ``pendant_pause``). The strategy
+    only changes what a full STOP does and whether a RESUME continues the same
+    trajectory; the slider stays the SLOW lever and the goal-cancel backstop stays the
+    independent net in both (see stop_strategy.py)."""
 
     def __init__(self, slider, scaling_monitor, canceller, sole_writer,
                  logger=None, confirm_deadline_s: float = 0.5,
-                 stop_scaling_threshold: float = 0.05):
+                 stop_scaling_threshold: float = 0.05,
+                 stop_strategy: str = STRAT_CANCEL, dashboard=None,
+                 pendant_params: Optional[PendantPauseParams] = None):
         self._slider = slider
         self._scaling = scaling_monitor
         self._canceller = canceller
@@ -54,15 +76,36 @@ class DriverCommandPort(CommandPort):
         self._commanded_at: Optional[float] = None
         self._confirmed: bool = True
         self._unconfirmed_warned: bool = False
+        # the selectable STOP strategy, driven per-tick from apply()
+        self._now: float = 0.0
+        self.strategy = make_stop_strategy(
+            stop_strategy, _SliderBookkeeping(self), canceller, dashboard, logger,
+            pendant_params)
 
-    # ---- primary lever --------------------------------------------------- #
-    def set_speed_fraction(self, fraction: float, reason: str, t: float) -> None:
+    def _commanded_slider(self, fraction: float) -> None:
+        """One slider write WITH sole-writer + confirmation bookkeeping (the strategy
+        routes all its slider writes through here via _SliderBookkeeping)."""
         self._slider.set(fraction)
-        self._sole_writer.note_command(fraction, t)
+        self._sole_writer.note_command(fraction, self._now)
         self._commanded_fraction = float(fraction)
-        self._commanded_at = t
+        self._commanded_at = self._now
         self._confirmed = False
         self._unconfirmed_warned = False
+
+    # ---- per-tick strategy dispatch (the node's single entry point) ------ #
+    def apply(self, decision, now: float, program_running=None) -> None:
+        """Effect the gate's decision this tick through the selected strategy. Reads
+        ``decision.action`` / ``decision.speed_fraction``; ``program_running`` (from
+        the robot_program_running topic) lets the pendant-pause strategy detect a
+        foreign play and re-pause."""
+        self._now = now
+        self.strategy.apply(decision.action, decision.speed_fraction, decision.reason,
+                            now, program_running=program_running)
+
+    # ---- primary lever (compat API; still used directly by tests/tools) -- #
+    def set_speed_fraction(self, fraction: float, reason: str, t: float) -> None:
+        self._now = t
+        self._commanded_slider(fraction)
         if self._log:
             self._log.info(f"slider -> {fraction:.2f} ({reason})")
 
@@ -70,6 +113,7 @@ class DriverCommandPort(CommandPort):
     def cancel_and_hold(self, reason: str, t: float) -> None:
         # Belt and suspenders: zero the slider too, then cancel the goal so the
         # arm holds. A cancel is terminal — a real resume needs a fresh plan.
+        self._now = t
         self._slider.set(0.0)
         self._sole_writer.note_command(0.0, t)
         self._canceller.cancel_all()

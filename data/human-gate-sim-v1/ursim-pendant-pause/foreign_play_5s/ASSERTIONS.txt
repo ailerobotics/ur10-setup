@@ -1,0 +1,11 @@
+
+=== dashboard pause/resume investigation (pendant CB3, loaded External Control program) ===
+  [PASS] External Control program was LOADED before motion  (/ursim/programs/external_control.urp)
+  [PASS] scaled_joint_trajectory_controller was ACTIVE  (active / active)
+  [PASS] trajectory goal was accepted
+  [PASS] arm was clearly moving before the pause call  (0.05889 rad/s)
+  [PASS] dashboard PAUSE executed
+  [PASS] arm FROZE on pause
+  [PASS] a foreign PLAY DID resume motion (=> the gate must RE-PAUSE)  (speed_after_play=0.0588 rad/s, pan_advanced=0.18381 rad)
+
+7/7 checks passed — pendant finding holds (action=foreign_play).
