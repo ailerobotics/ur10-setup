@@ -1,28 +1,46 @@
 # Static camera extrinsics for the FIXED cameras, base_link -> <optical_frame>.
 #
-# The launch file starts one static_transform_publisher per entry here, so a
-# calibrated camera gets a base<-optical TF and the detector node can place its
-# detections in the base frame. A camera NOT listed here (or listed with
-# calibrated: false) has no such TF and contributes PRESENCE ONLY.
+# The launch (human_safety.launch.py) starts one static_transform_publisher per
+# VALID entry here, so a calibrated camera gets a base<-optical TF and the
+# detector node can place its detections in the base frame. A camera not listed
+# here, listed with calibrated:false, or whose calibration fails the validity
+# guard (see human_safety/camera_poses.py) gets no TF and contributes PRESENCE
+# ONLY -- exactly as an uncalibrated camera behaves.
 #
-# HOW THIS GETS FILLED IN: a SEPARATE calibration task owns the fixed-camera
-# base_link solver (human-safety-s1 §6 / Phase 2); this package does NOT ship it.
-# The documented procedure it will follow (AprilTag PnP world-alignment, reusing
-# the cellmap tags + intrinsics) is in cams/human_safety/README.md "Calibrating a
-# fixed camera into base_link". When that task produces an extrinsic, add an entry
-# here (calibrated: true) and this package's launch publishes the static TF, at
-# which point the camera contributes a 3D position instead of presence only.
+# HOW THIS GETS FILLED IN:
+#   1. Solve the extrinsic with the static-camera calibrator (this is the tool
+#      human-safety-s1 §6 / Phase 2 called for; it now lives in the repo):
+#        ROS_DOMAIN_ID=80 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 \
+#        python3 cams/cellmap/calibrate_static_camera.py \
+#            --serial 025522060953 --role table \
+#            --image /table/color/image_raw --info /table/color/camera_info \
+#            --depth /table/aligned_depth/image \
+#            --optical-frame table_color_optical_frame
+#      It writes cams/cellmap/calib/base_to_camera_<serial>_<date>.yaml.
+#   2. Add an entry below pointing at that file. IDENTIFY THE CAMERA BY SERIAL,
+#      never by the provisional shelf/table role -- the loader refuses to publish
+#      if the file's serial does not match the entry's serial (a swapped camera
+#      cannot silently inherit another's pose).
+#   3. Guard against a moved camera: re-run periodically
+#        python3 cams/cellmap/recheck_static_camera.py \
+#            --calib <that file> --image /table/color/image_raw \
+#            --info /table/color/camera_info
+#      A failed recheck stamps status:fail in the file and the loader then drops
+#      the camera back to presence-only automatically.
 #
-# STATUS 2026-09-19: NEITHER D415 is calibrated (Step 2 pending, per
-# cams/README.md and human-safety-s1 §6). Both contribute presence only.
+# STATUS 2026-09-19: neither fixed D415 has a committed calibration yet (no
+# mapped AprilTag is currently in either camera's view -- see
+# data/human-cam-calib-v1/report.md). Both contribute presence only until a
+# calibration file is produced and referenced here.
 #
-# Entry format (translation metres, rotation quaternion x y z w):
-#   shelf:
+# Entry format (serial is the identity anchor; the transform is read from the
+# calibration file, not duplicated here):
+#   table:                                   # role label = optical-frame prefix
 #     calibrated: true
-#     parent: base_link
-#     child: shelf_color_optical_frame
-#     translation: [x, y, z]
-#     rotation: [qx, qy, qz, qw]
-#     source: "calibrate_d415_apriltag.py, tag1, 2026-09-19"
+#     serial: "025522060953"                 # MUST match the calibration file
+#     child: table_color_optical_frame       # the TF the detector looks up
+#     calibration_file: ../../cellmap/calib/base_to_camera_025522060953_2026-09-19.yaml
+#     max_age_days: 30                        # optional: reject if older
+#     require_recheck: false                  # optional: require a passing recheck
 
 cameras: {}

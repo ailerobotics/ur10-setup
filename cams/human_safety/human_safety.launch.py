@@ -23,7 +23,6 @@ Args:
 import pathlib
 import sys
 
-import yaml
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
@@ -34,24 +33,28 @@ DEFAULT_VENV = str(pathlib.Path.home() / "venvs" / "human-safety" / "bin" / "pyt
 
 
 def _static_tf_procs(poses_path):
+    """Publish a static base<-optical TF for every fixed camera whose calibration
+    is VALID. The validity guard (calibrated, serial match, freshness, and a
+    non-failed recheck) lives in human_safety.camera_poses so the launch and the
+    offline tests share one code path; a rejected camera gets no TF and stays
+    presence-only, and we log why."""
+    sys.path.insert(0, str(HERE))
+    from human_safety.camera_poses import load_with_reasons  # noqa: E402
+    good, rejected = load_with_reasons(poses_path)
+    for role, reason in rejected:
+        print(f"[human_safety] camera '{role}' PRESENCE-ONLY: {reason}")
     procs = []
-    p = pathlib.Path(poses_path)
-    if not p.is_file():
-        return procs
-    data = yaml.safe_load(p.read_text()) or {}
-    for role, e in (data.get("cameras") or {}).items():
-        if not e or not e.get("calibrated"):
-            continue
-        t = e["translation"]
-        q = e["rotation"]
+    for tf in good:
+        print(f"[human_safety] camera '{tf.role}' ({tf.serial}) CALIBRATED: "
+              f"publishing {tf.parent} -> {tf.child} from {tf.source}")
+        t, q = tf.translation, tf.rotation
         procs.append(ExecuteProcess(
             cmd=["ros2", "run", "tf2_ros", "static_transform_publisher",
                  "--x", str(t[0]), "--y", str(t[1]), "--z", str(t[2]),
                  "--qx", str(q[0]), "--qy", str(q[1]), "--qz", str(q[2]),
                  "--qw", str(q[3]),
-                 "--frame-id", e.get("parent", "base_link"),
-                 "--child-frame-id", e["child"]],
-            output="screen", name=f"static_tf_{role}"))
+                 "--frame-id", tf.parent, "--child-frame-id", tf.child],
+            output="screen", name=f"static_tf_{tf.role}"))
     return procs
 
 
