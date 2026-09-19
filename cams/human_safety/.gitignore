@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+# Live recordings land here by default (keep curated ones under tests/data/).
+human_safety_*.jsonl

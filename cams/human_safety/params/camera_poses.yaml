@@ -1,0 +1,28 @@
+# Static camera extrinsics for the FIXED cameras, base_link -> <optical_frame>.
+#
+# The launch file starts one static_transform_publisher per entry here, so a
+# calibrated camera gets a base<-optical TF and the detector node can place its
+# detections in the base frame. A camera NOT listed here (or listed with
+# calibrated: false) has no such TF and contributes PRESENCE ONLY.
+#
+# HOW THIS GETS FILLED IN: a SEPARATE calibration task owns the fixed-camera
+# base_link solver (human-safety-s1 §6 / Phase 2); this package does NOT ship it.
+# The documented procedure it will follow (AprilTag PnP world-alignment, reusing
+# the cellmap tags + intrinsics) is in cams/human_safety/README.md "Calibrating a
+# fixed camera into base_link". When that task produces an extrinsic, add an entry
+# here (calibrated: true) and this package's launch publishes the static TF, at
+# which point the camera contributes a 3D position instead of presence only.
+#
+# STATUS 2026-09-19: NEITHER D415 is calibrated (Step 2 pending, per
+# cams/README.md and human-safety-s1 §6). Both contribute presence only.
+#
+# Entry format (translation metres, rotation quaternion x y z w):
+#   shelf:
+#     calibrated: true
+#     parent: base_link
+#     child: shelf_color_optical_frame
+#     translation: [x, y, z]
+#     rotation: [qx, qy, qz, qw]
+#     source: "calibrate_d415_apriltag.py, tag1, 2026-09-19"
+
+cameras: {}

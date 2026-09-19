@@ -1,0 +1,80 @@
+# human_safety configuration — cameras + safety zones/budgets.
+#
+# PROVISIONAL DEFAULTS. The zone radii and time budgets below are conservative
+# placeholders, NOT derived separation distances. The real separation distances
+# are being computed by task human-safety-s1
+# (/home/manishsaini/firstmate/data/human-safety-s1/report.md); replace these
+# when that lands. This package is a SUPPLEMENTARY camera layer, never a
+# certified safety function — see cams/human_safety/README.md.
+
+base_frame: base_link
+ground_z: 0.0            # cell floor height in base_link (m); tune per install
+height_prior: 1.7        # assumed standing person height (m) for monocular lift
+detector: keypoint_rcnn
+device: cuda
+score_thresh: 0.6
+fusion_rate: 15.0        # Hz, fusion + safety publish cycle (>=10 Hz per human-safety-s1 §7)
+viz_rate: 6.0            # Hz, owner window redraw (modest for SSH X-forwarding)
+
+cameras:
+  # WRIST D435i — mounted UPSIDE DOWN; consume the UPRIGHT twin (the stream the
+  # hand-eye calibration and the cell map were solved against). Pose needs the
+  # robot's joint states at the frame stamp; the driver is DOWN, so TF lookup
+  # fails and the wrist contributes PRESENCE ONLY (flagged). It only delivers
+  # ~6 fps read directly on this machine, hence max_rate 6.
+  - role: wrist
+    color_topic: /wrist/color_upright/image_raw
+    info_topic:  /wrist/color_upright/camera_info
+    depth_topic: /wrist/aligned_depth_upright/image
+    depth_info_topic: /wrist/aligned_depth_upright/camera_info
+    has_depth: true
+    optical_frame: wrist_color_upright_optical_frame
+    max_rate: 6.0
+    min_range: 0.17
+    max_range: 4.0
+    pose_source: tf
+
+  # SHELF D415 (021422061772) — fixed, high, near-frontal at the gondola shelf.
+  # NO trustworthy pose today (Step-2 AprilTag world-alignment not done): with
+  # no static base<-optical TF published, it contributes PRESENCE ONLY until
+  # calibrated with tools/calibrate_d415_apriltag.py.
+  - role: shelf
+    color_topic: /shelf/color/image_raw
+    info_topic:  /shelf/color/camera_info
+    depth_topic: /shelf/aligned_depth/image
+    depth_info_topic: /shelf/aligned_depth/camera_info
+    has_depth: true
+    optical_frame: shelf_color_optical_frame
+    max_rate: 15.0
+    min_range: 0.3
+    max_range: 6.0
+    pose_source: tf
+
+  # TABLE D415 (025522060953) — fixed, wide side view of arm + shelf + transit
+  # volume. NO trustworthy pose today (same as shelf). PRESENCE ONLY until
+  # calibrated.
+  - role: table
+    color_topic: /table/color/image_raw
+    info_topic:  /table/color/camera_info
+    depth_topic: /table/aligned_depth/image
+    depth_info_topic: /table/aligned_depth/camera_info
+    has_depth: true
+    optical_frame: table_color_optical_frame
+    max_rate: 15.0
+    min_range: 0.3
+    max_range: 6.0
+    pose_source: tf
+
+safety:
+  reach_radius: 1.30      # UR10 reach; envelope = cylinder of this radius about base z
+  stop_radius: 0.70       # STOP within reach+this = 2.0 m of base (human-safety-s1 §3, PROVISIONAL)
+  slow_radius: 2.00       # SLOW ring (any person present also forces >= SLOW)  PROVISIONAL
+  hysteresis: 0.30        # extra clearance to de-escalate (anti-chatter)
+  min_clear_dwell: 2.0    # must be clear this long before leaving STOP
+  frame_age_budget: 0.5   # frame age over this but still answering -> SLOW
+  detector_stall_timeout: 1.5   # no fresh frame this long / no status -> STOP
+  reaction_time_budget: 0.7     # img->state latency over this -> STOP (fault 5)
+  lost_close_margin: 0.30
+  lost_hold_time: 3.0     # hold STOP this long after losing a close track
+  presence_floor_slow: true
+  slow_on_any_person: true   # small cell: any confirmed person present -> >= SLOW
