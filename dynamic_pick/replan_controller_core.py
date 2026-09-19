@@ -88,12 +88,15 @@ class ReplanController:
         self._goal_in_flight: Optional[np.ndarray] = None
         self._leg_end_mono: Optional[float] = None
         self._last_plan_mono: Optional[float] = None
+        self._retreat_committed = False
 
     # ---- leg lifecycle (the ROS node calls these on goal accept / result) --- #
     def note_leg_started(self, goal, now: float, duration_s: float) -> None:
         self._goal_in_flight = np.asarray(goal, float).reshape(3).copy()
         self._leg_end_mono = float(now) + max(float(duration_s), 0.1)
         self._last_plan_mono = float(now)
+        if self.phases.phase == RETREAT:
+            self._retreat_committed = True
 
     def note_leg_finished(self) -> None:
         self._leg_end_mono = None
@@ -108,6 +111,7 @@ class ReplanController:
         return self._leg_running(now)
 
     def begin_retreat(self) -> None:
+        self._retreat_committed = False
         self.phases.begin_retreat()
 
     # ---- the per-tick decision -------------------------------------------- #
@@ -144,6 +148,9 @@ class ReplanController:
                               phase, ruling.gate_action, True, False)
             if self._leg_running(now):
                 return Intent(NOOP, None, "retreat leg running (frozen) -> let it complete",
+                              phase, ruling.gate_action, True, False)
+            if self._retreat_committed:
+                return Intent(HOLD, None, "retreat leg already dispatched (one-shot) -> hold",
                               phase, ruling.gate_action, True, False)
             if self._rate_limited(now):
                 return Intent(NOOP, None, "retreat: within re-plan rate limit -> wait",

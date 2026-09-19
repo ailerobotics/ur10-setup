@@ -175,6 +175,30 @@ def test_no_fresh_plan_to_moved_target_in_retreat():
     assert i2.action == HOLD and i2.goal is None
 
 
+def test_retreat_is_one_shot_not_replanned_every_tick():
+    """The RETREAT leg is a ONE-SHOT to the fixed pose: after it is dispatched and
+    completes, the controller must HOLD, not re-issue a fresh retreat PLAN every
+    tick once the rate-limit window elapses (finding D)."""
+    c = ReplanController(min_replan_interval_s=0.5)
+    c.begin_retreat()
+    retreat = np.array([0.1, 0.0, 0.5])
+    tcp = np.array([0.6, 0, 0.3])
+    # first RETREAT tick plans the fixed leg
+    i0 = c.decide(100.0, _est(), tcp, _run(100.0), retreat_target=retreat)
+    assert i0.action == PLAN and np.allclose(i0.goal, retreat)
+    # the node dispatches it -> the retreat leg starts, then completes
+    c.note_leg_started(i0.goal, 100.0, 1.0)
+    assert c.decide(100.5, _est(), tcp, _run(100.5), retreat_target=retreat).action == NOOP
+    c.note_leg_finished()
+    # subsequent ticks, well past the rate-limit window, must NOT re-plan the retreat
+    for t in (102.0, 103.0, 110.0):
+        i = c.decide(t, _est(), tcp, _run(t), retreat_target=retreat)
+        assert i.action != PLAN, f"retreat re-planned at t={t}"
+    # a NEW pick cycle (begin_retreat again) re-arms the one-shot
+    c.begin_retreat()
+    assert c.decide(111.0, _est(), tcp, _run(111.0), retreat_target=retreat).action == PLAN
+
+
 def test_scripted_near_grasp_retreat_sequence():
     """Scripted (pure) end-to-end sequence: an approach leg drives FAR->NEAR->GRASP
     toward a target that keeps jittering, the grasp completes -> begin_retreat ->
