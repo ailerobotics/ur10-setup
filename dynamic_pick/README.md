@@ -59,7 +59,7 @@ controller core (`tests/`) and re-asserted end-to-end (`sim/assert_dynamic_pick.
 | `segmented_pick_node.py` | the controller node (the dynamic analog of `cams/cellmap/tools/loop_tags.py`): tracker + phases + shim + planner + FJT preemption + latency logging. |
 | `params.yaml` | controller params (gate safety thresholds stay in `../humangate/gate_params.yaml`). |
 | `sim/` | the end-to-end proofs, scripted moving target + human states, analyzer. |
-| `tests/` | offline unit tests for the four pure cores. |
+| `tests/` | offline unit tests for the five pure cores. |
 
 ## Offline tests (no ROS, no robot, no docker, no GPU)
 
