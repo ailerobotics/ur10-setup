@@ -295,10 +295,11 @@ def build_node(args):
                 self.get_logger().warn(f"MPC source error (holding): {e}")
             act = self.shim.step(decision.action, decision.speed_fraction,
                                  mpc_cmd, self._measured)
-            # publish only when armed; a HOLD still (re)publishes the hold position
+            # publish only when armed and the shim has been seeded from a real
+            # /joint_states message; a HOLD still (re)publishes the hold position
             # so the controller actively holds. Dropping publication entirely is
             # the starvation path tested separately.
-            if self._armed:
+            if self._armed and self._seeded:
                 self.pub.publish(Float64MultiArray(data=list(act.target_position)))
                 if act.kind == FORWARD:
                     self._forwarded += 1
