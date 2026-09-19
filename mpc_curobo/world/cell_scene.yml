@@ -1,0 +1,41 @@
+# GENERATED from mpc_curobo/world/cell_world.py static_world() -- ground + representative shelf.
+cuboid:
+  ground:
+    dims:
+    - 3.0
+    - 3.0
+    - 0.1
+    pose:
+    - 0.0
+    - 0.0
+    - -0.1
+    - 1
+    - 0
+    - 0
+    - 0
+  shelf_plate:
+    dims:
+    - 0.5
+    - 1.2
+    - 0.04
+    pose:
+    - 0.85
+    - 0.0
+    - 0.35
+    - 1
+    - 0
+    - 0
+    - 0
+  shelf_back:
+    dims:
+    - 0.04
+    - 1.2
+    - 1.2
+    pose:
+    - 1.15
+    - 0.0
+    - 0.6
+    - 1
+    - 0
+    - 0
+    - 0
