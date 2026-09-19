@@ -20,8 +20,9 @@ not in place, do not run.
 
 1. `humangate/` + `humangate_driver/` offline tests all green
    (`pytest` in each; see `humangate_driver/README.md`).
-2. Both sim proofs green and their logs committed: `sim/run_mock_e2e.sh` and
-   `sim/run_ursim_e2e.sh` (logs under `data/human-gate-sim-v1/`).
+2. Sim proofs green and their logs committed: `sim/run_mock_e2e.sh`,
+   `sim/run_ursim_e2e.sh`, and the pause investigation `sim/investigate_pause_ursim.sh`
+   (logs under `data/human-gate-sim-v1/`).
 3. The camera side (`cams/human_safety`) is live and publishing `/human_safety/state`
    with real detections, on the SAME domain the gate will use, and at least one
    camera has a trustworthy `base_link` pose (report §6). Confirm the state topic
@@ -70,10 +71,14 @@ slow leg as the motion under test (`cams/cellmap/tools/loop_tags.py` /
   logged.
 - (3) The arm **stays stopped** for the full clear dwell and does NOT resume while
   the owner is still inside a ring or merely occluded.
-- (4) The arm **resumes** only after CLEAR + dwell. Whether it resumes the SAME
-  trajectory (speed-slider freeze) or needs a fresh plan (goal-cancel backstop)
-  depends on the measured slider-zero behaviour — see the sim finding in
-  `SLIDER_ZERO_FINDING.md`; commission whichever the real arm exhibits and record it.
+- (4) The arm **resumes** only after CLEAR + dwell. On this cell's HEADLESS driver
+  the commissioned STOP is the **goal-cancel backstop**, so a resume after STOP is a
+  **fresh plan-gate-execute** (stop-then-replan), not a continuation of the frozen
+  trajectory — the sim proved neither slider-zero nor dashboard pause gives a full
+  freeze-and-continue on headless CB3 (`SLIDER_ZERO_FINDING.md`,
+  `PAUSE_RESUME_FINDING.md`). The graded SLOW + same-trajectory resume via the slider
+  still applies **above the floor** (a person approaching → slower same motion). Record
+  the real arm's behaviour and confirm it matches; if it does not, re-run the finding.
 - (5) Killing the state publisher mid-approach stops the arm within the heartbeat
   timeout.
 - (6) A foreign slider write (have a second session nudge the pendant slider) makes
@@ -84,8 +89,16 @@ slow leg as the motion under test (`cams/cellmap/tools/loop_tags.py` /
 - **Reaction time** (photon -> arm begins to react): the full latency chain Tr.
 - **Stopping time and stopping distance at operating speed** (Ts, Ss).
 - Whether **slider zero fully halts** or a floor applies on the real CB3 (compare
-  to the URSim finding).
+  to the URSim finding, `SLIDER_ZERO_FINDING.md`).
 - The **command-to-effect delay** for the slider on the real driver.
+- Whether **dashboard `pause`/`play` are still rejected** on the real headless arm
+  (compare to `PAUSE_RESUME_FINDING.md`): call `/dashboard_client/pause` against a
+  running slow leg and confirm it returns "Failed to execute" and the arm does not
+  freeze. If the real installation instead runs a *loaded* External Control URCap
+  program (not headless injection) and `pause`/`play` then give a clean
+  freeze-and-continue on the scaled JTC, that is a material change — revisit the
+  stop-path decision (re-run `sim/investigate_pause_ursim.sh`; its asserter will flag
+  RE-EVALUATE) before commissioning pause as the STOP.
 
 Feed these back into `humangate/gate_params.yaml`, re-deriving the provisional
 zone radii / dwell / latency budget (report §3). Tune UP only if a measurement

@@ -1,0 +1,5 @@
+# Raw/regenerable run logs — the decision-relevant evidence is kept in
+# pause_investigation.txt (which embeds the driver.log tail), ASSERTIONS.txt and
+# dashboard_services.txt. Regenerate all via sim/investigate_pause_ursim.sh.
+driver.log
+probe.err

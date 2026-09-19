@@ -1,0 +1,13 @@
+
+=== dashboard pause/resume investigation (headless CB3) ===
+  [PASS] dashboard pause/play services existed  ({'program_state': 'STOPPED', 'loaded_program': '', 'program_running': True})
+  [PASS] trajectory goal was accepted
+  [PASS] arm was clearly moving before the pause call  (0.05937 rad/s)
+  [PASS] dashboard PAUSE was rejected (headless: no loaded program)  (Expected: Pausing program, but received: Failed to execute: pause)
+  [PASS] dashboard PLAY was rejected (headless: no loaded program)  (Expected: Starting program, but received: Failed to execute: play)
+  [PASS] arm did NOT freeze on the pause call  (pan drift during 'pause' = 0.47153 rad)
+  [PASS] pause did NOT abort the goal or drop the connection
+  [PASS] trajectory ran to completion unaffected (goal succeeded)  (result_code=0)
+  [PASS] no true freeze-and-continue via the dashboard
+
+9/9 checks passed — finding holds: no dashboard freeze-and-continue on headless CB3; STOP stays the goal-cancel backstop (stop-then-replan).

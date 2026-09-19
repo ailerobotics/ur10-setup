@@ -62,6 +62,20 @@ below that, but the e2e measurement (`assert_e2e.py` "command-to-effect delay")
 pins it at one gate cycle. The safety-relevant number — the STOP that the slider
 CANNOT deliver — is handled by the backstop and does not depend on this delay.
 
+## Companion finding — could "pause the robot program" deliver the full STOP instead?
+
+The natural follow-up (the captain's own candidate) is: if the slider cannot fully
+halt, can the driver's dashboard **`pause`/`play`** freeze the trajectory and later
+continue the SAME motion? Measured on the same URSim CB3, launched **headless** as
+this cell runs it: **no** — dashboard `pause`/`play` are rejected by the robot
+("Failed to execute") because in headless mode there is no dashboard-loaded program
+to pause. Full measurements, root cause, the other mechanisms evaluated, and the
+resulting decision (stop path unchanged; goal-cancel STOP = stop-then-replan) are in
+**`PAUSE_RESUME_FINDING.md`** (repeatable via `sim/investigate_pause_ursim.sh`).
+Together these two findings establish that **no freeze-and-continue full STOP exists
+on this controller**; the slider does graded SLOW + same-trajectory resume above the
+floor, and the goal-cancel backstop delivers the full STOP.
+
 ## Implication for the live test
 
 On the real CB3 the same is expected but must be re-measured with the owner
