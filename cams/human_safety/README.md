@@ -1,0 +1,362 @@
+# human_safety — camera-based 3-D human detection, tracking & safety state (stage 1)
+
+Turns every camera watching the UR10 cell into one fused, tracked picture of
+where people are relative to the robot, and publishes a **CLEAR / SLOW / STOP**
+judgement with the distance to the nearest person. It **only publishes** — it
+does not touch the robot. Connecting this state to actual motion (slow/stop/
+resume) is a **separate, later change** (designed in `human-safety-s1`).
+
+> ## ⚠️ This is NOT a certified safety function
+> A camera plus a neural-network person detector is a **single-channel, unrated,
+> supplementary awareness layer**. It has no diagnostic coverage and
+> non-deterministic failure modes; it is **not** IEC 61496 / ISO 13849 PL d
+> Cat 3 and must never be described or used as the last line of defence.
+> The actual protection against injury remains the robot controller's
+> **safety-rated protective stop** (CB3 pendant Force limit, 100 N floor) and —
+> the recommended addition — a **safety-rated presence device** (an IEC 61496
+> light curtain / safety laser scanner, PL d / Cat 3, hard-wired into the CB3
+> safeguard-stop input). This layer sits *inside* that certified floor as an
+> early, graceful, resumable slow/stop. See `human-safety-s1` §0/§4/§11.
+
+Everything here fails **toward STOP**: absence of evidence is never evidence of
+clearance.
+
+---
+
+## What it does (the 8 pieces)
+
+1. **Camera intake** — discovers whatever RealSense units are attached by serial
+   (via `cams/rig_multicam.launch.py`), each as colour + aligned depth. A plain
+   colour-only camera (a RealSense colour node read with depth ignored, or any
+   UVC webcam) goes through the same pipeline with `has_depth: false`. Per-camera
+   rate caps (`max_rate`) mean the 6 fps wrist never stalls the others; each
+   detector node runs independently.
+2. **Person detection** — pluggable detector (default torchvision Keypoint
+   R-CNN); returns a box **and** 17 COCO keypoints per person.
+3. **3-D position** — with depth, a robust body-centre **and** the nearest
+   credible body point (percentile, not the single closest pixel), handling
+   depth holes and min/max range; without depth, a monocular ground-plane / body-
+   height estimate with honestly larger uncertainty.
+4. **One common frame** — positions in `base_link` via tf2. A camera with no
+   trustworthy pose contributes **presence only** (see *Camera poses* below).
+5. **Fusion & tracking** — gated association + constant-velocity Kalman tracker,
+   stable IDs, confirmation/coasting, multi-camera detections update one track.
+6. **Safety state** — `/human_safety/state` with zone, nearest distance,
+   hysteresis, minimum-clear dwell, per-camera health, and a monotonic heartbeat.
+7. **Owner view** — one window: every camera feed (boxes, keypoints, IDs,
+   distances) plus a top-down map (robot, zones, tracks, state banner).
+8. **No robot interface** — nothing here subscribes to drive the robot, calls a
+   robot service, or publishes to a controller.
+
+---
+
+## Layout
+
+```
+cams/human_safety/
+  human_safety/           # PURE decision logic — no ROS, no torch, no GPU (unit-tested)
+    geometry.py             depth lifting, monocular lifting, frame transforms
+    detector.py             pluggable detector (base + Keypoint R-CNN, torch lazy)
+    tracker.py              gated association + constant-velocity Kalman tracker
+    safety.py               zone / hysteresis / dwell / health state machine
+    fusion.py               merge per-camera detections -> tracks
+    messages.py             ROS-free dataclasses (Detection3D, Track, SafetyState…)
+    json_util.py            the published JSON schema (state / detections / tracks)
+    imgcodec.py             dependency-free Image <-> ndarray (no cv_bridge)
+    config.py               YAML config load + validation
+    replay.py               deterministic replay of a recorded log
+  nodes/                  # thin ROS shells
+    detector_node.py        per-camera: detect + lift + publish
+    fusion_node.py          fuse + evaluate safety + publish state/tracks/markers
+    viz_node.py             owner window (system python, cv2)
+  tools/
+    live_check.py           live plumbing check (rates, freshness, latency, GPU)
+    detector_selfcheck.py   run the detector on sample images
+  params/
+    human_safety.yaml       cameras + zones/budgets (PROVISIONAL defaults)
+    camera_poses.yaml       static extrinsics for calibrated fixed cameras (empty today)
+  human_safety.launch.py  detectors + fusion + viz + static TFs
+  run_live.sh             ONE command: cameras + graph + viewer + record (domain 77)
+  tests/                  offline pytest suite + replay fixture
+```
+
+The package runs **as scripts**, matching the repo convention (there is no
+colcon workspace anywhere in this repo). `import human_safety` works with the
+package dir on `sys.path`; offline tests need only NumPy + SciPy.
+
+---
+
+## Detector & licensing
+
+| | Choice | Licence |
+|---|---|---|
+| Detector code | torchvision `keypointrcnn_resnet50_fpn` | **BSD-3-Clause** |
+| Pretrained weights | `KeypointRCNN_ResNet50_FPN_Weights.COCO_LEGACY` | **BSD-3-Clause** (torchvision) |
+| Runtime | torch 2.4.1 + torchvision 0.19.1 (cu121 wheels, bundled CUDA runtime) | BSD-3-Clause |
+
+**No AGPL / ultralytics** anywhere, per the brief. The detector is pluggable
+(`human_safety/detector.py`, `build_detector(name)`); to add one, subclass
+`PersonDetector` and register it. Keypoints are preferred over a bare box
+because the 3-D lifting uses body points (ankles for the monocular foot point,
+the shrunk box for the robust depth region).
+
+**Measured** (this machine, RTX-class 12 GB GPU, 848×480):
+
+- Inference ~37 ms on a blank frame, ~150 ms on a busy live frame (≈6–7 Hz per
+  camera, GPU-bound — below the frame rate, so rate-capping rarely bites).
+- **GPU memory: 394 MB per detector process; ~1.87 GB for all three together —
+  under the 2 GB budget.** (Verify with `nvidia-smi`; keep ≤3 detectors, or move
+  one to `device: cpu`, if other GPU tenants shrink the headroom.)
+- Detector check on public-domain sample people (full body, **partial/upper-body
+  crop**, **seated crop**, pedestrian): all detected with keypoints
+  (`tools/detector_selfcheck.py`; evidence in
+  `firstmate/data/human-detect-core-v1/detector-check/`).
+
+---
+
+## 3-D methods & expected error
+
+- **Depth** (`geometry.lift_depth`): robust body centre = component-wise median
+  of valid deprojected points inside the shrunk person box; **nearest** = median
+  of the closest `nearest_percentile` (default 5 %) of ranges, so one flying
+  near-range speckle cannot pull the safety distance in. Invalid depth (0/NaN)
+  and anything outside `[min_range, max_range]` is dropped (handles holes and the
+  RealSense min/max range). Expected 1-σ ≈ **1 % of range + 2 cm** depth noise,
+  **plus the camera's calibration residual** when it has a pose (wrist hand-eye
+  ≈ 8 mm; a calibrated D415 target < 1 cm). ≈ 0.1–0.3 m at cell ranges — matches
+  `human-safety-s1` §3 `Zd`.
+- **Monocular** (`geometry.lift_monocular`, no depth): intersect the foot-pixel
+  ray with the ground plane `z = ground_z`; centre lifted half a body height
+  above the foot. Fallback (feet occluded / ray not descending): pinhole range
+  from box height and `height_prior`. Reported 1-σ is **honestly larger**
+  (≈ 0.35 m + 0.15 × range for the ground method; +0.25 m more for the height-
+  prior fallback). Monocular needs a known camera pose *and* a decent floor
+  estimate; it is a coarse locator, not a depth substitute.
+- Both are unit-tested offline (`tests/test_geometry.py`), including holes,
+  range-window clipping, and the speckle-robust nearest point.
+
+---
+
+## Camera poses — who is trustworthy today
+
+Positions are lifted to `base_link` via **tf2**. A camera is *positioned* only
+when a fresh `base_link ← <optical_frame>` transform exists at the image stamp;
+otherwise it contributes **presence only** (`present=True`, no position), clearly
+flagged. This one mechanism covers every case:
+
+| Camera | Pose today | Why |
+|---|---|---|
+| **wrist** D435i (`018322070619`, upright twin) | **presence only** | hand-eye calibrated, but its pose is FK-chained through `/joint_states`; the **robot driver is down** (leave it down), so the TF chain is broken |
+| **shelf** D415 (`021422061772`) | **presence only** | no `base_link` extrinsic exists — Step-2 AprilTag world-alignment is **not done** |
+| **table** D415 (`025522060953`) | **presence only** | same — uncalibrated |
+
+So **all three cameras are presence-only right now** (confirmed live). The
+machinery to place them is complete: when a pose becomes available (the driver
+comes up for the wrist; a fixed-camera extrinsic is added to
+`params/camera_poses.yaml`), the same node immediately produces 3-D positions —
+no code change. `human-safety-s1` §6 reaches the same conclusion from the repo.
+
+### Calibrating a fixed camera into `base_link` (procedure — a separate task owns the tool)
+
+This package does **not** ship the fixed-camera calibrator; a separate
+calibration task owns it (`human-safety-s1` §6 / Phase 2). The documented
+procedure, reusing the existing cellmap AprilTag tooling, is:
+
+1. Place a printed 36h11 AprilTag (`cams/cellmap/tags/`, 120 mm) at a **known
+   `base_link` pose** in the fixed camera's view (e.g. tag 1 at
+   `(-0.506, -1.058, -0.057)`).
+2. Detect the tag in the camera's **colour** image and solve `camera → tag` by
+   PnP with the colour intrinsics (same approach as
+   `cams/cellmap/validate_tag1.py` / `handeye_calibrate.py`).
+3. Compose with the known `base_link → tag` to get `base_link → camera`; write it
+   into `params/camera_poses.yaml` (`calibrated: true`). This launch then starts
+   a `static_transform_publisher` for it.
+4. Validate against a second tag and against the wrist camera's already-trusted
+   view (target < 5 px reprojection / < 1 cm, per `cams/placement-report.html`).
+
+A colour-only camera (webcam) additionally needs a one-time intrinsics
+(checkerboard/ChArUco) calibration before PnP is trustworthy.
+
+---
+
+## Published interface (the robot-side gate consumes this)
+
+Because this repo has no colcon build (and the offline test path must not require
+one), the state is a **versioned JSON document on `std_msgs/String`**, not a
+custom `.msg`. `human-safety-s1` §7 prefers a custom message; a thin adapter on
+the gate side (which that report also recommends) maps this schema to one. The
+schema is stable and `schema_version`-tagged so a rename is a one-line change.
+
+| Topic | Type | Payload |
+|---|---|---|
+| `/human_safety/state` | `std_msgs/String` | the JSON below — the judgement |
+| `/human_safety/tracks` | `std_msgs/String` | `{stamp, tracks:[…]}` (separate topic) |
+| `/human_safety/markers` | `visualization_msgs/MarkerArray` | RViz: zones + tracks |
+| `/human_safety/detections/<role>` | `std_msgs/String` | per-camera detections (+2-D overlay) |
+| `/human_safety/status/<role>` | `std_msgs/String` | per-camera detector liveness |
+
+**`/human_safety/state` JSON** (`json_util.state_to_json`, `schema_version: 1`):
+
+```jsonc
+{
+  "schema_version": 1,
+  "frame_id": "base_link",
+  "stamp": 1789811234.32,          // publication wall time
+  "evidence_stamp": 1789811234.13, // time of the FRESHEST fused evidence (gate uses THIS for staleness)
+  "heartbeat_seq": 412,            // monotonic; gate STOPs if it stalls
+  "zone": "CLEAR|SLOW|STOP",
+  "distance_status": "known|unknown|none",  // UNKNOWN is NOT 'far' (see below)
+  "nearest_distance": 1.34,        // to reach envelope, metres; null unless distance_status==known
+  "nearest_distance_base": 2.64,   // to base origin, metres; null unless known
+  "nearest_track_id": 7,
+  "any_person_visible": true,
+  "reasons": ["…which rules force non-CLEAR…"],
+  "cameras": [{"camera":"shelf","status":"fresh|stale|absent","fresh":true,"positioned":false,…}],
+  "tracks": [{"id":7,"position":[x,y,z],"velocity":[…],"confirmed":true,…}]
+}
+```
+
+**Distance honesty (the single most important line):** when only presence-only
+(uncalibrated) cameras see a person, `distance_status` is `"unknown"` and
+`nearest_distance` is `null` — this is **not** "far", and the state is still at
+least **SLOW**. The gate must read `distance_status`, never treat a null distance
+as clear. Published at a fixed **≥10 Hz** (default 15 Hz, measured 15.0 Hz) — the
+6 fps wrist does **not** set this rate; per-camera freshness is separate.
+
+---
+
+## Zones, hysteresis, dwell, health — PROVISIONAL
+
+Defaults from `human-safety-s1` §3 (conservative placeholders, **not** derived
+separation distances — a certified analysis would tighten them):
+
+- **STOP** when a person is within **2.0 m of the robot base**
+  (`reach_radius 1.30 + stop_radius 0.70`), **or** any presence-only camera sees
+  a person, **or** any health fault.
+- **SLOW** when any person is present (this small cell: SSM says any person →
+  at least SLOW), outside STOP.
+- **CLEAR** only when no person is anywhere in the monitored volume.
+- **Hysteresis 0.30 m**: leave STOP only after clearing the ring by +0.30 m.
+- **Dwell ≥ 2.0 s** of continuous healthy CLEAR before leaving STOP (anti-chatter).
+
+**Health is part of the judgement (fail toward STOP):** a stale frame (image
+stamp vs clock beyond `frame_age_budget`), a missing camera, a detector that
+stopped answering, an unlocalised visible person → **non-CLEAR (SLOW floor)**; a
+confirmed track **lost while close** to the robot → **STOP held** for
+`lost_hold_time`. Every rule is unit-tested (`tests/test_safety.py`). Tune radii
+and budgets in `params/human_safety.yaml`; they are parameters.
+
+---
+
+## Differences from `human-safety-s1` (named per the steering note)
+
+1. **State transport.** The report §7 prefers a **custom ROS message**; this
+   package ships a **versioned JSON schema on `std_msgs/String`** because the repo
+   has no colcon build and the offline test path must not require one. The report
+   itself endorses a thin gate-side adapter, which absorbs the difference.
+2. **Detector-stall severity.** Report §5 #3 would escalate a *stalled detector*
+   to **STOP**; the build brief says such health faults force **non-CLEAR**. We
+   ship the brief's rule (a per-camera fault → **SLOW** floor; STOP is reserved
+   for *track-lost-while-close*), configurable in `params`. A future revision may
+   raise a whole-perception stall to STOP.
+
+Everything else (zone defaults, distance-unknown honesty, heartbeat, ≥10 Hz,
+tracks on a separate topic, both D415s presence-only, and **not** writing the
+fixed-camera calibrator) follows the report.
+
+---
+
+## Environment / install (user-scoped, survives outside the worktree)
+
+A virtualenv **outside** the worktree so it persists: `~/venvs/human-safety`
+(4.9 GB, under the 6 GB cap). Only the detector nodes use it (torch); fusion and
+viz run on the system python. No sudo, no system packages, nothing installed into
+any existing environment. Recreate exactly:
+
+```bash
+python3 -m venv --system-site-packages ~/venvs/human-safety   # --system-site-packages: rclpy et al.
+~/venvs/human-safety/bin/pip install --upgrade pip
+~/venvs/human-safety/bin/pip install "numpy==1.26.4" pillow    # match the ROS/system NumPy ABI
+~/venvs/human-safety/bin/pip install torch==2.4.1 torchvision==0.19.1 \
+    --index-url https://download.pytorch.org/whl/cu121         # bundled CUDA runtime, no toolkit
+```
+
+Images are decoded without `cv_bridge` (`imgcodec.py`) so the venv never imports
+a ROS C-extension bound to a different NumPy ABI.
+
+---
+
+## Running
+
+**One command** (brings up the cameras AND the graph on the isolated
+`ROS_DOMAIN_ID=77`, opens the owner window, records a replayable log). This is
+the only task allowed to open the cameras; the wrapper stops everything it starts
+by **PID** and confirms the cameras are released:
+
+```bash
+cams/human_safety/run_live.sh wrist,shelf,table walkthrough.jsonl
+# ... reads $DISPLAY for the window (SSH X-forwarding); Ctrl-C to stop ...
+```
+
+Graph only (cameras already up on domain 77):
+
+```bash
+ROS_DOMAIN_ID=77 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 \
+  ros2 launch cams/human_safety/human_safety.launch.py cams:=wrist,shelf,table viz:=true
+```
+
+Live plumbing check (cameras found, fresh, per-camera rates, img→state latency,
+GPU, heartbeat; exit 0 = all live):
+
+```bash
+ROS_DOMAIN_ID=77 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 \
+  python3 cams/human_safety/tools/live_check.py --config cams/human_safety/params/human_safety.yaml
+```
+
+**Measured live** (domain 77, all three cameras, driver down): all cameras found
+& FRESH (stamp age ~0.04 s); colour 13–20 Hz; state **15.0 Hz**; img→state
+latency median **259 ms** / max 439 ms (dominated by detector inference on the
+shared GPU); 3 detectors **~1.87 GB** GPU total; all cameras presence-only
+(expected); heartbeat advancing; **cameras released cleanly** on stop.
+
+---
+
+## Testing
+
+- **Offline, deterministic** (`pytest cams/human_safety/tests/`, no cameras / no
+  GPU / no ROS): geometry (depth + monocular lifting, transforms), association,
+  tracker lifecycle, safety zones/hysteresis/dwell and every health rule, config,
+  JSON round-trip, and a **replay regression** (`tests/data/synthetic_approach.jsonl`
+  — CLEAR→SLOW→STOP→dwell→CLEAR). 40 tests, ~0.4 s.
+- **Detector check** on public sample images: `tools/detector_selfcheck.py`.
+- **Live plumbing check** on the real cameras: `tools/live_check.py`.
+- **Replay regression from a real recording:** `run_live.sh` writes a JSONL every
+  fusion cycle; `human_safety/replay.py` replays it through Fusion + Safety
+  deterministically. Drop a captured walk-through under `tests/data/` and assert
+  it in `tests/test_replay.py` (same shape as the synthetic fixture).
+
+### The walk-through check needs the owner
+
+Verifying live 3-D positions and tracking needs a **person in view** while a
+camera has a trustworthy pose — which cannot be arranged here now (the robot
+driver is down, so the wrist has no pose; the fixed D415s are uncalibrated). The
+offline geometry/tracker/safety are fully tested; the live check confirms the
+whole image→detector→fusion→state pipeline end to end on whoever is in frame. The
+**owner-run walk-through** (`run_live.sh …`, then add the recording as a replay
+test) is the remaining verification.
+
+---
+
+## Limitations (stage 1)
+
+- **Not a certified safety function** (see the top). No robot interface yet.
+- **All cameras presence-only today** — no camera has a live `base_link` pose
+  (driver down; D415s uncalibrated). Presence-only forces ≥ SLOW; 3-D distance
+  needs a pose.
+- **Provisional zones/budgets** — conservative placeholders, to be replaced by
+  measured latency/stopping data (`human-safety-s1` §3, Phase 4).
+- **Latency** ≈ 0.26 s img→state on this shared GPU; the wrist at 6 fps is a slow
+  path — a person seen *only* on the wrist reacts slowly (reason to add coverage).
+- **Blind spots are not CLEAR** — the monitored volume is the cameras' union;
+  unobserved space is presence-unknown by design, closed only by coverage + the
+  certified layer.
