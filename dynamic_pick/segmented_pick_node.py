@@ -125,6 +125,7 @@ class SegmentedPickNode(Node):
 
         # ---- goal / latency bookkeeping ---- #
         self._active_gh = None
+        self._leg_seq = 0                # monotonic id of the most recently sent leg
         self._committed_goal = None      # xyz of the leg most recently committed
         self._plan_samples = []          # plan latency (s)
         self._preempt_samples = []       # decide -> new-goal-accepted latency (s)
@@ -235,29 +236,39 @@ class SegmentedPickNode(Node):
             return
         g = FollowJointTrajectory.Goal()
         g.trajectory = traj
+        self._leg_seq += 1
+        leg_id = self._leg_seq
         send_future = self.fjt.send_goal_async(g)
         # Mark the leg in-flight and rate-limited at SEND time, not only in the
         # async accept callback: otherwise a _tick firing between send and accept
         # sees no leg running / no recent plan and dispatches a duplicate competing
-        # goal. The accept callback refreshes this timing; a rejection clears it.
+        # goal. Only the most-recently-sent leg's response callback (leg_id ==
+        # self._leg_seq) may mutate this bookkeeping, so a late accept/reject of a
+        # superseded leg cannot disturb the current leg's mark.
         self.controller.note_leg_started(self._committed_goal, time.monotonic(),
                                          getattr(self, "_leg_duration", 0.0))
         send_future.add_done_callback(
-            lambda fut, dt=decide_t, pmt=preempt, pdt=plan_dt: self._on_goal_response(fut, dt, pmt, pdt))
+            lambda fut, dt=decide_t, pmt=preempt, pdt=plan_dt, lid=leg_id:
+                self._on_goal_response(fut, dt, pmt, pdt, lid))
         self._log_event(now, "goal_sent", {
             "gate_action": self._gate.action, "preempt": preempt,
             "plan_s": round(plan_dt, 4), "solve_s": round(res.planning_time_s, 4),
             "duration_s": round(res.duration_s, 2), "n_pts": len(res.positions),
             "goal_xyz": [round(float(v), 3) for v in goal_xyz]})
 
-    def _on_goal_response(self, fut, decide_t, preempt, plan_dt):
+    def _on_goal_response(self, fut, decide_t, preempt, plan_dt, leg_id):
+        is_current = (leg_id == self._leg_seq)
         gh = fut.result()
         if gh is None or not gh.accepted:
             self.get_logger().warn("goal rejected by controller")
-            # undo the send-time in-flight mark so the phantom leg does not block
-            # re-planning; only when no accepted leg has since taken over.
-            if self._active_gh is None:
+            # undo the send-time in-flight mark only if this rejected leg is still
+            # the current one; a newer leg's send now owns the mark.
+            if is_current:
                 self.controller.note_leg_finished()
+            return
+        if not is_current:
+            # a superseded leg was accepted late; the newest leg owns the in-flight
+            # bookkeeping, and this leg's result is ignored via the _active_gh guard.
             return
         t_acc = time.time()
         self._active_gh = gh
