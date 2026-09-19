@@ -125,7 +125,7 @@ def state_to_json(s: SafetyState) -> str:
         "schema_version": STATE_SCHEMA_VERSION,
         "frame_id": "base_link",
         "stamp": s.stamp,                          # publication wall time
-        "evidence_stamp": s.evidence_stamp,        # time of freshest fused evidence
+        "evidence_stamp": s.evidence_stamp,        # oldest positioned-detection stamp (STOP-ring evidence)
         "heartbeat_seq": s.heartbeat_seq,          # monotonic; gate watchdog
         "zone": s.zone.value,                      # CLEAR | SLOW | STOP
         "distance_status": s.distance_status.value,  # known | unknown | none

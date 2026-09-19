@@ -118,10 +118,12 @@ class DistanceStatus(str, Enum):
 class SafetyState:
     """The published judgement. Fails toward STOP.
 
-    ``evidence_stamp`` is the time of the freshest fused evidence in the base
-    frame (NOT the publication time) — the timestamp the robot-side gate uses for
-    its own staleness check (human-safety-s1 §7). ``heartbeat_seq`` advances every
-    publish so the gate can detect a wedged publisher.
+    ``evidence_stamp`` is the OLDEST positioned-detection stamp that sizes the
+    current STOP ring (NOT the publication time, and NOT the freshest frame) — the
+    timestamp the robot-side gate uses for its own staleness check, kept
+    conservative so the latency it derives is never understated (human-safety-s1
+    §7). It is ``None`` when nobody is being localised. ``heartbeat_seq`` advances
+    every publish so the gate can detect a wedged publisher.
     """
 
     stamp: float                      # publication time (wall clock)
@@ -134,5 +136,5 @@ class SafetyState:
     reasons: list = field(default_factory=list)
     health: list = field(default_factory=list)   # list[CameraHealth]
     tracks: list = field(default_factory=list)    # list[Track]
-    evidence_stamp: Optional[float] = None        # freshest contributing image stamp
+    evidence_stamp: Optional[float] = None        # oldest positioned-detection stamp sizing the STOP ring
     heartbeat_seq: int = 0

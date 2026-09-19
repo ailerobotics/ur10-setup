@@ -33,7 +33,7 @@ from visualization_msgs.msg import Marker, MarkerArray  # noqa: E402
 from geometry_msgs.msg import Point  # noqa: E402
 
 from human_safety.config import load_config  # noqa: E402
-from human_safety.fusion import Fusion  # noqa: E402
+from human_safety.fusion import Fusion, gather_evidence  # noqa: E402
 from human_safety.json_util import (detection_to_dict, detections_from_json,  # noqa: E402
                                     health_to_dict, state_to_json, track_to_dict)
 from human_safety.messages import CameraHealth  # noqa: E402
@@ -102,27 +102,18 @@ class FusionNode(Node):
 
     def _cycle(self):
         now_wall = time.time()
-        # Gather the freshest detections from every camera within one budget.
-        all_dets = []
-        source_stamps = []
-        for role, (recv, dets, stamp) in list(self._dets.items()):
-            # Drop detections whose message itself is stale (camera/detector
-            # stopped) so a latched last message can't keep a phantom person.
-            if now_wall - recv <= self.cfg.safety.frame_age_budget + 0.5:
-                all_dets.extend(dets)
-                if stamp is not None:
-                    source_stamps.append(stamp)
+        # Gather the freshest detections within one budget and derive the
+        # STOP-ring evidence stamp / latency (fault 5) from the positioned ones
+        # only, using the OLDEST contributing stamp so a camera streaming fresh
+        # empty frames can never make older person evidence look fresh; per-camera
+        # staleness is reported separately (report §7 #2).
+        all_dets, evidence_stamp, latency = gather_evidence(
+            self._dets, now_wall, self.cfg.safety.frame_age_budget)
 
         tracks, presence_cams = self.fusion.step(all_dets, now_wall)
         health = self._assess_health(now_wall)
         any_presence = bool(presence_cams)
 
-        # Freshest fused evidence (max), so the 6 fps wrist never drags the state
-        # stamp; per-camera staleness is reported separately (report §7 #2).
-        evidence_stamp = max(source_stamps) if source_stamps else None
-        # End-to-end image->state latency (fault 5). Only meaningful once someone
-        # is being localised (evidence has a real base-frame stamp).
-        latency = (now_wall - evidence_stamp) if evidence_stamp is not None else None
         state = self.evaluator.evaluate(
             tracks, health, now_wall, any_presence=any_presence,
             source_stamp=evidence_stamp, latency=latency)
