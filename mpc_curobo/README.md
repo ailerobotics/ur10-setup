@@ -50,9 +50,13 @@ decision (report §0, `decision.md` D1).
   on (soft collision cost) — MPC alone is not a safety function.
 - ROS bridge (mock hardware): the arm moves only while the gate is **RUN**, holds
   on SLOW/STOP/BACKSTOP, **resumes** toward the freshest goal, and on
-  **command-stream starvation** (bridge killed mid-motion) the arm **ends stopped**
-  — `forward_position_controller` holds its last setpoint (answers RD-3). Live
-  cuRobo MPC in the loop passes too. CB3 URSim: driver connects + controller
+  **command-stream starvation** (the **bridge** killed mid-motion, **driver still
+  alive**) the arm **ends stopped** — `forward_position_controller` holds its last
+  setpoint (answers RD-3 for the stream-death case). **This is not "the bridge
+  alone guarantees a stop":** the hold depends on the driver being alive; if the
+  **driver** itself dies, the stop comes from a separate layer — the robot's
+  external-control program ending. `forward_velocity_controller` would coast on
+  starvation. Live cuRobo MPC in the loop passes too. CB3 URSim: driver connects + controller
   activates + gate streams, but the CB3 sim arm did not register motion under
   headless servoj streaming (documented gap; mock is the faithful proof).
 - Comparison: C1 re-plan ~77 ms/leg (~50 % single-shot pose-goal success without
