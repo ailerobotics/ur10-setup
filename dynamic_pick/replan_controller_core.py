@@ -91,11 +91,12 @@ class ReplanController:
         self._retreat_committed = False
 
     # ---- leg lifecycle (the ROS node calls these on goal accept / result) --- #
-    def note_leg_started(self, goal, now: float, duration_s: float) -> None:
+    def note_leg_started(self, goal, now: float, duration_s: float,
+                         *, committed: bool = False) -> None:
         self._goal_in_flight = np.asarray(goal, float).reshape(3).copy()
         self._leg_end_mono = float(now) + max(float(duration_s), 0.1)
         self._last_plan_mono = float(now)
-        if self.phases.phase == RETREAT:
+        if committed and self.phases.phase == RETREAT:
             self._retreat_committed = True
 
     def note_leg_finished(self) -> None:

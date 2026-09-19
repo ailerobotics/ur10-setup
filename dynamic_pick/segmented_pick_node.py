@@ -273,7 +273,8 @@ class SegmentedPickNode(Node):
         t_acc = time.time()
         self._active_gh = gh
         self.controller.note_leg_started(self._committed_goal, time.monotonic(),
-                                         getattr(self, "_leg_duration", 0.0))
+                                         getattr(self, "_leg_duration", 0.0),
+                                         committed=True)
         self._goals_sent += 1
         mono = time.monotonic()
         if preempt and decide_t is not None:

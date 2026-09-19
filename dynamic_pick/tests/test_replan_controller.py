@@ -186,8 +186,10 @@ def test_retreat_is_one_shot_not_replanned_every_tick():
     # first RETREAT tick plans the fixed leg
     i0 = c.decide(100.0, _est(), tcp, _run(100.0), retreat_target=retreat)
     assert i0.action == PLAN and np.allclose(i0.goal, retreat)
-    # the node dispatches it -> the retreat leg starts, then completes
+    # the node dispatches it (send-time mark) then the goal is CONFIRMED ACCEPTED
+    # (committed=True latches the one-shot), and the leg then completes
     c.note_leg_started(i0.goal, 100.0, 1.0)
+    c.note_leg_started(i0.goal, 100.0, 1.0, committed=True)
     assert c.decide(100.5, _est(), tcp, _run(100.5), retreat_target=retreat).action == NOOP
     c.note_leg_finished()
     # subsequent ticks, well past the rate-limit window, must NOT re-plan the retreat
@@ -197,6 +199,25 @@ def test_retreat_is_one_shot_not_replanned_every_tick():
     # a NEW pick cycle (begin_retreat again) re-arms the one-shot
     c.begin_retreat()
     assert c.decide(111.0, _est(), tcp, _run(111.0), retreat_target=retreat).action == PLAN
+
+
+def test_rejected_retreat_send_does_not_latch_one_shot():
+    """A retreat leg that is SENT then REJECTED (never accepted) must NOT latch the
+    one-shot: the retreat can still be re-issued on the next tick (finding E). Only a
+    CONFIRMED-accepted retreat leg latches."""
+    c = ReplanController(min_replan_interval_s=0.0)
+    c.begin_retreat()
+    retreat = np.array([0.1, 0.0, 0.5])
+    tcp = np.array([0.6, 0, 0.3])
+    i0 = c.decide(100.0, _est(), tcp, _run(100.0), retreat_target=retreat)
+    assert i0.action == PLAN
+    # send-time mark only (goal not yet accepted -> committed defaults False)
+    c.note_leg_started(i0.goal, 100.0, 1.0)
+    # the FollowJointTrajectory goal is REJECTED -> the in-flight mark is unwound
+    c.note_leg_finished()
+    # the retreat must be retried, not stalled forever at the grasp pose
+    i1 = c.decide(101.0, _est(), tcp, _run(101.0), retreat_target=retreat)
+    assert i1.action == PLAN and np.allclose(i1.goal, retreat)
 
 
 def test_scripted_near_grasp_retreat_sequence():
