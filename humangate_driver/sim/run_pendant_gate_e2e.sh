@@ -41,9 +41,11 @@ python3 "$HERE/scripted_state_publisher.py" --ros-args -p scenario:=pendant_paus
     > "$LOGDIR/publisher.log" 2>&1 &
 PUB_PID=$!; PIDS+=("$PUB_PID")
 sleep 1
-# pendant_freeze_confirm_s / stop_effect_deadline_s are widened past the ~1.8 s
-# pendant freeze time so neither the gate core's fall-through nor the independent
-# watcher cancels the pause before it takes effect (PENDANT_PAUSE_FINDING.md).
+# The SINGLE freeze-confirm knob (pendant_freeze_confirm_s) configures BOTH processes:
+# the gate widens its own STOP->BACKSTOP deadline from it, and the watcher — given the
+# same stop_strategy:=pendant_pause — sizes its own stop-effect deadline from it, so
+# neither cancels the pause before it freezes past ~1.8 s (PENDANT_PAUSE_FINDING.md).
+# No hand-tuned watcher stop_effect_deadline_s to forget.
 python3 "$HERE/../gate_driver_node.py" --ros-args \
     -p arm:=true -p robot_ip:="$PLIB_URSIM_IP" \
     -p stop_strategy:=pendant_pause -p resume_max_pause_s:=120.0 \
@@ -52,7 +54,7 @@ python3 "$HERE/../gate_driver_node.py" --ros-args \
 PIDS+=($!)
 python3 "$HERE/../backstop_watcher_node.py" --ros-args \
     -p arm:=true -p robot_ip:="$PLIB_URSIM_IP" \
-    -p stop_effect_deadline_s:=3.0 \
+    -p stop_strategy:=pendant_pause -p pendant_freeze_confirm_s:=2.5 \
     -p watcher_log:="$LOGDIR/watcher.jsonl" > "$LOGDIR/watcher.log" 2>&1 &
 PIDS+=($!)
 

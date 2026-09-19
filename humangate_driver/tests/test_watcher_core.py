@@ -9,7 +9,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
-from watcher_core import BackstopWatcher, WatcherParams  # noqa: E402
+from watcher_core import (  # noqa: E402
+    STRAT_CANCEL, STRAT_PENDANT_PAUSE, BackstopWatcher, WatcherParams)
 
 P = WatcherParams(state_heartbeat_timeout_s=0.5, gate_heartbeat_timeout_s=0.5,
                   stop_effect_deadline_s=0.7, stop_scaling_threshold=0.05,
@@ -129,6 +130,101 @@ def test_latches():
     assert w.update(3.0, **_healthy(3.0)) == w.reason
     w.reset()
     assert not w.tripped
+
+
+# --- coupling: one freeze-confirm knob sizes the watcher deadline too ------- #
+
+def test_cancel_strategy_deadline_unchanged():
+    # DEFAULT `cancel`: the effective stop-effect deadline is exactly the
+    # configured 0.7 s, unaffected by pendant_freeze_confirm_s.
+    p = WatcherParams(stop_effect_deadline_s=0.7, pendant_freeze_confirm_s=2.5,
+                      stop_strategy=STRAT_CANCEL, startup_grace_s=1.0)
+    assert p.effective_stop_effect_deadline_s == 0.7
+
+
+def test_pendant_pause_sizes_deadline_from_freeze_confirm():
+    # Under pendant_pause the effective deadline is sized from the SAME
+    # freeze-confirm knob the gate node uses — not the 0.7 s cancel default.
+    p = WatcherParams(stop_effect_deadline_s=0.7, pendant_freeze_confirm_s=2.5,
+                      stop_strategy=STRAT_PENDANT_PAUSE, startup_grace_s=1.0)
+    assert p.effective_stop_effect_deadline_s == 2.5
+
+
+def test_pendant_pause_does_not_cancel_before_freeze():
+    # A pendant pause freezes over ~1.8 s. With the watcher sized from
+    # pendant_freeze_confirm_s=2.5, a STOP whose scaling is still high must NOT be
+    # cancelled at the old 0.7 s cancel deadline (that would defeat the pause), but
+    # MUST still be cancelled if the freeze never effects past 2.5 s.
+    p = WatcherParams(stop_effect_deadline_s=0.7, pendant_freeze_confirm_s=2.5,
+                      stop_strategy=STRAT_PENDANT_PAUSE, startup_grace_s=1.0)
+    w = BackstopWatcher(p, start_time=0.0)
+    # 0.7 s..2.5 s after demand: slider still high, but within the freeze window.
+    for i in range(1, 24):
+        t = 2.0 + i * 0.1
+        r = w.update(t, last_state_arrival=t, last_gate_arrival=t,
+                     state_zone="STOP", gate_action="STOP", gate_demand="STOP",
+                     gate_stop_strategy=STRAT_PENDANT_PAUSE, observed_scaling=1.0)
+        if t - 2.0 <= 2.5:
+            assert r is None, f"cancelled at {t - 2.0:.1f}s (before freeze)"
+    # past the freeze-confirm deadline with the arm still not stopped -> cancel.
+    r = w.update(2.0 + 3.0, last_state_arrival=5.0, last_gate_arrival=5.0,
+                 state_zone="STOP", gate_action="STOP", gate_demand="STOP",
+                 gate_stop_strategy=STRAT_PENDANT_PAUSE, observed_scaling=1.0)
+    assert w.tripped and "slider ineffective" in r
+
+
+def test_matching_strategy_no_misconfig():
+    # gate announces the same strategy the watcher is configured for -> no misconfig.
+    p = WatcherParams(stop_strategy=STRAT_PENDANT_PAUSE, pendant_freeze_confirm_s=2.5,
+                      startup_grace_s=1.0)
+    w = BackstopWatcher(p, start_time=0.0)
+    w.update(2.0, last_state_arrival=2.0, last_gate_arrival=2.0, state_zone="CLEAR",
+             gate_action="RUN", gate_demand="CLEAR",
+             gate_stop_strategy=STRAT_PENDANT_PAUSE, observed_scaling=1.0)
+    assert w.misconfig is None
+
+
+def test_mismatched_strategy_reported_but_still_cancels():
+    # OPERATOR ERROR: gate is running pendant_pause but this watcher was left on the
+    # cancel default (0.7 s). The mismatch must be REPORTED (never silent), AND the
+    # watcher must STILL end the arm stopped — cancelling at its OWN 0.7 s deadline.
+    p = WatcherParams(stop_effect_deadline_s=0.7, pendant_freeze_confirm_s=2.5,
+                      stop_strategy=STRAT_CANCEL, startup_grace_s=1.0)
+    w = BackstopWatcher(p, start_time=0.0)
+    tripped_by = None
+    for i in range(1, 12):
+        t = 2.0 + i * 0.1
+        r = w.update(t, last_state_arrival=t, last_gate_arrival=t,
+                     state_zone="STOP", gate_action="STOP", gate_demand="STOP",
+                     gate_stop_strategy=STRAT_PENDANT_PAUSE, observed_scaling=1.0)
+        assert w.misconfig is not None and "MISCONFIG" in w.misconfig
+        if r and tripped_by is None:
+            tripped_by = t - 2.0
+    # cancelled at its own ~0.7 s deadline (safe), not the 2.5 s freeze window.
+    assert w.tripped and tripped_by is not None and tripped_by <= 1.0
+    # and the misconfig keeps being reported even after it latches.
+    w.update(5.0, **_healthy(5.0), gate_stop_strategy=STRAT_PENDANT_PAUSE)
+    assert w.misconfig is not None
+
+
+def test_params_yaml_single_knob_configures_both():
+    # The declarative contract: params.yaml expresses the freeze-confirm value and
+    # the strategy ONCE (YAML anchor) and both process sections resolve to the SAME
+    # value. Parse into the real semantic model (anchors resolved) and assert meaning,
+    # then feed the watcher value through the actual sizing logic.
+    import yaml
+    path = os.path.join(os.path.dirname(HERE), "params.yaml")
+    with open(path) as f:
+        doc = yaml.safe_load(f)
+    node = doc["human_gate_driver"]["ros__parameters"]
+    watcher = doc["human_gate_backstop_watcher"]["ros__parameters"]
+    assert node["stop_strategy"] == watcher["stop_strategy"]
+    assert node["pendant_freeze_confirm_s"] == watcher["pendant_freeze_confirm_s"]
+    # the one value actually sizes the watcher's enforced deadline under pendant_pause.
+    p = WatcherParams(stop_effect_deadline_s=watcher["stop_effect_deadline_s"],
+                      pendant_freeze_confirm_s=watcher["pendant_freeze_confirm_s"],
+                      stop_strategy=STRAT_PENDANT_PAUSE)
+    assert p.effective_stop_effect_deadline_s == watcher["pendant_freeze_confirm_s"]
 
 
 def _run_all():

@@ -46,7 +46,9 @@ human_gate_driver:
     #                   cell's headless bring-up — pause is rejected there.
     # The slider stays the SLOW lever and the goal-cancel backstop stays the
     # independent net in BOTH strategies.
-    stop_strategy: "cancel"
+    # Anchored so the SAME value configures the independent watcher below (a YAML
+    # alias, not a second number that can silently drift out of step with this one).
+    stop_strategy: &stop_strategy "cancel"
     # pendant_pause only: refuse to RESUME (play) once the pause has lasted longer than
     # this — the frozen plan is treated as stale and the resume becomes a fresh plan
     # (cancel). Provisional; set at/below the pause duration measured safe in sim
@@ -57,10 +59,11 @@ human_gate_driver:
     # arm is not confirmed stopped within backstop_deadline_s; in pendant mode that
     # deadline is overridden to THIS value so a pause is not cancelled before it
     # freezes. It MUST exceed the measured freeze time; the backstop still fires if the
-    # pause has not effected a stop by then. The independent watcher's
-    # stop_effect_deadline_s (below) MUST be widened to match, or the watcher cancels
-    # the pause instead. Both are re-measured on the real arm (LIVE_TEST.md).
-    pendant_freeze_confirm_s: 2.5
+    # pause has not effected a stop by then. The independent watcher (below) shares this
+    # SAME anchored value and sizes its own stop-effect deadline from it under
+    # pendant_pause, so the two processes cannot drift. Both are re-measured on the real
+    # arm (LIVE_TEST.md).
+    pendant_freeze_confirm_s: &pendant_freeze_confirm_s 2.5
 
 human_gate_backstop_watcher:
   ros__parameters:
@@ -71,12 +74,20 @@ human_gate_backstop_watcher:
     # case and the watcher is the independent net, not a racing duplicate.
     state_heartbeat_timeout_s: 0.5
     gate_heartbeat_timeout_s: 0.5
+    # The watcher runs the SAME STOP strategy as the gate, expressed ONCE above via the
+    # anchor (change it in one place and both processes move together). The watcher also
+    # cross-checks this against the strategy the gate ANNOUNCES on /human_gate/decision
+    # at runtime and, on any mismatch, reports it loudly and repeatedly (log +
+    # /human_gate/watcher_status) while STILL cancelling at its own deadline.
+    stop_strategy: *stop_strategy
+    pendant_freeze_confirm_s: *pendant_freeze_confirm_s
     # After a STOP is demanded, the applied scaling must fall below the threshold
     # within this deadline, else the watcher cancels (the STOP did not take effect).
-    # DEFAULT 0.7 s suits the `cancel` strategy (slider ~50 ms). For `pendant_pause`,
-    # the pause freezes over ~1.8 s, so this MUST be widened (e.g. 3.0 s) to match the
-    # gate's pendant_freeze_confirm_s — otherwise the watcher cancels every pause
-    # before it freezes (PENDANT_PAUSE_FINDING.md; set via the node's launch param).
+    # DEFAULT 0.7 s suits the `cancel` strategy (slider ~50 ms). Under `pendant_pause`
+    # the pause freezes over ~1.8 s, so the EFFECTIVE deadline is auto-sized to
+    # max(this, pendant_freeze_confirm_s) — no separate number to hand-tune (that is the
+    # coupling fix; previously stop_effect_deadline_s had to be raised by hand and could
+    # be forgotten). PENDANT_PAUSE_FINDING.md.
     stop_effect_deadline_s: 0.7
     stop_scaling_threshold: 0.05
     startup_grace_s: 3.0

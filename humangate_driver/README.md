@@ -54,6 +54,18 @@ lever and the goal-cancel backstop stays the independent net in BOTH:
   on a foreign play. Do NOT select it on the cell's headless bring-up (pause is
   rejected there).
 
+A pendant pause freezes over ~1.8 s (far slower than the slider), so BOTH the gate's
+STOP→BACKSTOP deadline and the independent watcher's stop-effect deadline must outlast
+it. A SINGLE knob, `pendant_freeze_confirm_s`, sizes both: `params.yaml` expresses it
+(and `stop_strategy`) once via a YAML anchor shared by both process sections, and the
+watcher — given the same `stop_strategy` — auto-sizes its effective deadline to
+`max(stop_effect_deadline_s, pendant_freeze_confirm_s)`. The watcher stays a fully
+independent process (its own timer and its own camera-state heartbeat); as a runtime
+guard it also cross-checks the strategy the gate ANNOUNCES on `/human_gate/decision`
+against its own configured one, and on any mismatch reports it loudly and repeatedly
+(log + `/human_gate/watcher_status`) while STILL cancelling at its own deadline — the arm
+always ends stopped.
+
 ## Modules
 
 | File | Role |
@@ -65,7 +77,7 @@ lever and the goal-cancel backstop stays the independent net in BOTH:
 | `driver_port.py` | `DriverCommandPort` (primary + backstop + fail-to-zero + per-tick `apply` dispatch to the STOP strategy) and `DriverFeedbackFromTopics` (STOP confirmed only when scaling ~0). |
 | `stop_strategy.py` | PURE: the selectable STOP strategy — `CancelHoldStrategy` (default) and `PendantPauseStrategy` (dashboard pause/play, resume window, re-pause on foreign play). |
 | `gate_driver_node.py` | armed gate node: interlock -> HumanGate core -> DriverCommandPort (+ DashboardClient when `stop_strategy=pendant_pause`). |
-| `backstop_watcher_node.py` | the INDEPENDENT watcher process (own timer, own state heartbeat). |
+| `backstop_watcher_node.py` | the INDEPENDENT watcher process (own timer, own state heartbeat); publishes `/human_gate/watcher_status` and cross-checks the gate's announced `stop_strategy`. |
 | `params.yaml` | driver/interlock params (decision thresholds still live in `../humangate/gate_params.yaml`). |
 | `sim/` | the end-to-end proofs + scripted states + analyzer (below). |
 | `tests/` | offline unit tests for the interlock, sole-writer and watcher core. |

@@ -101,11 +101,21 @@ far slower than the slider's ~50 ms. Both the gate core's STOP→BACKSTOP fall-t
 scaling not ~0" rule (`stop_effect_deadline_s`, default 0.7 s) are tuned for the fast
 slider — so on an actively-moving goal they would cancel the pause **before it freezes**,
 defeating freeze-and-continue and turning every pendant STOP into a stop-then-replan.
-`sim/run_pendant_gate_e2e.sh` surfaced this. The fix: in pendant mode the gate node
-widens `backstop_deadline_s` to `pendant_freeze_confirm_s` (default 2.5 s) and the
-watcher's `stop_effect_deadline_s` is set to match (3.0 s) — both must EXCEED the
-measured freeze time, and the backstop still fires if the pause has not effected a stop
-by then. **Consequence:** a pendant-pause STOP has a ~1.8 s stopping time, so the STOP
+`sim/run_pendant_gate_e2e.sh` surfaced this. The fix: a SINGLE knob,
+`pendant_freeze_confirm_s` (default 2.5 s), sizes BOTH deadlines. In pendant mode the
+gate node widens its own `backstop_deadline_s` to it, and the independent watcher —
+given the same `stop_strategy: pendant_pause` — sizes its own effective stop-effect
+deadline to `max(stop_effect_deadline_s, pendant_freeze_confirm_s)` from it. `params.yaml`
+expresses the value once (a YAML anchor shared by both process sections), so the two can
+no longer drift; earlier the watcher's `stop_effect_deadline_s` had to be raised by hand
+(and could be forgotten, silently reverting pendant_pause to cancel-and-replan). Both
+deadlines must EXCEED the measured freeze time, and the backstop still fires if the pause
+has not effected a stop by then. As a runtime backstop against a half-applied config, the
+watcher also cross-checks the strategy the gate ANNOUNCES on `/human_gate/decision`
+against its own; on any mismatch (e.g. gate pendant_pause, watcher left on cancel) it
+reports the misconfiguration loudly and repeatedly (log + `/human_gate/watcher_status`)
+while STILL cancelling at its own deadline — the arm always ends stopped, never silently
+mis-timed. **Consequence:** a pendant-pause STOP has a ~1.8 s stopping time, so the STOP
 ring must be sized for it (report §3 Tr/Ts budget); re-measure the real freeze time and
 re-derive the deadlines on the real arm (`LIVE_TEST.md`). This is a genuine trade: the
 pause gives a smooth full stop + same-trajectory resume, at a slower stop than the
