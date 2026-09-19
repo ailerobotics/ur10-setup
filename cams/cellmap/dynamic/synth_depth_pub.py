@@ -28,7 +28,6 @@ import json
 import os
 import sys
 
-import numpy as np
 import rclpy
 from geometry_msgs.msg import TransformStamped
 from rclpy.node import Node

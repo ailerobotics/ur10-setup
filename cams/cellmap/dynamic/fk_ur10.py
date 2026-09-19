@@ -12,7 +12,7 @@ FK only — this never commands anything.
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-from typing import Dict, List, Sequence
+from typing import List, Sequence
 
 import numpy as np
 

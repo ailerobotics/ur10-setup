@@ -21,7 +21,6 @@ import sys
 
 import rclpy
 from geometry_msgs.msg import TransformStamped
-from rclpy.node import Node
 from tf2_ros import StaticTransformBroadcaster
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

@@ -227,7 +227,6 @@ def main():
     mn = [float(mid[i] - a.box_half) for i in range(3)]
     mx = [float(mid[i] + a.box_half) for i in range(3)]
     n.set_obstacle("routebox", True, mn, mx)
-    t_place = time.monotonic()
     time.sleep(a.integrate_wait)
     for _ in range(10):
         rclpy.spin_once(n, timeout_sec=0.05)

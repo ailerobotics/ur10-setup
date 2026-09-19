@@ -29,7 +29,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 
 # Reuse the merged gate's action vocabulary as the single source of truth.
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
