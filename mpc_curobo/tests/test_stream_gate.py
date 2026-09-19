@@ -18,7 +18,7 @@ PKG = os.path.dirname(HERE)
 REPO = os.path.dirname(PKG)
 sys.path.insert(0, PKG)
 
-from robot.joint_windows import JOINT_ORDER, load_measured_windows  # noqa: E402
+from robot.joint_windows import load_measured_windows  # noqa: E402
 from ros_bridge.stream_gate import (  # noqa: E402
     BACKSTOP,
     FORWARD,

@@ -8,7 +8,6 @@ stream leaves the arm stopped. SIM ONLY — opens no cameras, commands nothing.
 import argparse
 import json
 import os
-import sys
 import time
 
 import rclpy

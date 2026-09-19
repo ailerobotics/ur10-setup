@@ -149,7 +149,7 @@ def main():
     args = ap.parse_args()
 
     # independent joint-window guard (recomputed from the measured YAML)
-    from robot.joint_windows import JOINT_ORDER, load_measured_windows
+    from robot.joint_windows import load_measured_windows
     windows = load_measured_windows(args.limits)
 
     world = (cell_world.world_with_person() if args.scenario in ("person", "blocked")

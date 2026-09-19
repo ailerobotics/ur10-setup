@@ -23,7 +23,6 @@ SAME robot body, not a cuRobo default.
 from __future__ import annotations
 
 import argparse
-import math
 
 import yaml
 

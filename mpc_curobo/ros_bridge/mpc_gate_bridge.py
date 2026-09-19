@@ -32,9 +32,7 @@ cuRobo MPC (``--command-source curobo``, imports curobo lazily).
 from __future__ import annotations
 
 import argparse
-import ipaddress
 import json
-import math
 import os
 import subprocess
 import sys

@@ -12,7 +12,6 @@ config YAML schema — so make_curobo_robot.py and cell_world.py target the real
 schema, not a guess.
 """
 import inspect
-import json
 import sys
 
 
