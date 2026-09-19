@@ -129,6 +129,43 @@ See the end-to-end run logs under `mock/` and `ursim/` and the summary printed b
   reported there — this is exactly report residual risk R3 and the reason the
   goal-cancel backstop is not optional.
 
+## Can "pause the robot program" be the STOP (freeze-and-continue)? — investigated, NO
+
+The captain asked whether the gate's STOP could **freeze the planned motion in
+place and later continue that same motion** rather than stop-then-replan, the
+natural candidate being to **pause/resume the robot program** via the driver's
+dashboard. This was investigated on URSim CB3 3.15.8 with the driver launched
+**headless** (as this cell runs it — `ur-bringup.sh`: `headless_mode:=true`),
+repeatable via `humangate_driver/sim/investigate_pause_ursim.sh` (domain 81), and
+the answer is **no true freeze-and-continue exists on this controller**:
+
+- **Slider zero (source + measurement).** `set_speed_slider`
+  (`ur_msgs/SetSpeedSliderFraction`) accepts `[0.0, 1.0]` — 0.0 is a valid value,
+  the service does NOT reject below a minimum (installed .srv doc; `rtde_writer.h
+  sendSpeedSlider`). The ~10 % floor is applied DOWNSTREAM by PolyScope, so the
+  smallest accepted value (0.0) still leaves the arm creeping at ~10 % scaling.
+- **Dashboard pause/play (headless).** Both are **rejected by the robot**
+  ("Failed to execute: pause" / "Failed to execute: play"): in headless mode there
+  is no dashboard-loaded program (`loaded_program=""`, `program_state=STOPPED`); the
+  motion runs from the injected external-control script (`program_running=true`),
+  which the dashboard verbs cannot act on. The arm never froze (pan advanced 0.47 rad
+  through the "pause"), the FollowJointTrajectory goal was unaffected and completed
+  successfully, and — unlike dashboard `stop` — pause did NOT drop the driver
+  connection (it is a no-op-that-errors). A gate trusting the pause reply would fail
+  *open*, which is exactly why it is not adopted.
+- **Other mechanisms.** Dashboard `stop` and goal-cancel both fully stop but are
+  terminal (need a fresh plan); MoveIt stop == goal-cancel; cuMotion is plan-time
+  only. Nothing gives full-stop AND same-goal continue.
+
+**Decision (per the task's decision rule): the stop path is UNCHANGED.** STOP stays
+the goal-cancel backstop (a resume after STOP is a fresh plan-gate-execute); SLOW
+stays the speed slider (graded, and a raise above the floor continues the same
+trajectory — the only freeze-and-continue behaviour that works, but never a full
+stop). Full measurements, root cause, per-candidate failure analysis, and the
+regression guard are in `humangate_driver/PAUSE_RESUME_FINDING.md`
+(analyzer + guard: `sim/assert_pause_investigation.py`, offline-tested in
+`tests/test_pause_investigation.py`).
+
 ## What is NOT done here (later phases)
 
 - No real-robot motion, no real-robot arming (Phase 4, owner present — see

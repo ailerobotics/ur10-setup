@@ -67,6 +67,7 @@ cd humangate_driver
 python3 tests/test_arming_interlock.py
 python3 tests/test_sole_writer.py
 python3 tests/test_watcher_core.py
+python3 tests/test_pause_investigation.py   # analyzer + regression guard for the pause finding
 # or: pytest -q tests
 ```
 
@@ -90,6 +91,12 @@ bash sim/run_ursim_e2e.sh
 
 # slider characterisation (what SLOW / STOP do to a moving arm on CB3):
 bash sim/measure_slider_ursim.sh   # -> data/human-gate-sim-v1/ursim/slider_measurement.txt
+
+# (c) can "pause the robot program" freeze-and-continue the SAME motion? Launches
+#     URSim + the driver HEADLESS (as this cell runs it) and probes dashboard
+#     pause/play against a running scaled-JTC trajectory. Self-asserts the finding.
+#     Runs on ROS_DOMAIN_ID=81 (the pause-investigation task's isolated domain).
+bash sim/investigate_pause_ursim.sh   # -> data/human-gate-sim-v1/ursim-pause/
 ```
 
 `sim/assert_e2e.py` analyses the run logs and prints PASS/FAIL plus the
@@ -99,5 +106,8 @@ published in the REAL camera wire format (`../humangate/state_adapter.build_stat
 ## Decisions + findings
 
 `../data/human-gate-sim-v1/decision.md` (design decisions, the adapter/real-message
-mapping, the interlock rationale) and `SLIDER_ZERO_FINDING.md` (whether slider zero
-fully halts on CB3, and why the goal-cancel backstop is not optional).
+mapping, the interlock rationale), `SLIDER_ZERO_FINDING.md` (whether slider zero
+fully halts on CB3, and why the goal-cancel backstop is not optional), and
+`PAUSE_RESUME_FINDING.md` (whether "pause the robot program" can freeze-and-continue
+the SAME motion — measured NO on headless CB3, so the STOP stays the goal-cancel
+backstop / stop-then-replan).

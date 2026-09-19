@@ -1,0 +1,42 @@
+RESULT {"dashboard_before_motion": {"program_state": "STOPPED", "loaded_program": "", "program_running": true}, "goal_accepted": true, "dashboard_during_motion": {"program_state": "STOPPED", "loaded_program": "", "program_running": true}, "speed_before_pause": 0.05937, "clearly_moving_before_pause": true, "pan_at_pause": -1.28529, "scaling_before_pause": 100.0, "pause_call": {"ok": false, "msg": "Expected: Pausing program, but received: Failed to execute: pause"}, "froze_after_pause": false, "time_to_freeze_s": null, "goal_aborted_by_pause": false, "pan_drift_during_pause": 0.47153, "joint_states_flowing_during_pause": true, "dashboard_during_pause": {"program_state": "STOPPED", "loaded_program": "", "program_running": true}, "goal_done_during_pause": false, "play_call": {"ok": false, "msg": "Expected: Starting program, but received: Failed to execute: play"}, "speed_after_play": 0.05883, "pan_advanced_since_pause": 0.93694, "final_goal_result_code": 0, "final_goal_succeeded": true, "pause_executed": false, "play_executed": false, "true_freeze_and_continue": false}
+[investigate_pause] --- driver.log tail ---
+[spawner-8] [INFO] [1789821238.371387670] [spawner_joint_state_broadcaster]: Loaded tcp_pose_broadcaster
+[ros2_control_node-1] [INFO] [1789821238.371711933] [controller_manager]: Configuring controller: 'tcp_pose_broadcaster'
+[ros2_control_node-1] [INFO] [1789821238.378617141] [controller_manager]: Activating controllers: [ tcp_pose_broadcaster ]
+[ros2_control_node-1] [INFO] [1789821238.385910644] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789821238.395177187] [spawner_joint_state_broadcaster]: Configured and activated tcp_pose_broadcaster
+[ros2_control_node-1] [INFO] [1789821238.396149786] [controller_manager]: Loading controller : 'ur_configuration_controller' of type 'ur_controllers/URConfigurationController'
+[ros2_control_node-1] [INFO] [1789821238.396170355] [controller_manager]: Loading controller 'ur_configuration_controller'
+[ros2_control_node-1] [INFO] [1789821238.396620196] [controller_manager]: Controller 'ur_configuration_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_5gq8tbzt 
+[spawner-8] [INFO] [1789821238.419130033] [spawner_joint_state_broadcaster]: Loaded ur_configuration_controller
+[ros2_control_node-1] [INFO] [1789821238.419461670] [controller_manager]: Configuring controller: 'ur_configuration_controller'
+[ros2_control_node-1] [INFO] [1789821238.426747218] [controller_manager]: Activating controllers: [ ur_configuration_controller ]
+[ros2_control_node-1] [INFO] [1789821238.433928548] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789821238.443109540] [spawner_joint_state_broadcaster]: Configured and activated ur_configuration_controller
+[ros2_control_node-1] [INFO] [1789821238.444184162] [controller_manager]: Loading controller : 'friction_model_controller' of type 'ur_controllers/FrictionModelController'
+[ros2_control_node-1] [INFO] [1789821238.444208268] [controller_manager]: Loading controller 'friction_model_controller'
+[ros2_control_node-1] [INFO] [1789821238.444593717] [controller_manager]: Controller 'friction_model_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_5gq8tbzt 
+[spawner-8] [INFO] [1789821238.467267054] [spawner_joint_state_broadcaster]: Loaded friction_model_controller
+[ros2_control_node-1] [INFO] [1789821238.467590966] [controller_manager]: Configuring controller: 'friction_model_controller'
+[ros2_control_node-1] [INFO] [1789821238.474753721] [controller_manager]: Activating controllers: [ friction_model_controller ]
+[ros2_control_node-1] [INFO] [1789821238.481906237] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789821238.491177049] [spawner_joint_state_broadcaster]: Configured and activated friction_model_controller
+[ros2_control_node-1] [INFO] [1789821238.492141683] [controller_manager]: Loading controller : 'scaled_joint_trajectory_controller' of type 'ur_controllers/ScaledJointTrajectoryController'
+[ros2_control_node-1] [INFO] [1789821238.492162843] [controller_manager]: Loading controller 'scaled_joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789821238.492592465] [controller_manager]: Controller 'scaled_joint_trajectory_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_5gq8tbzt 
+[ros2_control_node-1] [INFO] [1789821238.507328322] [scaled_joint_trajectory_controller]: Using scaling state from the hardware from interface speed_scaling/speed_scaling_factor.
+[spawner-8] [INFO] [1789821238.531039220] [spawner_joint_state_broadcaster]: Loaded scaled_joint_trajectory_controller
+[ros2_control_node-1] [INFO] [1789821238.531349036] [controller_manager]: Configuring controller: 'scaled_joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789821238.531522114] [scaled_joint_trajectory_controller]: No specific joint names are used for command interfaces. Using 'joints' parameter.
+[ros2_control_node-1] [INFO] [1789821238.531538254] [scaled_joint_trajectory_controller]: Command interfaces are [position] and state interfaces are [position velocity].
+[ros2_control_node-1] [INFO] [1789821238.531548544] [scaled_joint_trajectory_controller]: Using 'splines' interpolation method.
+[ros2_control_node-1] [INFO] [1789821238.533277343] [scaled_joint_trajectory_controller]: Action status changes will be monitored at 20.00 Hz.
+[ros2_control_node-1] [INFO] [1789821238.538316713] [scaled_joint_trajectory_controller]: Setting initial scaling factor to 1.000000
+[ros2_control_node-1] [INFO] [1789821238.538336130] [scaled_joint_trajectory_controller]: No scaling interface set. This controller will not read speed scaling from the hardware.
+[ros2_control_node-1] [INFO] [1789821238.546899834] [controller_manager]: Activating controllers: [ scaled_joint_trajectory_controller ]
+[ros2_control_node-1] [INFO] [1789821238.554089911] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789821238.563274970] [spawner_joint_state_broadcaster]: Configured and activated scaled_joint_trajectory_controller
+[INFO] [spawner-8]: process has finished cleanly [pid 3246689]
+[ros2_control_node-1] [INFO] [1789821244.210920638] [scaled_joint_trajectory_controller]: Received new action goal
+[ros2_control_node-1] [INFO] [1789821244.210985601] [scaled_joint_trajectory_controller]: Accepted new action goal
+[ros2_control_node-1] [INFO] [1789821284.217818555] [scaled_joint_trajectory_controller]: Goal reached, success!
