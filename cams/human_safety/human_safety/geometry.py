@@ -15,8 +15,6 @@ it in. All functions are deterministic and unit-tested offline.
 """
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 

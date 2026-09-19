@@ -10,7 +10,6 @@ from human_safety.json_util import (detection_from_dict, detection_to_dict,
                                     state_to_json)
 from human_safety.messages import Detection3D, Method
 from human_safety.replay import replay_file
-from human_safety.safety import SafetyEvaluator
 
 PARAMS = pathlib.Path(__file__).parents[1] / "params" / "human_safety.yaml"
 

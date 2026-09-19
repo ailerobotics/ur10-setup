@@ -10,8 +10,7 @@ from typing import List
 
 import numpy as np
 
-from .messages import (CameraHealth, Detection3D, Method, SafetyState, Track,
-                       Zone)
+from .messages import (CameraHealth, Detection3D, Method, SafetyState, Track)
 
 
 def _vec(a):

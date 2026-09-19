@@ -202,7 +202,7 @@ schema is stable and `schema_version`-tagged so a rename is a one-line change.
   "schema_version": 1,
   "frame_id": "base_link",
   "stamp": 1789811234.32,          // publication wall time
-  "evidence_stamp": 1789811234.13, // time of the FRESHEST fused evidence (gate uses THIS for staleness)
+  "evidence_stamp": 1789811234.13, // OLDEST positioned-detection stamp sizing the STOP ring (gate uses THIS for staleness); null when nobody is localised
   "heartbeat_seq": 412,            // monotonic; gate STOPs if it stalls
   "zone": "CLEAR|SLOW|STOP",
   "distance_status": "known|unknown|none",  // UNKNOWN is NOT 'far' (see below)
@@ -336,7 +336,7 @@ shared GPU); 3 detectors **~1.87 GB** GPU total; all cameras presence-only
   GPU / no ROS): geometry (depth + monocular lifting, transforms), association,
   tracker lifecycle, safety zones/hysteresis/dwell and every health rule, config,
   JSON round-trip, and a **replay regression** (`tests/data/synthetic_approach.jsonl`
-  — CLEAR→SLOW→STOP→dwell→CLEAR). 40 tests, ~0.4 s.
+  — CLEAR→SLOW→STOP→dwell→CLEAR). 49 tests, ~0.4 s.
 - **Detector check** on public sample images: `tools/detector_selfcheck.py`.
 - **Live plumbing check** on the real cameras: `tools/live_check.py`.
 - **Replay regression from a real recording:** `run_live.sh` writes a JSONL every

@@ -167,7 +167,7 @@ class FusionNode(Node):
         for i, (radius, rgba) in enumerate([
                 (p.reach_radius + p.slow_radius, (1.0, 0.8, 0.0, 0.6)),
                 (p.reach_radius + p.stop_radius, (1.0, 0.1, 0.1, 0.8))]):
-            arr.markers.append(self._ring(f"zone", i, radius, rgba))
+            arr.markers.append(self._ring("zone", i, radius, rgba))
         # Tracks as spheres + id text.
         for t in state.tracks:
             arr.markers.append(self._sphere(t))

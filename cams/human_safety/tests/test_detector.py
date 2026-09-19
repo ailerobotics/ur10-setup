@@ -22,7 +22,7 @@ def test_detection2d_center_and_foot():
 
 
 def test_keypoint_rcnn_on_blank_image_if_torch():
-    torch = pytest.importorskip("torch")
+    pytest.importorskip("torch")
     det = build_detector("keypoint_rcnn", device="cpu")
     assert isinstance(det, PersonDetector)
     assert "BSD-3-Clause" in det.license          # licence recorded
