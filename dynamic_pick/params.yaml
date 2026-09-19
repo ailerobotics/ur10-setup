@@ -1,0 +1,44 @@
+# dynamic_pick — segmented re-plan/preempt pick controller parameters
+# (human-dynamic-plan-s1 report §10 Phase A). SIMULATION ONLY.
+#
+# The MOTION-SAFETY thresholds do NOT live here — the human-safety gate owns them
+# in humangate/gate_params.yaml (zones, dwell, heartbeat, speed fractions) and the
+# gate is unchanged. This file holds only the pick controller's own parameters:
+# tracking hygiene, phase geometry, and the re-plan cadence. All are provisional
+# and simulation-oriented; the report marks the phase box and grasp radius as
+# owner-tuned per cell (tune the box/deadband tighter, never looser, without
+# re-measuring).
+
+dynamic_pick_controller:
+  ros__parameters:
+    # --- planner --- #
+    # "analytic"  : GPU-free joint-space straight line at the 5% cap (mock/URSim).
+    # "cumotion"  : collision-aware, through the nvblox ESDF, via the task's OWN
+    #               cuMotion container on domain 83 (sim/start_cumotion_task.sh).
+    planner: "analytic"
+    cumotion_action: "/cumotion/move_group"
+    # The MEASURED joint windows — enforced on EVERY leg exactly as the cell's
+    # executor does (execute_plan.py). NEVER loosen these.
+    limits: "cumotion/measured_joint_limits.yaml"
+    fjt_action: "/scaled_joint_trajectory_controller/follow_joint_trajectory"
+
+    # --- I/O --- #
+    target_topic: "/dynamic_pick/target"       # pick target, PointStamped, base frame
+    decision_topic: "/human_gate/decision"     # the gate's published decision (the shim reads this)
+
+    # --- control cadence --- #
+    control_rate_hz: 15.0
+    # No benefit to re-planning faster than the target estimate settles or the 5%
+    # cap can act on (report §3). Preemptions are rate-limited to this interval.
+    min_replan_interval_s: 0.5
+    plan_time_s: 5.0                            # allowed_planning_time handed to cuMotion
+
+    # --- tracking hygiene (report §3; reuse of cams/human_safety/tracker.py shape) --- #
+    # The committed goal moves only when the smoothed estimate shifts beyond this
+    # deadband AND stays shifted for n_sustain fresh updates (hysteresis), so the
+    # arm chases the target, not the noise (bench jitter 0.1-0.4 cm).
+    deadband_m: 0.03
+    n_sustain: 3
+
+    # (phase geometry — near-approach box, grasp radius — lives in pick_phases.py
+    #  PhaseParams defaults; expose here if a cell needs to tune them.)
