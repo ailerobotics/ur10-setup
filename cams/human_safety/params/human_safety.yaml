@@ -67,11 +67,14 @@ cameras:
 
 safety:
   reach_radius: 1.30      # UR10 reach; envelope = cylinder of this radius about base z
-  stop_radius: 0.50       # envelope distance below which -> STOP  (PROVISIONAL)
-  slow_radius: 1.50       # envelope distance below which -> SLOW  (PROVISIONAL)
-  hysteresis: 0.25        # extra clearance to de-escalate (anti-chatter)
+  stop_radius: 0.70       # STOP within reach+this = 2.0 m of base (human-safety-s1 §3, PROVISIONAL)
+  slow_radius: 2.00       # SLOW ring (any person present also forces >= SLOW)  PROVISIONAL
+  hysteresis: 0.30        # extra clearance to de-escalate (anti-chatter)
   min_clear_dwell: 2.0    # must be clear this long before leaving STOP
-  frame_age_budget: 0.5   # image-stamp-vs-clock age before a camera is "stale"
+  frame_age_budget: 0.5   # frame age over this but still answering -> SLOW
+  detector_stall_timeout: 1.5   # no fresh frame this long / no status -> STOP
+  reaction_time_budget: 0.7     # img->state latency over this -> STOP (fault 5)
   lost_close_margin: 0.30
   lost_hold_time: 3.0     # hold STOP this long after losing a close track
   presence_floor_slow: true
+  slow_on_any_person: true   # small cell: any confirmed person present -> >= SLOW

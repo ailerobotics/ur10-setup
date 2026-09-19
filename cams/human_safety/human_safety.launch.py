@@ -75,7 +75,8 @@ def _setup(context, *args, **kwargs):
         procs.append(ExecuteProcess(cmd=cmd, output="screen",
                                     name=f"detector_{role}"))
 
-    fusion_cmd = [sys.executable, str(NODES / "fusion_node.py"), "--config", config]
+    fusion_cmd = [sys.executable, str(NODES / "fusion_node.py"),
+                  "--config", config, "--cams", ",".join(cams)]
     if record:
         fusion_cmd += ["--record", record]
     procs.append(ExecuteProcess(cmd=fusion_cmd, output="screen", name="fusion"))

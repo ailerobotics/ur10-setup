@@ -86,29 +86,57 @@ def test_dwell_timer_resets_if_person_returns():
 
 
 # --- health rules (fail toward STOP) --------------------------------------- #
-def test_missing_camera_forces_non_clear():
+def test_missing_camera_forces_stop():
+    # A detector whose status stopped is not answering -> STOP (fail toward stop).
     ev = SafetyEvaluator(params())
     h = [CameraHealth(camera="shelf", present_in_graph=False)]
     s = ev.evaluate([], h, now=0.0)
-    assert s.zone == Zone.SLOW
-    assert any("missing" in r for r in s.reasons)
+    assert s.zone == Zone.STOP
+    assert any("not answering" in r for r in s.reasons)
 
 
-def test_stale_frame_forces_non_clear():
+def test_slow_but_answering_detector_forces_slow_not_stop():
+    # Frame age over the freshness budget (0.5) but under the stall timeout
+    # (1.5) and still answering -> SLOW, not STOP.
     ev = SafetyEvaluator(params())
-    h = [CameraHealth(camera="shelf", present_in_graph=True, frame_age=1.2,
+    h = [CameraHealth(camera="shelf", present_in_graph=True, frame_age=1.0,
                       detector_alive=True, positioned=True, fresh=False)]
     s = ev.evaluate([], h, now=0.0)
     assert s.zone == Zone.SLOW
-    assert any("stale" in r for r in s.reasons)
+    assert any("still answering" in r for r in s.reasons)
 
 
-def test_dead_detector_forces_non_clear():
+def test_stalled_detector_forces_stop():
+    # No fresh frame for longer than the stall timeout -> detector stalled -> STOP.
+    ev = SafetyEvaluator(params())
+    h = [CameraHealth(camera="shelf", present_in_graph=True, frame_age=3.0,
+                      detector_alive=True, positioned=True, fresh=False)]
+    s = ev.evaluate([], h, now=0.0)
+    assert s.zone == Zone.STOP
+    assert any("stalled" in r for r in s.reasons)
+
+
+def test_dead_detector_forces_stop():
     ev = SafetyEvaluator(params())
     h = [CameraHealth(camera="shelf", present_in_graph=True, frame_age=0.05,
                       detector_alive=False, positioned=True, fresh=True)]
     s = ev.evaluate([], h, now=0.0)
-    assert s.zone == Zone.SLOW
+    assert s.zone == Zone.STOP
+
+
+def test_latency_over_reaction_budget_forces_stop():
+    ev = SafetyEvaluator(params())   # reaction_time_budget default 0.7
+    # A localised person far away (SLOW by distance) but the pipeline latency
+    # blew the reaction budget -> STOP (the ring math is no longer valid).
+    s = ev.evaluate([track(1, (5.0, 0.0))], healthy(["s"]), now=0.0, latency=1.2)
+    assert s.zone == Zone.STOP
+    assert any("latency" in r for r in s.reasons)
+
+
+def test_latency_within_budget_does_not_force_stop():
+    ev = SafetyEvaluator(params())
+    s = ev.evaluate([], healthy(["s"]), now=0.0, latency=0.2)
+    assert s.zone == Zone.CLEAR
 
 
 def test_presence_only_person_forces_non_clear():

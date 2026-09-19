@@ -42,7 +42,7 @@ from human_safety.tracker import MultiTargetTracker  # noqa: E402
 
 
 class FusionNode(Node):
-    def __init__(self, cfg_path, record_path=None):
+    def __init__(self, cfg_path, record_path=None, cams=None):
         super().__init__("human_safety_fusion")
         self.cfg = load_config(cfg_path)
         self._record = open(record_path, "w") if record_path else None
@@ -56,8 +56,12 @@ class FusionNode(Node):
         self._dets = {}
         # role -> latest (recv_wall, status dict)
         self._status = {}
-        self._roles = [c.role for c in self.cfg.cameras]
-        self._status_timeout = 2.0   # no status for this long -> camera missing
+        # Expected cameras = the ones actually being brought up (launch cams:=),
+        # intersected with the config. A configured-but-not-launched camera must
+        # NOT be treated as a crashed detector (permanent STOP).
+        cfg_roles = [c.role for c in self.cfg.cameras]
+        self._roles = ([r for r in cams if r in cfg_roles] if cams else cfg_roles)
+        self._status_timeout = 2.0   # no status for this long -> detector down
 
         for role in self._roles:
             self.create_subscription(
@@ -115,9 +119,13 @@ class FusionNode(Node):
 
         # Freshest fused evidence (max), so the 6 fps wrist never drags the state
         # stamp; per-camera staleness is reported separately (report §7 #2).
+        evidence_stamp = max(source_stamps) if source_stamps else None
+        # End-to-end image->state latency (fault 5). Only meaningful once someone
+        # is being localised (evidence has a real base-frame stamp).
+        latency = (now_wall - evidence_stamp) if evidence_stamp is not None else None
         state = self.evaluator.evaluate(
             tracks, health, now_wall, any_presence=any_presence,
-            source_stamp=(max(source_stamps) if source_stamps else None))
+            source_stamp=evidence_stamp, latency=latency)
         self._heartbeat += 1
         state.heartbeat_seq = self._heartbeat
 
@@ -227,9 +235,15 @@ def main(argv=None):
     ap.add_argument("--config", required=True)
     ap.add_argument("--record", default=None,
                     help="write a replayable JSONL log of every fusion cycle")
+    ap.add_argument("--cams", default=None,
+                    help="comma list of cameras actually launched; a "
+                         "configured-but-not-launched camera is not expected "
+                         "(so it never forces a spurious STOP)")
     args, ros_args = ap.parse_known_args(argv)
+    cams = ([c.strip() for c in args.cams.split(",") if c.strip()]
+            if args.cams else None)
     rclpy.init(args=ros_args)
-    node = FusionNode(args.config, record_path=args.record)
+    node = FusionNode(args.config, record_path=args.record, cams=cams)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

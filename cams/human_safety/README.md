@@ -239,30 +239,39 @@ separation distances — a certified analysis would tighten them):
 - **Hysteresis 0.30 m**: leave STOP only after clearing the ring by +0.30 m.
 - **Dwell ≥ 2.0 s** of continuous healthy CLEAR before leaving STOP (anti-chatter).
 
-**Health is part of the judgement (fail toward STOP):** a stale frame (image
-stamp vs clock beyond `frame_age_budget`), a missing camera, a detector that
-stopped answering, an unlocalised visible person → **non-CLEAR (SLOW floor)**; a
-confirmed track **lost while close** to the robot → **STOP held** for
-`lost_hold_time`. Every rule is unit-tested (`tests/test_safety.py`). Tune radii
-and budgets in `params/human_safety.yaml`; they are parameters.
+**Health is part of the judgement (fail toward STOP):**
+
+| Condition | Zone floor |
+|---|---|
+| Detector **stopped answering** — status gone, or no fresh frame for `detector_stall_timeout` (1.5 s), or camera blind | **STOP** (a stalled/crashed detector cannot see a person who is there) |
+| Detector **slow but still answering** — frame age over `frame_age_budget` (0.5 s) but under the stall timeout | **SLOW** |
+| End-to-end img→state **latency over `reaction_time_budget`** (0.7 s) — the STOP-ring sizing is no longer valid | **STOP** |
+| An **unlocalised visible person** (presence-only camera) | **SLOW** |
+| A confirmed track **lost while close** to the robot | **STOP** held for `lost_hold_time` |
+
+The freshness/stall/latency thresholds distinguish a *lagging* detector (SLOW)
+from one that has *stopped* (STOP). Every rule is unit-tested
+(`tests/test_safety.py`). Tune radii and budgets in `params/human_safety.yaml`;
+they are parameters. (Expected cameras = the ones actually launched; a
+configured-but-not-launched camera is not treated as a crashed detector.)
 
 ---
 
-## Differences from `human-safety-s1` (named per the steering note)
+## Difference from `human-safety-s1` (named per the steering note)
 
-1. **State transport.** The report §7 prefers a **custom ROS message**; this
-   package ships a **versioned JSON schema on `std_msgs/String`** because the repo
-   has no colcon build and the offline test path must not require one. The report
-   itself endorses a thin gate-side adapter, which absorbs the difference.
-2. **Detector-stall severity.** Report §5 #3 would escalate a *stalled detector*
-   to **STOP**; the build brief says such health faults force **non-CLEAR**. We
-   ship the brief's rule (a per-camera fault → **SLOW** floor; STOP is reserved
-   for *track-lost-while-close*), configurable in `params`. A future revision may
-   raise a whole-perception stall to STOP.
+- **State transport.** The report §7 prefers a **custom ROS message**; this
+  package ships a **versioned JSON schema on `std_msgs/String`** because the repo
+  has no colcon build and the offline test path must not require one. The report
+  itself endorses a thin gate-side adapter, which absorbs the difference (this is
+  explicitly accepted for this stage).
 
-Everything else (zone defaults, distance-unknown honesty, heartbeat, ≥10 Hz,
-tracks on a separate topic, both D415s presence-only, and **not** writing the
-fixed-camera calibrator) follows the report.
+Everything else follows the report: zone defaults (STOP within 2.0 m of base,
++0.30 m hysteresis, ≥2.0 s dwell), distance-unknown honesty, heartbeat, ≥10 Hz,
+tracks on a separate topic, both D415s + the wrist presence-only, a
+stalled/crashed detector → **STOP** (§5 fault 3) with SLOW kept for a
+slow-but-answering detector and STOP once latency blows the reaction budget
+(§5 fault 5), and **not** writing the fixed-camera calibrator (a separate task
+owns it).
 
 ---
 

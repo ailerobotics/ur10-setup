@@ -49,9 +49,12 @@ def replay_records(records: List[dict], params: SafetyParams | None = None,
         health = [_health_from_dict(h) for h in rec.get("health", [])]
         tracks, presence_cams = fusion.step(dets, now)
         any_presence = bool(rec.get("any_presence", False) or presence_cams)
-        source_stamp = min((d.stamp for d in dets), default=None)
+        # Match the live fusion node: freshest fused evidence (max) and the
+        # end-to-end latency, so a real recording reproduces fault-5 STOPs.
+        evidence_stamp = max((d.stamp for d in dets), default=None)
+        latency = (now - evidence_stamp) if evidence_stamp is not None else None
         state = ev.evaluate(tracks, health, now, any_presence=any_presence,
-                            source_stamp=source_stamp)
+                            source_stamp=evidence_stamp, latency=latency)
         out.append(state)
     return out
 

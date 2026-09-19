@@ -34,7 +34,16 @@ class SafetyParams:
     slow_radius: float = 2.00           # envelope distance below which -> SLOW (outer ring)
     hysteresis: float = 0.30            # extra clearance required to de-escalate
     min_clear_dwell: float = 2.0        # must be clear this long before leaving STOP
-    frame_age_budget: float = 0.5       # image-stamp-vs-clock age before "stale"
+    frame_age_budget: float = 0.5       # frame age beyond which a camera is "slow/lagging" -> SLOW
+    # A detector still ANSWERING but lagging (frame_age in (frame_age_budget,
+    # detector_stall_timeout]) -> SLOW; once it has produced no fresh frame for
+    # detector_stall_timeout, or its status stopped entirely, it has STOPPED
+    # answering -> STOP (human-safety-s1 §5 fault 3: a stalled/crashed detector
+    # cannot see a person who is there; fail toward STOP).
+    detector_stall_timeout: float = 1.5
+    # End-to-end image->state latency beyond which the STOP-ring sizing (Tr) is no
+    # longer valid -> STOP (human-safety-s1 §5 fault 5).
+    reaction_time_budget: float = 0.7
     lost_close_margin: float = 0.30     # a track within stop_radius+this is "close"
     lost_hold_time: float = 3.0         # hold STOP this long after losing a close track
     presence_floor_slow: bool = True    # an unlocalised visible person forces >= SLOW
@@ -56,7 +65,8 @@ class SafetyEvaluator:
     # ------------------------------------------------------------------ #
     def evaluate(self, tracks: List[Track], health: List[CameraHealth],
                  now: float, any_presence: bool = False,
-                 source_stamp: Optional[float] = None) -> SafetyState:
+                 source_stamp: Optional[float] = None,
+                 latency: Optional[float] = None) -> SafetyState:
         p = self.p
         reasons: List[str] = []
 
@@ -88,6 +98,14 @@ class SafetyEvaluator:
         floor, health_reasons = self._health_floor(
             health, now, any_presence, close_ids, current_ids)
         reasons.extend(health_reasons)
+
+        # Latency over the reaction-time budget invalidates the STOP-ring math
+        # (report §5 fault 5) -> STOP.
+        if latency is not None and latency > p.reaction_time_budget:
+            floor = _max_zone(floor, Zone.STOP)
+            reasons.append(
+                f"img->state latency {latency:.2f}s > reaction budget "
+                f"{p.reaction_time_budget:.2f}s -> STOP")
 
         candidate = _max_zone(dist_zone, floor)
         if nearest_id is not None:
@@ -155,18 +173,28 @@ class SafetyEvaluator:
         reasons = []
 
         for hc in health:
-            if not hc.present_in_graph:
-                floor = _max_zone(floor, Zone.SLOW)
-                reasons.append(f"camera '{hc.camera}' missing from graph -> SLOW")
+            # Detector STOPPED answering (status gone, or no fresh frame for
+            # detector_stall_timeout) -> STOP. A stalled/crashed detector cannot
+            # see a person who is there (report §5 fault 3; fail toward STOP).
+            if not hc.present_in_graph or not hc.detector_alive:
+                floor = _max_zone(floor, Zone.STOP)
+                reasons.append(
+                    f"camera '{hc.camera}' detector not answering (no status) "
+                    f"-> STOP")
                 continue
-            if not hc.detector_alive:
-                floor = _max_zone(floor, Zone.SLOW)
-                reasons.append(f"camera '{hc.camera}' detector not answering -> SLOW")
-            if not hc.fresh:
+            if hc.frame_age > p.detector_stall_timeout:
+                floor = _max_zone(floor, Zone.STOP)
+                reasons.append(
+                    f"camera '{hc.camera}' detector stalled (no frame for "
+                    f"{hc.frame_age:.2f}s > {p.detector_stall_timeout:.2f}s) "
+                    f"-> STOP")
+                continue
+            # Still answering but lagging beyond the freshness budget -> SLOW.
+            if hc.frame_age > p.frame_age_budget:
                 floor = _max_zone(floor, Zone.SLOW)
                 reasons.append(
-                    f"camera '{hc.camera}' frame stale ({hc.frame_age:.2f}s "
-                    f"> {p.frame_age_budget:.2f}s) -> SLOW")
+                    f"camera '{hc.camera}' slow ({hc.frame_age:.2f}s > "
+                    f"{p.frame_age_budget:.2f}s, still answering) -> SLOW")
 
         if any_presence and p.presence_floor_slow:
             floor = _max_zone(floor, Zone.SLOW)
