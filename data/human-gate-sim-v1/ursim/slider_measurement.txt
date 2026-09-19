@@ -1,0 +1,9 @@
+discovered: njoints=6 scaling=100.0
+goal accepted: True
+--- slider sweep during motion ---
+slider=1.0       scaling=  100.0  pan=-1.5876  moved=0.01314 rad/2.5s
+slider=0.5       scaling=   50.0  pan=-1.5678  moved=0.01748 rad/2.5s
+slider=0.1       scaling=   10.0  pan=-1.5627  moved=0.00427 rad/2.5s
+slider=0.0 (a)   scaling=   10.0  pan=-1.5577  moved=0.00451 rad/2.5s
+slider=0.0 (b)   scaling=   10.0  pan=-1.5527  moved=0.00494 rad/2.5s
+slider=1.0 back  scaling=  100.0  pan=-1.4821  moved=0.06426 rad/2.5s

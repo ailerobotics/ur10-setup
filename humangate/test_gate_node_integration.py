@@ -40,7 +40,7 @@ def _worker():
 
         sys.path.insert(0, HERE)
         import state_adapter as sa
-        from camera_state import CameraState, ZONE_CLEAR, ZONE_SLOW, ZONE_STOP
+        from camera_state import ZONE_CLEAR, ZONE_SLOW, ZONE_STOP
         from gate_node import GateNode, DECISION_TOPIC_DEFAULT
     except Exception as e:                            # noqa: BLE001
         print("WORKER_ROS_UNAVAILABLE " + repr(e))
@@ -64,9 +64,14 @@ def _worker():
             seen.append(json.loads(msg.data)["action"])
 
         def send(self, zone, dist, seq):
-            st = CameraState(stamp=time.time(), zone=zone,
-                             nearest_distance_m=dist, heartbeat_seq=seq)
-            self.pub.publish(String(data=sa.to_json(st)))
+            now = time.time()
+            known = dist is not None
+            data = sa.build_state_json(
+                zone, stamp=now, evidence_stamp=(now if known else None),
+                heartbeat_seq=seq,
+                distance_status=("known" if known else "none"),
+                nearest_distance_base=dist)
+            self.pub.publish(String(data=data))
 
     gate = GateNode()
     harness = Harness()

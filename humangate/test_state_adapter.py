@@ -2,10 +2,14 @@
 """
 Offline tests for the camera-side -> gate state adapter — NO ROS, NO robot.
 
-Asserts the adapter maps the report §7 fields onto CameraState, round-trips
-through the provisional JSON transport, normalises the "unknown distance"
-encodings, and rejects a message that violates the contract (so the node keeps
-the gate at STOP rather than acting on a malformed state).
+Asserts the adapter maps the REAL camera wire message
+(cams/human_safety json_util.state_to_json) onto CameraState: it uses the
+evidence stamp when a person is localised and the publication stamp otherwise,
+honours distance_status (unknown/none never become a distance), derives a single
+health_ok from the per-camera booleans, maps only the lost-close reason to a
+flag, refuses a wrong schema version and a malformed message, and round-trips
+through build_state_json (the exact wire shape the sim/integration publishers
+use).
 
 Run standalone:  python3 test_state_adapter.py
 Or under pytest: pytest test_state_adapter.py
@@ -19,7 +23,7 @@ sys.path.insert(0, HERE)
 
 import state_adapter as sa  # noqa: E402
 from camera_state import (  # noqa: E402
-    HEALTH_TRACK_LOST_CLOSE, ZONE_CLEAR, ZONE_SLOW, ZONE_STOP, CameraState)
+    HEALTH_TRACK_LOST_CLOSE, ZONE_CLEAR, ZONE_SLOW, ZONE_STOP)
 
 
 class _StringMsg:
@@ -29,51 +33,85 @@ class _StringMsg:
         self.data = data
 
 
-def test_from_dict_maps_all_fields():
-    d = {
-        sa.FIELD_STAMP: 12.5, sa.FIELD_ZONE: ZONE_STOP,
-        sa.FIELD_NEAREST_DISTANCE: 0.8, sa.FIELD_NEAREST_POINT: [0.1, 0.2, 0.3],
-        sa.FIELD_HEALTH_OK: True, sa.FIELD_HEALTH_FLAGS: [HEALTH_TRACK_LOST_CLOSE],
-        sa.FIELD_HEARTBEAT_SEQ: 7,
-        sa.FIELD_CAMERAS: {"wrist": "stale", "table": "fresh"},
-    }
-    s = sa.from_dict(d)
-    assert s.stamp == 12.5 and s.zone == ZONE_STOP
-    assert s.nearest_distance_m == 0.8 and s.nearest_point == (0.1, 0.2, 0.3)
-    assert HEALTH_TRACK_LOST_CLOSE in s.health_flags and s.heartbeat_seq == 7
-    assert dict(s.cameras) == {"wrist": "stale", "table": "fresh"}
+_FRESH_CAM = {"camera": "wrist", "status": "fresh", "present_in_graph": True,
+              "detector_alive": True, "fresh": True, "positioned": True}
+_STALE_CAM = {"camera": "table", "status": "stale", "present_in_graph": True,
+              "detector_alive": True, "fresh": False, "positioned": True}
 
 
-def test_unknown_distance_null_and_nan_both_become_none():
-    for enc in (None,):
-        s = sa.from_dict({sa.FIELD_STAMP: 1.0, sa.FIELD_ZONE: ZONE_SLOW,
-                          sa.FIELD_NEAREST_DISTANCE: enc})
-        assert s.nearest_distance_m is None and not s.distance_known
-    # NaN via the JSON transport
-    raw = json.dumps({sa.FIELD_STAMP: 1.0, sa.FIELD_ZONE: ZONE_SLOW,
-                      sa.FIELD_NEAREST_DISTANCE: float("nan")})
+def test_known_distance_uses_base_distance():
+    raw = sa.build_state_json(
+        ZONE_STOP, stamp=100.0, evidence_stamp=99.9, heartbeat_seq=7,
+        distance_status="known", nearest_distance_base=1.2, nearest_distance=0.4,
+        cameras=[_FRESH_CAM])
     s = sa.parse_string_msg(_StringMsg(raw))
-    assert s.nearest_distance_m is None
+    assert s.zone == ZONE_STOP
+    # localised -> ages against the evidence stamp, not the publication stamp
+    assert s.stamp == 99.9
+    # base-origin distance (matches the gate's stop_radius_m semantics)
+    assert s.nearest_distance_m == 1.2 and s.distance_known
+    assert s.heartbeat_seq == 7 and s.health_ok
 
 
-def test_string_msg_round_trip():
-    original = CameraState(stamp=3.0, zone=ZONE_SLOW, nearest_distance_m=2.1,
-                           nearest_point=(1.0, 2.0, 3.0), health_ok=True,
-                           health_flags=frozenset({"GPU_SLOW"}), heartbeat_seq=42,
-                           cameras=(("shelf", "absent"),))
-    s = sa.parse_string_msg(_StringMsg(sa.to_json(original)))
-    assert s.stamp == original.stamp and s.zone == original.zone
-    assert s.nearest_distance_m == original.nearest_distance_m
-    assert s.nearest_point == original.nearest_point
-    assert s.health_flags == original.health_flags
-    assert s.heartbeat_seq == original.heartbeat_seq
-    assert dict(s.cameras) == dict(original.cameras)
+def test_unknown_and_none_distance_are_never_a_distance():
+    for status in ("unknown", "none"):
+        raw = sa.build_state_json(
+            ZONE_SLOW, stamp=5.0, distance_status=status,
+            nearest_distance_base=None, cameras=[_FRESH_CAM])
+        s = sa.parse_string_msg(_StringMsg(raw))
+        assert s.nearest_distance_m is None and not s.distance_known
 
 
-def test_unknown_distance_json_encodes_as_null():
-    s = CameraState(stamp=1.0, zone=ZONE_SLOW, nearest_distance_m=None)
-    payload = json.loads(sa.to_json(s))
-    assert payload[sa.FIELD_NEAREST_DISTANCE] is None
+def test_clear_cycle_falls_back_to_publication_stamp():
+    # No person localised -> evidence_stamp is null -> age against publication.
+    raw = sa.build_state_json(
+        ZONE_CLEAR, stamp=42.0, evidence_stamp=None, distance_status="none",
+        cameras=[_FRESH_CAM])
+    s = sa.parse_string_msg(_StringMsg(raw))
+    assert s.stamp == 42.0 and s.is_clear
+
+
+def test_stale_camera_forces_not_healthy_even_on_clear():
+    raw = sa.build_state_json(
+        ZONE_CLEAR, stamp=1.0, distance_status="none",
+        cameras=[_FRESH_CAM, _STALE_CAM])
+    s = sa.parse_string_msg(_StringMsg(raw))
+    assert not s.health_ok and not s.is_clear   # contradiction -> not a clearance
+
+
+def test_empty_camera_list_is_not_healthy():
+    raw = sa.build_state_json(ZONE_CLEAR, stamp=1.0, distance_status="none",
+                              cameras=[])
+    s = sa.parse_string_msg(_StringMsg(raw))
+    assert not s.health_ok
+
+
+def test_lost_close_reason_maps_to_flag_but_narration_does_not():
+    lost = sa.build_state_json(
+        ZONE_STOP, stamp=1.0, evidence_stamp=1.0, distance_status="known",
+        nearest_distance_base=0.8,
+        reasons=["track id=3 lost while close (0.80 m) -> hold STOP"],
+        cameras=[_FRESH_CAM])
+    s = sa.parse_string_msg(_StringMsg(lost))
+    assert HEALTH_TRACK_LOST_CLOSE in s.health_flags
+    # a normal narration reason must NOT become a health flag
+    narr = sa.build_state_json(
+        ZONE_SLOW, stamp=1.0, evidence_stamp=1.0, distance_status="known",
+        nearest_distance_base=2.1,
+        reasons=["nearest person id=3 at 2.10 m from base (0.80 m from reach envelope)"],
+        cameras=[_FRESH_CAM])
+    s2 = sa.parse_string_msg(_StringMsg(narr))
+    assert not s2.health_flags
+
+
+def test_wrong_schema_version_rejected():
+    raw = sa.build_state_json(ZONE_CLEAR, stamp=1.0, distance_status="none",
+                              cameras=[_FRESH_CAM], schema_version=999)
+    try:
+        sa.parse_string_msg(_StringMsg(raw))
+    except ValueError:
+        return
+    raise AssertionError("a mismatched schema_version must be rejected")
 
 
 def test_bad_zone_rejected():
@@ -90,16 +128,16 @@ def test_missing_stamp_rejected():
         sa.from_dict({sa.FIELD_ZONE: ZONE_CLEAR})
     except ValueError:
         return
-    raise AssertionError("expected ValueError for a message with no stamp")
+    raise AssertionError("expected ValueError for a message with no usable time")
 
 
-def test_custom_msg_parser_is_unimplemented_until_message_lands():
-    try:
-        sa.parse_custom_msg(object())
-    except NotImplementedError:
-        return
-    raise AssertionError("parse_custom_msg must stay unimplemented until the "
-                         "perception message is committed")
+def test_nan_distance_becomes_none():
+    raw = json.dumps({sa.FIELD_SCHEMA: 1, sa.FIELD_ZONE: ZONE_SLOW,
+                      sa.FIELD_STAMP: 1.0, sa.FIELD_DISTANCE_STATUS: "known",
+                      sa.FIELD_NEAREST_DISTANCE_BASE: float("nan"),
+                      sa.FIELD_CAMERAS: [_FRESH_CAM]})
+    s = sa.parse_string_msg(_StringMsg(raw))
+    assert s.nearest_distance_m is None
 
 
 def _run_all():

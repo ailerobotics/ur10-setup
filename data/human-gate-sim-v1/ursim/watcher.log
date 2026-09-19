@@ -1,0 +1,64 @@
+[WARN] [1789818214.762352358] [human_gate_backstop_watcher]: backstop watcher up (INDEPENDENT process). Cancels the trajectory on camera-state or gate heartbeat loss, on BACKSTOP, or on an ineffective STOP. SIMULATED arm only.
+[ERROR] [1789818219.685316658] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818220.725346066] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818221.725484606] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818222.765280113] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818223.765342221] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818224.805235878] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818225.845239449] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818226.885325825] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818227.885323808] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818228.925320506] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818229.925324283] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818230.965328859] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818232.005368970] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818233.045341528] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818234.085344250] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818235.125309688] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818236.125320389] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818237.165310947] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818238.205244495] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818239.245304138] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818240.285274057] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818241.285320930] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818242.325335087] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818243.325339893] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818244.325398068] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818245.365323196] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818246.365408786] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818247.365603791] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818248.405350470] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818249.405359766] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818250.445372353] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818251.485304324] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818252.525346541] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818253.565363035] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818254.605333560] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818255.645263773] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818256.685279587] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818257.685324575] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818258.685344863] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818259.725359996] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818260.725766321] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818261.765646593] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818262.805704713] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+[ERROR] [1789818263.845334098] [human_gate_backstop_watcher]: BACKSTOP WATCHER CANCELLING TRAJECTORY: gate decided BACKSTOP
+Traceback (most recent call last):
+  File "/home/manishsaini/.treehouse/ur10-setup-5940d0/2/ur10-setup/humangate_driver/sim/../backstop_watcher_node.py", line 159, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/manishsaini/.treehouse/ur10-setup-5940d0/2/ur10-setup/humangate_driver/sim/../backstop_watcher_node.py", line 144, in main
+    rclpy.spin(node)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+    executor.spin_once()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 926, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 907, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 877, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 785, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException

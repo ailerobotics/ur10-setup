@@ -1,0 +1,21 @@
+=== end-to-end assertions (mock) ===
+gate action sequence: STOP RUN SLOW STOP SLOW STOP RUN STOP SLOW STOP SLOW STOP SLOW STOP SLOW STOP RUN STOP SLOW STOP SLOW STOP RUN SLOW STOP SLOW STOP RUN STOP SLOW STOP SLOW STOP SLOW STOP BACKSTOP RUN STOP BACKSTOP STOP RUN SLOW STOP BACKSTOP RUN STOP BACKSTOP
+command-to-effect: N/A — mock scaling is inert at 1.0 (slider zero does not halt in mock; the BACKSTOP does)
+longest trajectory-progress stall: 0.01s
+
+  [PASS] gate produced decisions  (4550 decisions)
+  [PASS] SLOW seen (person approaching)
+  [PASS] STOP seen (person close)
+  [PASS] RUN seen (clear+dwell)
+  [PASS] RUN follows an approach STOP (resume, not run-from-start)  (first RUN idx 108, first STOP idx 0)
+  [PASS] never RUN on presence-only / SLOW demand
+  [PASS] vanish-close: does NOT resume on a person vanishing  (held via LOST_CLOSE provenance)
+  [PASS] heartbeat loss -> STOP
+  [PASS] stale evidence stamp -> STOP
+  [PASS] fault reported with CLEAR zone -> STOP
+  [PASS] trajectory moved (mover advanced)  (max tps 0.170)
+  [PASS] BACKSTOP fired (slider inert -> gate and/or watcher cancel)  (gate BACKSTOP=True, watcher cancels=214)
+  [PASS] gate's OWN primary->backstop fall-through fired
+  [PASS] independent watcher recorded a cancel  (214 watcher cancels)
+
+14/14 checks passed

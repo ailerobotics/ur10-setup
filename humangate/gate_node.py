@@ -13,9 +13,9 @@ Run it (isolated domain, per this task's brief):
     ROS_DOMAIN_ID=78 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 \
         python3 gate_node.py --ros-args -p decision_log:=/tmp/human_gate/decisions.jsonl
 
-Transport note: the camera-side custom message is not committed yet, so the gate
-consumes the state as a std_msgs/String JSON payload (state_adapter.py). When the
-real message lands, swap the subscription type + parse function (one line each).
+Transport note: the camera side publishes its state as a std_msgs/String JSON
+payload by design (its package is not colcon-built, so it uses no custom .msg);
+`state_adapter.parse_string_msg` parses that real, committed wire format.
 """
 import os
 import sys
@@ -78,9 +78,10 @@ class GateNode(Node):
         self.create_subscription(String, state_topic, self._on_state, 10)
         self.create_timer(1.0 / cfg.decide_rate_hz, self._on_tick)
         self.get_logger().info(
-            f"human_gate up: sub {state_topic} (provisional String/JSON transport), "
-            f"pub {decision_topic}, dwell {cfg.clear_dwell_s:.1f} s. PLAN-ONLY — "
-            f"commands are recorded, never sent.")
+            f"human_gate up: sub {state_topic} (std_msgs/String JSON, real "
+            f"camera-side wire format), pub {decision_topic}, dwell "
+            f"{cfg.clear_dwell_s:.1f} s. PLAN-ONLY — commands are recorded, "
+            f"never sent.")
 
     def _decl(self, name, default):
         return self.declare_parameter(name, default).value

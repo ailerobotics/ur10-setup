@@ -1,0 +1,258 @@
+[INFO] [launch]: All log files can be found below /home/manishsaini/.ros/log/2026-09-19-13-34-18-351143-aileworkstation-2809482
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [dashboard_client-2]: process started with pid [2809500]
+[INFO] [controller_stopper_node-4]: process started with pid [2809502]
+[INFO] [ros2_control_node-1]: process started with pid [2809499]
+[INFO] [robot_state_helper-3]: process started with pid [2809501]
+[INFO] [urscript_interface-5]: process started with pid [2809503]
+[INFO] [robot_state_publisher-6]: process started with pid [2809504]
+[INFO] [trajectory_until_node-7]: process started with pid [2809505]
+[INFO] [spawner-8]: process started with pid [2809506]
+[INFO] [spawner-9]: process started with pid [2809507]
+[dashboard_client-2] [0m[INFO] [1789817658.690081922] [UR_Client_Library:]: Starting primary client pipeline[0m
+[controller_stopper_node-4] [0m[INFO] [1789817658.693384610] [Controller stopper]: Waiting for switch controller service to come up on controller_manager/switch_controller[0m
+[ros2_control_node-1] [INFO] [1789817658.697545182] [controller_manager]: Using Steady (Monotonic) clock for triggering controller manager cycles.
+[ros2_control_node-1] [INFO] [1789817658.699965360] [controller_manager]: Subscribing to '/robot_description' topic for robot description.
+[ros2_control_node-1] [INFO] [1789817658.701618607] [controller_manager]: update rate is 125 Hz
+[ros2_control_node-1] [INFO] [1789817658.701643304] [controller_manager]: Overruns handling is : enabled
+[ros2_control_node-1] [INFO] [1789817658.701653103] [controller_manager]: Spawning controller_manager RT thread with scheduler priority: 50
+[ros2_control_node-1] [WARN] [1789817658.701723717] [controller_manager]: Could not enable FIFO RT scheduling policy: with error number <1>(Operation not permitted). See [https://control.ros.org/master/doc/ros2_control/controller_manager/doc/userdoc.html] for details on how to enable realtime scheduling.
+[robot_state_publisher-6] [INFO] [1789817658.701932124] [robot_state_publisher]: Robot initialized
+[robot_state_helper-3] [INFO] [1789817658.702013950] [UR_Client_Library:]: Starting primary client pipeline
+[spawner-8] [INFO] [1789817659.018219980] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[ros2_control_node-1] [INFO] [1789817659.037639613] [controller_manager]: Received robot description from topic.
+[ros2_control_node-1] [INFO] [1789817659.037705749] [controller_manager]: Enforcing command limits is disabled. Command limits from URDF will be ignored.
+[ros2_control_node-1] text not specified in the tf_prefix tag
+[ros2_control_node-1] [INFO] [1789817659.040514237] [controller_manager]: Loading hardware 'ur10' 
+[ros2_control_node-1] [INFO] [1789817659.044829212] [controller_manager]: Loaded hardware 'ur10' from plugin 'ur_robot_driver/URPositionHardwareInterface'
+[ros2_control_node-1] [INFO] [1789817659.044954600] [controller_manager]: Initialize hardware 'ur10' 
+[ros2_control_node-1] [INFO] [1789817659.053236609] [controller_manager]: Successful initialization of hardware 'ur10'
+[ros2_control_node-1] [INFO] [1789817659.054493221] [controller_manager]: Activating component 'ur10'.
+[ros2_control_node-1] [INFO] [1789817659.054514532] [resource_manager]: 'configure' hardware 'ur10' 
+[ros2_control_node-1] [INFO] [1789817659.054525803] [URPositionHardwareInterface]: Starting ...please wait...
+[ros2_control_node-1] [INFO] [1789817659.054546573] [URPositionHardwareInterface]: Initializing driver...
+[ros2_control_node-1] [WARN] [1789817659.168736750] [UR_Client_Library:]: Did not receive protocol negotiation answer from robot. Message received instead: 
+[ros2_control_node-1] message: SafetySetup has not been confirmed yet, therefore no data will be send yet
+[ros2_control_node-1] source: 
+[ros2_control_node-1] warning level: 0. Retrying...
+[ros2_control_node-1] [INFO] [1789817659.168763972] [UR_Client_Library:]: Negotiated RTDE protocol version to 2.
+[ros2_control_node-1] [INFO] [1789817659.168827633] [UR_Client_Library:]: Received URControl version 3.15.8.0
+[ros2_control_node-1] [INFO] [1789817659.168840317] [UR_Client_Library:]: Setting up RTDE communication with frequency 125.000000
+[dashboard_client-2] [0m[INFO] [1789817659.187783864] [dashboard_client]: Connecting to Dashboard Server at 192.168.98.2 with policy G5[0m
+[dashboard_client-2] [0m[INFO] [1789817659.187902951] [UR_Client_Library:]: DashboardClient created for host 192.168.98.2[0m
+[dashboard_client-2] [0m[INFO] [1789817659.188298464] [UR_Client_Library:]: Connected: Universal Robots Dashboard Server
+[dashboard_client-2] [0m
+[dashboard_client-2] [0m[INFO] [1789817659.189354795] [dashboard_client]: Successfully connected to Dashboard Server at 192.168.98.2. Robot has version 3.15.8.0[0m
+[ros2_control_node-1] [INFO] [1789817661.218970644] [UR_Client_Library:]: Starting primary client pipeline
+[ros2_control_node-1] [INFO] [1789817661.537164951] [URPositionHardwareInterface]: Calibration checksum: 'calib_17227329492635474227'.
+[ros2_control_node-1] [INFO] [1789817661.537203855] [URPositionHardwareInterface]: Calibration checked successfully.
+[ros2_control_node-1] [INFO] [1789817661.537274700] [URPositionHardwareInterface]: System successfully started!
+[ros2_control_node-1] [INFO] [1789817661.537292343] [resource_manager]: Successful 'configure' of hardware 'ur10'
+[ros2_control_node-1] [INFO] [1789817661.537344212] [resource_manager]: 'activate' hardware 'ur10' 
+[ros2_control_node-1] [INFO] [1789817661.537353991] [URPositionHardwareInterface]: Activating HW interface
+[ros2_control_node-1] [INFO] [1789817661.537362066] [resource_manager]: Successful 'activate' of hardware 'ur10'
+[ros2_control_node-1] [INFO] [1789817661.537477145] [controller_manager]: Registering statistics for : ur10
+[ros2_control_node-1] [INFO] [1789817661.537568469] [controller_manager]: Resource Manager has been successfully initialized. Starting Controller Manager services...
+[controller_stopper_node-4] [0m[INFO] [1789817661.541773896] [Controller stopper]: Service available[0m
+[controller_stopper_node-4] [0m[INFO] [1789817661.541806017] [Controller stopper]: Waiting for list controllers service to come up on controller_manager/list_controllers[0m
+[controller_stopper_node-4] [0m[INFO] [1789817661.541820384] [Controller stopper]: Service available[0m
+[ros2_control_node-1] [INFO] [1789817661.587639308] [UR_Client_Library:]: Robot connected to reverse interface. Ready to receive control commands.
+[ros2_control_node-1] [INFO] [1789817661.771774341] [controller_manager]: Loading controller : 'joint_state_broadcaster' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[ros2_control_node-1] [INFO] [1789817661.771838603] [controller_manager]: Loading controller 'joint_state_broadcaster'
+[ros2_control_node-1] [INFO] [1789817661.774470724] [controller_manager]: Controller 'joint_state_broadcaster' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-8] [INFO] [1789817661.791565932] [spawner_joint_state_broadcaster]: Loaded joint_state_broadcaster
+[ros2_control_node-1] [INFO] [1789817661.792736370] [controller_manager]: Configuring controller: 'joint_state_broadcaster'
+[ros2_control_node-1] [INFO] [1789817661.792853273] [joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. All available state interfaces will be published
+[ros2_control_node-1] [INFO] [1789817661.807584219] [controller_manager]: Activating controllers: [ joint_state_broadcaster ]
+[ros2_control_node-1] [INFO] [1789817661.814173073] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789817661.823281645] [spawner_joint_state_broadcaster]: Configured and activated joint_state_broadcaster
+[ros2_control_node-1] [INFO] [1789817661.823917876] [controller_manager]: Loading controller : 'io_and_status_controller' of type 'ur_controllers/GPIOController'
+[ros2_control_node-1] [INFO] [1789817661.823947382] [controller_manager]: Loading controller 'io_and_status_controller'
+[ros2_control_node-1] [INFO] [1789817661.828464593] [controller_manager]: Controller 'io_and_status_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-8] [INFO] [1789817661.847223738] [spawner_joint_state_broadcaster]: Loaded io_and_status_controller
+[ros2_control_node-1] [INFO] [1789817661.847477792] [controller_manager]: Configuring controller: 'io_and_status_controller'
+[ros2_control_node-1] [INFO] [1789817661.854576827] [controller_manager]: Activating controllers: [ io_and_status_controller ]
+[ros2_control_node-1] [INFO] [1789817661.873614493] [controller_manager]: Successfully switched controllers!
+[ros2_control_node-1] [WARN] [1789817661.873635233] [controller_manager]: Overrun might occur, Total time : 11691.760 us (Expected < 8000.000 us) --> Read time : 10.570 us, Update time : 11654.038 us (Switch time : 11628.710 us (Switch chained mode time : 0.561 us, perform mode change time : 11.983 us, Activation time : 11614.332 us, Deactivation time : 0.421 us)), Write time : 27.152 us
+[ros2_control_node-1] [WARN] [1789817661.873678435] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 125 Hz. The loop took 11.801153 ms (missed cycles : 2).
+[robot_state_helper-3] [INFO] [1789817661.878092869] [robot_state_helper]: The robot is currently in mode RUNNING.
+[robot_state_helper-3] [INFO] [1789817661.878145289] [robot_state_helper]: The robot is currently in safety mode NORMAL.
+[spawner-8] [INFO] [1789817661.879111479] [spawner_joint_state_broadcaster]: Configured and activated io_and_status_controller
+[ros2_control_node-1] [INFO] [1789817661.879772097] [controller_manager]: Loading controller : 'speed_scaling_state_broadcaster' of type 'ur_controllers/SpeedScalingStateBroadcaster'
+[ros2_control_node-1] [INFO] [1789817661.879799529] [controller_manager]: Loading controller 'speed_scaling_state_broadcaster'
+[ros2_control_node-1] [INFO] [1789817661.880148203] [controller_manager]: Controller 'speed_scaling_state_broadcaster' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[ros2_control_node-1] [INFO] [1789817661.890008075] [speed_scaling_state_broadcaster]: Loading UR SpeedScalingStateBroadcaster with tf_prefix: 
+[spawner-8] [INFO] [1789817661.895189670] [spawner_joint_state_broadcaster]: Loaded speed_scaling_state_broadcaster
+[ros2_control_node-1] [INFO] [1789817661.895471466] [controller_manager]: Configuring controller: 'speed_scaling_state_broadcaster'
+[ros2_control_node-1] [INFO] [1789817661.895549395] [speed_scaling_state_broadcaster]: Publisher rate set to : 100.0 Hz
+[ros2_control_node-1] [INFO] [1789817661.902593556] [controller_manager]: Activating controllers: [ speed_scaling_state_broadcaster ]
+[ros2_control_node-1] [INFO] [1789817661.910043760] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789817661.919218708] [spawner_joint_state_broadcaster]: Configured and activated speed_scaling_state_broadcaster
+[ros2_control_node-1] [INFO] [1789817661.920044280] [controller_manager]: Loading controller : 'force_torque_sensor_broadcaster' of type 'force_torque_sensor_broadcaster/ForceTorqueSensorBroadcaster'
+[ros2_control_node-1] [INFO] [1789817661.920061904] [controller_manager]: Loading controller 'force_torque_sensor_broadcaster'
+[ros2_control_node-1] [INFO] [1789817661.921249735] [controller_manager]: Controller 'force_torque_sensor_broadcaster' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-8] [INFO] [1789817661.943204214] [spawner_joint_state_broadcaster]: Loaded force_torque_sensor_broadcaster
+[ros2_control_node-1] [INFO] [1789817661.943443530] [controller_manager]: Configuring controller: 'force_torque_sensor_broadcaster'
+[ros2_control_node-1] [INFO] [1789817661.945936767] [force_torque_sensor_broadcaster]: configure successful
+[ros2_control_node-1] [INFO] [1789817661.950611747] [controller_manager]: Activating controllers: [ force_torque_sensor_broadcaster ]
+[ros2_control_node-1] [INFO] [1789817661.958036213] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789817661.967317493] [spawner_joint_state_broadcaster]: Configured and activated force_torque_sensor_broadcaster
+[ros2_control_node-1] [INFO] [1789817661.968171208] [controller_manager]: Loading controller : 'tcp_pose_broadcaster' of type 'pose_broadcaster/PoseBroadcaster'
+[ros2_control_node-1] [INFO] [1789817661.968201426] [controller_manager]: Loading controller 'tcp_pose_broadcaster'
+[ros2_control_node-1] [INFO] [1789817661.969197102] [controller_manager]: Controller 'tcp_pose_broadcaster' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-8] [INFO] [1789817661.982866787] [spawner_joint_state_broadcaster]: Loaded tcp_pose_broadcaster
+[ros2_control_node-1] [INFO] [1789817661.983111333] [controller_manager]: Configuring controller: 'tcp_pose_broadcaster'
+[ros2_control_node-1] [INFO] [1789817661.990587296] [controller_manager]: Activating controllers: [ tcp_pose_broadcaster ]
+[ros2_control_node-1] [INFO] [1789817661.998056607] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789817662.007144760] [spawner_joint_state_broadcaster]: Configured and activated tcp_pose_broadcaster
+[ros2_control_node-1] [INFO] [1789817662.007965132] [controller_manager]: Loading controller : 'ur_configuration_controller' of type 'ur_controllers/URConfigurationController'
+[ros2_control_node-1] [INFO] [1789817662.007987705] [controller_manager]: Loading controller 'ur_configuration_controller'
+[ros2_control_node-1] [INFO] [1789817662.008374241] [controller_manager]: Controller 'ur_configuration_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-8] [INFO] [1789817662.022869548] [spawner_joint_state_broadcaster]: Loaded ur_configuration_controller
+[ros2_control_node-1] [INFO] [1789817662.023117380] [controller_manager]: Configuring controller: 'ur_configuration_controller'
+[ros2_control_node-1] [INFO] [1789817662.030665921] [controller_manager]: Activating controllers: [ ur_configuration_controller ]
+[ros2_control_node-1] [INFO] [1789817662.038044890] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789817662.047146067] [spawner_joint_state_broadcaster]: Configured and activated ur_configuration_controller
+[ros2_control_node-1] [INFO] [1789817662.047978232] [controller_manager]: Loading controller : 'friction_model_controller' of type 'ur_controllers/FrictionModelController'
+[ros2_control_node-1] [INFO] [1789817662.047998671] [controller_manager]: Loading controller 'friction_model_controller'
+[ros2_control_node-1] [INFO] [1789817662.048312538] [controller_manager]: Controller 'friction_model_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-8] [INFO] [1789817662.063037603] [spawner_joint_state_broadcaster]: Loaded friction_model_controller
+[ros2_control_node-1] [INFO] [1789817662.063282319] [controller_manager]: Configuring controller: 'friction_model_controller'
+[ros2_control_node-1] [INFO] [1789817662.070679973] [controller_manager]: Activating controllers: [ friction_model_controller ]
+[ros2_control_node-1] [INFO] [1789817662.078057119] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789817662.087102029] [spawner_joint_state_broadcaster]: Configured and activated friction_model_controller
+[ros2_control_node-1] [INFO] [1789817662.087974249] [controller_manager]: Loading controller : 'scaled_joint_trajectory_controller' of type 'ur_controllers/ScaledJointTrajectoryController'
+[ros2_control_node-1] [INFO] [1789817662.087997333] [controller_manager]: Loading controller 'scaled_joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789817662.088450496] [controller_manager]: Controller 'scaled_joint_trajectory_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[ros2_control_node-1] [INFO] [1789817662.101221320] [scaled_joint_trajectory_controller]: Using scaling state from the hardware from interface speed_scaling/speed_scaling_factor.
+[spawner-8] [INFO] [1789817662.119036728] [spawner_joint_state_broadcaster]: Loaded scaled_joint_trajectory_controller
+[ros2_control_node-1] [INFO] [1789817662.119300240] [controller_manager]: Configuring controller: 'scaled_joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789817662.119456117] [scaled_joint_trajectory_controller]: No specific joint names are used for command interfaces. Using 'joints' parameter.
+[ros2_control_node-1] [INFO] [1789817662.119477047] [scaled_joint_trajectory_controller]: Command interfaces are [position] and state interfaces are [position velocity].
+[ros2_control_node-1] [INFO] [1789817662.119499119] [scaled_joint_trajectory_controller]: Using 'splines' interpolation method.
+[ros2_control_node-1] [INFO] [1789817662.121728844] [scaled_joint_trajectory_controller]: Action status changes will be monitored at 20.00 Hz.
+[ros2_control_node-1] [INFO] [1789817662.128581621] [scaled_joint_trajectory_controller]: Setting initial scaling factor to 1.000000
+[ros2_control_node-1] [INFO] [1789817662.128612590] [scaled_joint_trajectory_controller]: No scaling interface set. This controller will not read speed scaling from the hardware.
+[ros2_control_node-1] [INFO] [1789817662.134916642] [controller_manager]: Activating controllers: [ scaled_joint_trajectory_controller ]
+[ros2_control_node-1] [INFO] [1789817662.142231488] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789817662.151216956] [spawner_joint_state_broadcaster]: Configured and activated scaled_joint_trajectory_controller
+[spawner-9] [INFO] [1789817662.233960059] [spawner_joint_trajectory_controller]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [spawner-8]: process has finished cleanly [pid 2809506]
+[ros2_control_node-1] [INFO] [1789817662.736471290] [controller_manager]: Loading controller : 'joint_trajectory_controller' of type 'joint_trajectory_controller/JointTrajectoryController'
+[ros2_control_node-1] [INFO] [1789817662.736505605] [controller_manager]: Loading controller 'joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789817662.736905526] [controller_manager]: Controller 'joint_trajectory_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-9] [INFO] [1789817662.767314030] [spawner_joint_trajectory_controller]: Loaded joint_trajectory_controller
+[ros2_control_node-1] [INFO] [1789817662.768588617] [controller_manager]: Configuring controller: 'joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789817662.768804648] [joint_trajectory_controller]: No specific joint names are used for command interfaces. Using 'joints' parameter.
+[ros2_control_node-1] [INFO] [1789817662.768827792] [joint_trajectory_controller]: Command interfaces are [position] and state interfaces are [position velocity].
+[ros2_control_node-1] [INFO] [1789817662.768843011] [joint_trajectory_controller]: Using 'splines' interpolation method.
+[ros2_control_node-1] [INFO] [1789817662.770320113] [joint_trajectory_controller]: Action status changes will be monitored at 20.00 Hz.
+[ros2_control_node-1] [INFO] [1789817662.775165308] [joint_trajectory_controller]: Setting initial scaling factor to 1.000000
+[ros2_control_node-1] [INFO] [1789817662.775193542] [joint_trajectory_controller]: No scaling interface set. This controller will not read speed scaling from the hardware.
+[ros2_control_node-1] [INFO] [1789817662.783267704] [controller_manager]: Loading controller : 'forward_velocity_controller' of type 'velocity_controllers/JointGroupVelocityController'
+[ros2_control_node-1] [INFO] [1789817662.783292040] [controller_manager]: Loading controller 'forward_velocity_controller'
+[ros2_control_node-1] [INFO] [1789817662.784427933] [controller_manager]: Controller 'forward_velocity_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-9] [INFO] [1789817662.799103724] [spawner_joint_trajectory_controller]: Loaded forward_velocity_controller
+[ros2_control_node-1] [INFO] [1789817662.799442739] [controller_manager]: Configuring controller: 'forward_velocity_controller'
+[ros2_control_node-1] [INFO] [1789817662.800838497] [forward_velocity_controller]: configure successful
+[ros2_control_node-1] [INFO] [1789817662.807452088] [controller_manager]: Loading controller : 'forward_position_controller' of type 'position_controllers/JointGroupPositionController'
+[ros2_control_node-1] [INFO] [1789817662.807480362] [controller_manager]: Loading controller 'forward_position_controller'
+[ros2_control_node-1] [INFO] [1789817662.808269805] [controller_manager]: Controller 'forward_position_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-9] [INFO] [1789817662.831209239] [spawner_joint_trajectory_controller]: Loaded forward_position_controller
+[ros2_control_node-1] [INFO] [1789817662.831524449] [controller_manager]: Configuring controller: 'forward_position_controller'
+[ros2_control_node-1] [INFO] [1789817662.832465391] [forward_position_controller]: configure successful
+[ros2_control_node-1] [INFO] [1789817662.839296035] [controller_manager]: Loading controller : 'forward_effort_controller' of type 'effort_controllers/JointGroupEffortController'
+[ros2_control_node-1] [INFO] [1789817662.839328898] [controller_manager]: Loading controller 'forward_effort_controller'
+[ros2_control_node-1] [INFO] [1789817662.840121116] [controller_manager]: Controller 'forward_effort_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-9] [INFO] [1789817662.863077643] [spawner_joint_trajectory_controller]: Loaded forward_effort_controller
+[ros2_control_node-1] [INFO] [1789817662.863380609] [controller_manager]: Configuring controller: 'forward_effort_controller'
+[ros2_control_node-1] [INFO] [1789817662.864300511] [forward_effort_controller]: configure successful
+[ros2_control_node-1] [INFO] [1789817662.871252346] [controller_manager]: Loading controller : 'force_mode_controller' of type 'ur_controllers/ForceModeController'
+[ros2_control_node-1] [INFO] [1789817662.871279858] [controller_manager]: Loading controller 'force_mode_controller'
+[ros2_control_node-1] [INFO] [1789817662.871639834] [controller_manager]: Controller 'force_mode_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-9] [INFO] [1789817662.887161796] [spawner_joint_trajectory_controller]: Loaded force_mode_controller
+[ros2_control_node-1] [INFO] [1789817662.887499218] [controller_manager]: Configuring controller: 'force_mode_controller'
+[ros2_control_node-1] [INFO] [1789817662.903370635] [controller_manager]: Loading controller : 'passthrough_trajectory_controller' of type 'ur_controllers/PassthroughTrajectoryController'
+[ros2_control_node-1] [INFO] [1789817662.903406383] [controller_manager]: Loading controller 'passthrough_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789817662.903780686] [controller_manager]: Controller 'passthrough_trajectory_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-9] [INFO] [1789817662.919254046] [spawner_joint_trajectory_controller]: Loaded passthrough_trajectory_controller
+[ros2_control_node-1] [INFO] [1789817662.919549658] [controller_manager]: Configuring controller: 'passthrough_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789817662.927407368] [controller_manager]: Loading controller : 'freedrive_mode_controller' of type 'ur_controllers/FreedriveModeController'
+[ros2_control_node-1] [INFO] [1789817662.927459037] [controller_manager]: Loading controller 'freedrive_mode_controller'
+[ros2_control_node-1] [INFO] [1789817662.927862104] [controller_manager]: Controller 'freedrive_mode_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-9] [INFO] [1789817662.951043098] [spawner_joint_trajectory_controller]: Loaded freedrive_mode_controller
+[ros2_control_node-1] [INFO] [1789817662.951367115] [controller_manager]: Configuring controller: 'freedrive_mode_controller'
+[ros2_control_node-1] [INFO] [1789817662.959299437] [controller_manager]: Loading controller : 'tool_contact_controller' of type 'ur_controllers/ToolContactController'
+[ros2_control_node-1] [INFO] [1789817662.959330486] [controller_manager]: Loading controller 'tool_contact_controller'
+[ros2_control_node-1] [INFO] [1789817662.959807815] [controller_manager]: Controller 'tool_contact_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_hdzz1y4a 
+[spawner-9] [INFO] [1789817662.983055235] [spawner_joint_trajectory_controller]: Loaded tool_contact_controller
+[ros2_control_node-1] [INFO] [1789817662.983372329] [controller_manager]: Configuring controller: 'tool_contact_controller'
+[INFO] [spawner-9]: process has finished cleanly [pid 2809507]
+[ros2_control_node-1] [WARN] [1789817668.379810125] [controller_manager]: Overrun might occur, Total time : 13872.901 us (Expected < 8000.000 us) --> Read time : 8.025 us, Update time : 13840.980 us, Write time : 23.896 us
+[ros2_control_node-1] [WARN] [1789817668.379857775] [controller_manager]: Overrun detected! The controller manager missed its desired rate of 125 Hz. The loop took 13.980533 ms (missed cycles : 2).
+[ros2_control_node-1] [INFO] [1789817669.207854961] [io_and_status_controller]: Setting speed slider to 100.00%.
+[ros2_control_node-1] [INFO] [1789817669.559712762] [scaled_joint_trajectory_controller]: Received new action goal
+[ros2_control_node-1] [INFO] [1789817669.559763639] [scaled_joint_trajectory_controller]: Accepted new action goal
+[ros2_control_node-1] [INFO] [1789817672.061110269] [io_and_status_controller]: Setting speed slider to 50.00%.
+[ros2_control_node-1] [INFO] [1789817674.918392954] [io_and_status_controller]: Setting speed slider to 10.00%.
+[ros2_control_node-1] [WARN] [1789817677.774815053] [io_and_status_controller]: The desired speed slider fraction must be within range (0; 1.0]. Request ignored.
+[ros2_control_node-1] [INFO] [1789817683.086933347] [io_and_status_controller]: Setting speed slider to 100.00%.
+[ros2_control_node-1] [INFO] [1789817685.942786533] [scaled_joint_trajectory_controller]: Got request to cancel goal
+[ros2_control_node-1] [INFO] [1789817685.942827802] [scaled_joint_trajectory_controller]: Canceling active action goal because cancel callback received.
+[robot_state_publisher-6] [INFO] [1789817687.102986587] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[controller_stopper_node-4] [0m[INFO] [1789817687.102999561] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[dashboard_client-2] [0m[INFO] [1789817687.103026803] [rclcpp]: signal_handler(SIGINT/SIGTERM)[0m
+[robot_state_helper-3] [INFO] [1789817687.102998149] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[urscript_interface-5] [INFO] [1789817687.102996816] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[trajectory_until_node-7] [INFO] [1789817687.102998058] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2_control_node-1] [INFO] [1789817687.103026192] [rclcpp]: signal_handler(SIGINT/SIGTERM)
+[ros2_control_node-1] [INFO] [1789817687.103092879] [controller_manager]: Shutdown request received....
+[ros2_control_node-1] [INFO] [1789817687.103135480] [controller_manager]: Shutting down all controllers in the controller manager.
+[ros2_control_node-1] [INFO] [1789817687.103179804] [controller_manager]: Shutting down controller 'tool_contact_controller'
+[ros2_control_node-1] [INFO] [1789817687.103545631] [controller_manager]: Shutting down controller 'freedrive_mode_controller'
+[ros2_control_node-1] [INFO] [1789817687.103664116] [controller_manager]: Deactivating controller 'force_torque_sensor_broadcaster'
+[ros2_control_node-1] [INFO] [1789817687.103702369] [controller_manager]: Shutting down controller 'force_torque_sensor_broadcaster'
+[ros2_control_node-1] [INFO] [1789817687.103812779] [controller_manager]: Deactivating controller 'joint_state_broadcaster'
+[ros2_control_node-1] [INFO] [1789817687.103858506] [controller_manager]: Shutting down controller 'joint_state_broadcaster'
+[ros2_control_node-1] [INFO] [1789817687.103943238] [controller_manager]: Shutting down controller 'forward_velocity_controller'
+[ros2_control_node-1] [INFO] [1789817687.104034241] [controller_manager]: Deactivating controller 'io_and_status_controller'
+[robot_state_helper-3] [INFO] [1789817687.113396714] [UR_Client_Library:]: Stopping primary client pipeline
+[ros2_control_node-1] [INFO] [1789817687.119483451] [controller_manager]: Shutting down controller 'io_and_status_controller'
+[ros2_control_node-1] [INFO] [1789817687.119682820] [controller_manager]: Deactivating controller 'speed_scaling_state_broadcaster'
+[ros2_control_node-1] [INFO] [1789817687.119701866] [controller_manager]: Shutting down controller 'speed_scaling_state_broadcaster'
+[ros2_control_node-1] [INFO] [1789817687.119750990] [controller_manager]: Deactivating controller 'friction_model_controller'
+[ros2_control_node-1] [INFO] [1789817687.119779715] [controller_manager]: Shutting down controller 'friction_model_controller'
+[ros2_control_node-1] [INFO] [1789817687.119826243] [controller_manager]: Deactivating controller 'tcp_pose_broadcaster'
+[ros2_control_node-1] [INFO] [1789817687.119840190] [controller_manager]: Shutting down controller 'tcp_pose_broadcaster'
+[ros2_control_node-1] [INFO] [1789817687.119881919] [controller_manager]: Shutting down controller 'force_mode_controller'
+[ros2_control_node-1] [INFO] [1789817687.119930502] [controller_manager]: Deactivating controller 'ur_configuration_controller'
+[ros2_control_node-1] [INFO] [1789817687.119951251] [controller_manager]: Shutting down controller 'ur_configuration_controller'
+[ros2_control_node-1] [INFO] [1789817687.119988242] [controller_manager]: Shutting down controller 'passthrough_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789817687.120030642] [controller_manager]: Deactivating controller 'scaled_joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789817687.120055039] [controller_manager]: Shutting down controller 'scaled_joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789817687.120091268] [controller_manager]: Shutting down controller 'joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789817687.120121425] [controller_manager]: Shutting down controller 'forward_position_controller'
+[ros2_control_node-1] [INFO] [1789817687.120151272] [controller_manager]: Shutting down controller 'forward_effort_controller'
+[ros2_control_node-1] [INFO] [1789817687.120188242] [resource_manager]: 'deactivate' hardware 'ur10' 
+[ros2_control_node-1] [INFO] [1789817687.120196217] [resource_manager]: Successful 'deactivate' of hardware 'ur10'
+[ros2_control_node-1] [INFO] [1789817687.120198863] [resource_manager]: 'shutdown' hardware 'ur10' 
+[ros2_control_node-1] [INFO] [1789817687.120208240] [URPositionHardwareInterface]: Stopping ...please wait...
+[dashboard_client-2] [0m[INFO] [1789817687.122145488] [UR_Client_Library:]: Stopping primary client pipeline[0m
+[ros2_control_node-1] [INFO] [1789817687.137328271] [UR_Client_Library:]: Stopping primary client pipeline
+[ros2_control_node-1] [INFO] [1789817687.171015278] [UR_Client_Library:]: RTDE background read thread stopped
+[ros2_control_node-1] [INFO] [1789817687.171122122] [URPositionHardwareInterface]: System successfully stopped!
+[ros2_control_node-1] [INFO] [1789817687.171141198] [resource_manager]: Successful 'shutdown' of hardware 'ur10'
+[ros2_control_node-1] [INFO] [1789817687.171309258] [controller_manager]: Shutting down the controller manager.
+[ros2_control_node-1] [ERROR] [1789817687.171425640] [controller_manager.pal_statistics]: Exception in publisher thread: context cannot be slept with because it's invalid!. Aborting!
+[ros2_control_node-1] [ERROR] [1789817687.171425660] [controller_manager.pal_statistics]: Exception in publisher thread: context cannot be slept with because it's invalid!. Aborting!
+[ros2_control_node-1] [INFO] [1789817687.182492106] [controller_manager.pal_statistics]: Async messages lost 0
+[ros2_control_node-1] [INFO] [1789817687.182503979] [controller_manager.pal_statistics]: publish_async_failures_ 0
+[ros2_control_node-1] [INFO] [1789817687.184443201] [controller_manager.pal_statistics]: Async messages lost 0
+[ros2_control_node-1] [INFO] [1789817687.184450294] [controller_manager.pal_statistics]: publish_async_failures_ 0
+[INFO] [urscript_interface-5]: process has finished cleanly [pid 2809503]
+[INFO] [controller_stopper_node-4]: process has finished cleanly [pid 2809502]
+[INFO] [robot_state_publisher-6]: process has finished cleanly [pid 2809504]
+[INFO] [trajectory_until_node-7]: process has finished cleanly [pid 2809505]
+[INFO] [dashboard_client-2]: process has finished cleanly [pid 2809500]
+[INFO] [robot_state_helper-3]: process has finished cleanly [pid 2809501]
+[INFO] [ros2_control_node-1]: process has finished cleanly [pid 2809499]
