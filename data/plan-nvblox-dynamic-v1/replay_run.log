@@ -1,0 +1,6 @@
+== PROVISIONAL base_link->camera TF (uncalibrated D415, presence-only, sim time) ==
+== nvblox dynamic fed by the RECORDED depth topic (use_sim_time) ==
+== replay the recorded bag (--clock so stamps drive the sim clock) ==
+== probe the ESDF over the PROVISIONAL camera's view cone (realism) ==
+{"t_wall": 1789838829.795, "occupied": 0, "observed": 0, "total": 4108881, "min_dist_m": 2.0, "voxel_m": 0.019999999552965164, "latency_ms": 106.6, "success": true}
+== peak GPU during replay: 3138 MiB ==

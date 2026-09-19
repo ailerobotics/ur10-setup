@@ -1,0 +1,95 @@
+== mode=dynamic seg=off timeline=default dur=44s ==
+== nvidia-smi before ==
+memory.total [MiB], memory.used [MiB], memory.free [MiB]
+12288 MiB, 2305 MiB, 9603 MiB
+== launch nvblox (dynamic, use_segmentation=false) ==
+== start synthetic depth (+mask:off) ==
+== run proof driver (duration=44s) ==
+{"t_wall": 1789837721.404, "gt_t": 0.1, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 47.4}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 13.8}}}
+{"t_wall": 1789837721.966, "gt_t": 0.9, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.0}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.7}}}
+{"t_wall": 1789837722.485, "gt_t": 1.4, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 8.2}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 10.6}}}
+{"t_wall": 1789837723.005, "gt_t": 2.0, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 8.8}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 10.7}}}
+{"t_wall": 1789837723.525, "gt_t": 2.5, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.1}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.4}}}
+{"t_wall": 1789837724.045, "gt_t": 3.0, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.7}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 18.2}}}
+{"t_wall": 1789837724.576, "gt_t": 3.5, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.5}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.0}}}
+{"t_wall": 1789837725.095, "gt_t": 4.1, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.2}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.0}}}
+{"t_wall": 1789837725.615, "gt_t": 4.6, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.4}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.0}}}
+{"t_wall": 1789837726.135, "gt_t": 5.1, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.2}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.3}}}
+{"t_wall": 1789837726.655, "gt_t": 5.6, "obstacles": {"box": {"gt_present": true, "occ": 0, "min_dist": 0.08, "latency_ms": 13.3}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 6.7}}}
+{"t_wall": 1789837727.175, "gt_t": 6.1, "obstacles": {"box": {"gt_present": true, "occ": 96, "min_dist": -0.0, "latency_ms": 9.8}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.1}}}
+{"t_wall": 1789837727.695, "gt_t": 6.6, "obstacles": {"box": {"gt_present": true, "occ": 568, "min_dist": -0.0, "latency_ms": 9.8}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.9}}}
+{"t_wall": 1789837728.215, "gt_t": 7.1, "obstacles": {"box": {"gt_present": true, "occ": 964, "min_dist": -0.066, "latency_ms": 9.4}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.3}}}
+{"t_wall": 1789837728.735, "gt_t": 7.7, "obstacles": {"box": {"gt_present": true, "occ": 964, "min_dist": -0.066, "latency_ms": 11.7}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.7}}}
+{"t_wall": 1789837729.255, "gt_t": 8.2, "obstacles": {"box": {"gt_present": true, "occ": 964, "min_dist": -0.066, "latency_ms": 10.9}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 8.8}}}
+{"t_wall": 1789837729.775, "gt_t": 8.7, "obstacles": {"box": {"gt_present": true, "occ": 1054, "min_dist": -0.066, "latency_ms": 13.0}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.4}}}
+{"t_wall": 1789837730.296, "gt_t": 9.2, "obstacles": {"box": {"gt_present": true, "occ": 1084, "min_dist": -0.066, "latency_ms": 11.6}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 8.1}}}
+{"t_wall": 1789837730.817, "gt_t": 9.7, "obstacles": {"box": {"gt_present": true, "occ": 1114, "min_dist": -0.066, "latency_ms": 6.9}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 10.5}}}
+{"t_wall": 1789837731.335, "gt_t": 10.3, "obstacles": {"box": {"gt_present": true, "occ": 1129, "min_dist": -0.066, "latency_ms": 10.1}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.4}}}
+{"t_wall": 1789837731.855, "gt_t": 10.8, "obstacles": {"box": {"gt_present": true, "occ": 1129, "min_dist": -0.066, "latency_ms": 13.2}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 6.4}}}
+{"t_wall": 1789837732.375, "gt_t": 11.3, "obstacles": {"box": {"gt_present": true, "occ": 1129, "min_dist": -0.066, "latency_ms": 10.3}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.1}}}
+{"t_wall": 1789837732.895, "gt_t": 11.8, "obstacles": {"box": {"gt_present": true, "occ": 1129, "min_dist": -0.066, "latency_ms": 9.9}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.6}}}
+{"t_wall": 1789837733.415, "gt_t": 12.3, "obstacles": {"box": {"gt_present": true, "occ": 1129, "min_dist": -0.066, "latency_ms": 9.6}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 12.1}}}
+{"t_wall": 1789837733.938, "gt_t": 12.9, "obstacles": {"box": {"gt_present": true, "occ": 1129, "min_dist": -0.066, "latency_ms": 9.6}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 8.1}}}
+{"t_wall": 1789837734.456, "gt_t": 13.4, "obstacles": {"box": {"gt_present": true, "occ": 1129, "min_dist": -0.066, "latency_ms": 11.7}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 18.5}}}
+{"t_wall": 1789837734.987, "gt_t": 13.9, "obstacles": {"box": {"gt_present": true, "occ": 1129, "min_dist": -0.066, "latency_ms": 10.3}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 8.3}}}
+{"t_wall": 1789837735.506, "gt_t": 14.4, "obstacles": {"box": {"gt_present": true, "occ": 1129, "min_dist": -0.066, "latency_ms": 8.1}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 11.6}}}
+{"t_wall": 1789837736.026, "gt_t": 15.0, "obstacles": {"box": {"gt_present": true, "occ": 1129, "min_dist": -0.066, "latency_ms": 7.2}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 12.0}}}
+{"t_wall": 1789837736.546, "gt_t": 15.5, "obstacles": {"box": {"gt_present": false, "occ": 1129, "min_dist": -0.066, "latency_ms": 7.6}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 11.0}}}
+{"t_wall": 1789837737.065, "gt_t": 16.0, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.08, "latency_ms": 8.4}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 22.2}}}
+{"t_wall": 1789837737.597, "gt_t": 16.6, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 6.9}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 13.4}}}
+{"t_wall": 1789837738.118, "gt_t": 17.1, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.3}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 8.3}}}
+{"t_wall": 1789837738.636, "gt_t": 17.6, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.4}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 6.9}}}
+{"t_wall": 1789837739.155, "gt_t": 18.1, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.2}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 21.0}}}
+{"t_wall": 1789837739.686, "gt_t": 18.6, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 7.8}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 10.7}}}
+{"t_wall": 1789837740.205, "gt_t": 19.2, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 8.8}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 10.7}}}
+{"t_wall": 1789837740.725, "gt_t": 19.7, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.8}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.4}}}
+{"t_wall": 1789837741.245, "gt_t": 20.2, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.1}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.8}}}
+{"t_wall": 1789837741.765, "gt_t": 20.7, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.1}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 8.9}}}
+{"t_wall": 1789837742.285, "gt_t": 21.2, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.3}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.4}}}
+{"t_wall": 1789837742.805, "gt_t": 21.8, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.5}, "person": {"gt_present": true, "occ": 867, "min_dist": -0.045, "latency_ms": 11.5}}}
+{"t_wall": 1789837743.326, "gt_t": 22.3, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.4}, "person": {"gt_present": true, "occ": 3311, "min_dist": -0.045, "latency_ms": 7.5}}}
+{"t_wall": 1789837743.846, "gt_t": 22.8, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 7.9}, "person": {"gt_present": true, "occ": 4486, "min_dist": -0.045, "latency_ms": 21.6}}}
+{"t_wall": 1789837744.376, "gt_t": 23.3, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 8.1}, "person": {"gt_present": true, "occ": 4586, "min_dist": -0.045, "latency_ms": 20.9}}}
+{"t_wall": 1789837744.905, "gt_t": 23.8, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 14.0}, "person": {"gt_present": true, "occ": 5686, "min_dist": -0.045, "latency_ms": 5.5}}}
+{"t_wall": 1789837745.426, "gt_t": 24.3, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.3}, "person": {"gt_present": true, "occ": 5686, "min_dist": -0.045, "latency_ms": 6.4}}}
+{"t_wall": 1789837745.945, "gt_t": 24.9, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.4}, "person": {"gt_present": true, "occ": 5686, "min_dist": -0.045, "latency_ms": 17.8}}}
+{"t_wall": 1789837746.476, "gt_t": 25.4, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.2}, "person": {"gt_present": true, "occ": 5686, "min_dist": -0.045, "latency_ms": 7.3}}}
+{"t_wall": 1789837746.995, "gt_t": 25.9, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.0}, "person": {"gt_present": true, "occ": 5686, "min_dist": -0.045, "latency_ms": 7.4}}}
+{"t_wall": 1789837747.515, "gt_t": 26.4, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.1}, "person": {"gt_present": true, "occ": 5686, "min_dist": -0.045, "latency_ms": 8.7}}}
+{"t_wall": 1789837748.034, "gt_t": 27.0, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.3}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 7.2}}}
+{"t_wall": 1789837748.555, "gt_t": 27.5, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.8}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 19.7}}}
+{"t_wall": 1789837749.086, "gt_t": 28.0, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.0}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 9.4}}}
+{"t_wall": 1789837749.605, "gt_t": 28.5, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.1}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 7.5}}}
+{"t_wall": 1789837750.125, "gt_t": 29.1, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.4}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 7.4}}}
+{"t_wall": 1789837750.644, "gt_t": 29.6, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.1}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 10.1}}}
+{"t_wall": 1789837751.165, "gt_t": 30.1, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.3}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 6.7}}}
+{"t_wall": 1789837751.685, "gt_t": 30.6, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.9}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 9.2}}}
+{"t_wall": 1789837752.205, "gt_t": 31.1, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.3}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 17.8}}}
+{"t_wall": 1789837752.736, "gt_t": 31.7, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.4}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 7.4}}}
+{"t_wall": 1789837753.255, "gt_t": 32.2, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.3}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 18.6}}}
+{"t_wall": 1789837753.787, "gt_t": 32.7, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.0}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 7.6}}}
+{"t_wall": 1789837754.305, "gt_t": 33.2, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.0}, "person": {"gt_present": true, "occ": 5693, "min_dist": -0.045, "latency_ms": 12.0}}}
+{"t_wall": 1789837754.827, "gt_t": 33.8, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 7.0}, "person": {"gt_present": false, "occ": 867, "min_dist": -0.045, "latency_ms": 10.7}}}
+{"t_wall": 1789837755.345, "gt_t": 34.3, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 8.4}, "person": {"gt_present": false, "occ": 867, "min_dist": -0.045, "latency_ms": 11.6}}}
+{"t_wall": 1789837755.866, "gt_t": 34.8, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 8.3}, "person": {"gt_present": false, "occ": 867, "min_dist": -0.045, "latency_ms": 10.2}}}
+{"t_wall": 1789837756.385, "gt_t": 35.3, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 8.7}, "person": {"gt_present": false, "occ": 867, "min_dist": -0.045, "latency_ms": 10.5}}}
+{"t_wall": 1789837756.905, "gt_t": 35.9, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.1}, "person": {"gt_present": false, "occ": 867, "min_dist": -0.045, "latency_ms": 9.6}}}
+{"t_wall": 1789837757.425, "gt_t": 36.4, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.6}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.6}}}
+{"t_wall": 1789837757.945, "gt_t": 36.9, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.2}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.8}}}
+{"t_wall": 1789837758.466, "gt_t": 37.4, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.4}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.2}}}
+{"t_wall": 1789837758.985, "gt_t": 37.9, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.5}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.5}}}
+{"t_wall": 1789837759.505, "gt_t": 38.5, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 12.3}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.5}}}
+{"t_wall": 1789837760.025, "gt_t": 39.0, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.5}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.7}}}
+{"t_wall": 1789837760.545, "gt_t": 39.5, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 8.7}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 12.6}}}
+{"t_wall": 1789837761.067, "gt_t": 40.0, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.0}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 16.7}}}
+{"t_wall": 1789837761.595, "gt_t": 40.6, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 8.0}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 24.9}}}
+{"t_wall": 1789837762.129, "gt_t": 41.1, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 7.9}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.3}}}
+{"t_wall": 1789837762.647, "gt_t": 41.6, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.7}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 7.0}}}
+{"t_wall": 1789837763.165, "gt_t": 42.1, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.1}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.2}}}
+{"t_wall": 1789837763.685, "gt_t": 42.601, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.5}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.6}}}
+{"t_wall": 1789837764.205, "gt_t": 43.2, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 9.8}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 9.6}}}
+{"t_wall": 1789837764.725, "gt_t": 43.7, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 11.4}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 8.0}}}
+{"t_wall": 1789837765.245, "gt_t": 44.2, "obstacles": {"box": {"gt_present": false, "occ": 0, "min_dist": 0.1, "latency_ms": 10.1}, "person": {"gt_present": false, "occ": 0, "min_dist": 0.14, "latency_ms": 19.8}}}
+SUMMARY {"n_records": 85, "results": {"box": {"ok": true, "detail": {"peak_occ": 1129, "appeared": true, "before_ok": true, "decayed": true, "appear_lat_s": 0.5, "clear_lat_s": 1.0}}, "person": {"ok": true, "detail": {"peak_occ": 5693, "appeared": true, "before_ok": true, "decayed": true, "appear_lat_s": 0.0, "clear_lat_s": 0.6}}}, "ok": true}
+== peak GPU memory.used during run: 3172 MiB ==
+RESULT: PASS (dynamic)

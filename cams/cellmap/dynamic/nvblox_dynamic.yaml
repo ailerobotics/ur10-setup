@@ -1,0 +1,80 @@
+# nvblox overrides for the DYNAMIC layer (this task, plan-nvblox-dynamic-v1).
+# Layered on top of, in order (see dynamic_live.launch.py):
+#   nvblox_examples_bringup/config/nvblox/nvblox_base.yaml
+#   isaac_ros_manipulation_bringup/config/nvblox/nvblox_manipulator_base.yaml
+#   .../specializations/nvblox_manipulator_realsense.yaml
+#   THIS FILE  (so only the deltas from the manipulator config live here)
+#
+# Difference from cams/cellmap/nvblox_cell.yaml (the SNAPSHOT map): that file
+# freezes the world (decay off, no clearing) so a hand-swept scan never erases
+# itself. This file does the opposite on purpose: it runs nvblox's `dynamic`
+# multi-mapper so obstacles that APPEAR or MOVE are added to the ESDF and, when
+# they leave, DECAY back out — the whole point of feeding a live dynamic layer to
+# the planner. Verified against nvblox 4.4.0 in the planner image.
+/**:
+  ros__parameters:
+    # dynamic multi-mapper: a static TSDF mapper + a dynamic occupancy mapper.
+    # The dynamic mapper captures anything that changes (a box, a person-sized
+    # volume) from DEPTH ALONE — no segmentation model required. mapping_type is
+    # overridable from the launch (mapping_type:=...) so the proofs can also
+    # exercise static_tsdf and human_with_static_tsdf.
+    mapping_type: "dynamic"
+
+    # Same cell geometry choices as the snapshot map.
+    voxel_size: 0.02
+    num_cameras: 1
+    global_frame: "base_link"
+
+    # 3-D ESDF, served to cuMotion on request. The ESDF service refuses 2d mode.
+    esdf_mode: "3d"
+
+    # Unobserved reads as FREE (2.0), not "deep inside an obstacle" (-1000), for
+    # the same reason as the snapshot map: otherwise the arm's own base sphere,
+    # which the camera can never see, invalidates every plan. Read once at start.
+    esdf_and_gradients_unobserved_value: 2.0
+
+    # Feed the planner, not a viewer: compute the ESDF and publish nothing heavy
+    # by default. The launch turns the mesh/voxel viz on for RViz when asked.
+    update_esdf_rate_hz: 10.0
+    publish_esdf_distance_slice: false
+    update_mesh_rate_hz: 0.0
+    publish_layer_rate_hz: 0.0
+    use_color: false
+    integrate_color_rate_hz: 0.0
+
+    # Live depth integration + dynamic decay: obstacles appear fast and leave on
+    # their own. decay_dynamic_occupancy_rate_hz is the dynamic layer's clock.
+    use_depth: true
+    integrate_depth_rate_hz: 10.0
+    decay_dynamic_occupancy_rate_hz: 10.0
+
+    static_mapper:
+      # Same workspace box as the snapshot map (reach envelope + shelf front).
+      workspace_bounds_type: "bounding_box"
+      workspace_bounds_min_corner_x_m: -1.8
+      workspace_bounds_min_corner_y_m: -1.8
+      workspace_bounds_min_height_m: -0.6
+      workspace_bounds_max_corner_x_m: 1.8
+      workspace_bounds_max_corner_y_m: 2.4
+      workspace_bounds_max_height_m: 2.0
+      projective_integrator_max_integration_distance_m: 3.0
+      projective_integrator_weighting_mode: "constant"
+      projective_tsdf_integrator_invalid_depth_decay_factor: 0.8
+      esdf_integrator_max_distance_m: 2.0
+      esdf_integrator_min_weight: 0.1
+
+    dynamic_mapper:
+      # Occupancy + decay knobs (from the shipped nvblox_dynamics.yaml, kept so
+      # the intent is explicit and tunable). decay probabilities set how fast a
+      # departed obstacle clears; see decay_model.py for the appear/clear numbers
+      # these produce and proof/run_dynamic_esdf_proof.sh for the measured ones.
+      projective_integrator_max_integration_distance_m: 3.0
+      projective_integrator_truncation_distance_vox: 4.0
+      free_region_occupancy_probability: 0.2
+      occupied_region_occupancy_probability: 0.9
+      unobserved_region_occupancy_probability: 0.35
+      occupied_region_half_width_m: 0.15
+      esdf_integrator_min_weight: 2.0
+      esdf_integrator_max_distance_m: 2.0
+      free_region_decay_probability: 0.55
+      occupied_region_decay_probability: 0.30

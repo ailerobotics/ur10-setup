@@ -1,0 +1,3 @@
+# Recorded rosbags are large and never committed (record with proof/record_fixed_bag.sh).
+fixed_d415_bag/
+*.mcap

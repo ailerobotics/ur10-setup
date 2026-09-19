@@ -1,0 +1,16 @@
+[INFO] [1789838076.085561653] [fm_dyn_synth_depth_pub]: synthetic depth on /fm_dyn/depth/image_mm @ 10.0 Hz, frame fm_dyn_sim_camera_optical_frame, timeline 'default' — PROVISIONAL sim pose
+[INFO] [1789838080.398005644] [fm_dyn_synth_depth_pub]: set_obstacle: routebox removed
+[INFO] [1789838080.448812887] [fm_dyn_synth_depth_pub]: set_obstacle: routebox removed
+[INFO] [1789838080.499277988] [fm_dyn_synth_depth_pub]: set_obstacle: routebox removed
+[INFO] [1789838080.550272247] [fm_dyn_synth_depth_pub]: set_obstacle: routebox removed
+[INFO] [1789838080.600896592] [fm_dyn_synth_depth_pub]: set_obstacle: routebox removed
+[INFO] [1789838080.857932024] [fm_dyn_synth_depth_pub]: set_obstacle: routebox present at [0.4108964145813486, 0.34770496749473523, 0.7584685729409925]..[0.7308964145813487, 0.6677049674947353, 1.0784685729409924]
+[INFO] [1789838080.928250899] [fm_dyn_synth_depth_pub]: set_obstacle: routebox present at [0.4108964145813486, 0.34770496749473523, 0.7584685729409925]..[0.7308964145813487, 0.6677049674947353, 1.0784685729409924]
+[INFO] [1789838080.958681721] [fm_dyn_synth_depth_pub]: set_obstacle: routebox present at [0.4108964145813486, 0.34770496749473523, 0.7584685729409925]..[0.7308964145813487, 0.6677049674947353, 1.0784685729409924]
+[INFO] [1789838081.025081984] [fm_dyn_synth_depth_pub]: set_obstacle: routebox present at [0.4108964145813486, 0.34770496749473523, 0.7584685729409925]..[0.7308964145813487, 0.6677049674947353, 1.0784685729409924]
+[INFO] [1789838081.059777877] [fm_dyn_synth_depth_pub]: set_obstacle: routebox present at [0.4108964145813486, 0.34770496749473523, 0.7584685729409925]..[0.7308964145813487, 0.6677049674947353, 1.0784685729409924]
+[INFO] [1789838085.624075391] [fm_dyn_synth_depth_pub]: set_obstacle: routebox removed
+[INFO] [1789838085.640087789] [fm_dyn_synth_depth_pub]: set_obstacle: routebox removed
+[INFO] [1789838085.691381334] [fm_dyn_synth_depth_pub]: set_obstacle: routebox removed
+[INFO] [1789838085.741022437] [fm_dyn_synth_depth_pub]: set_obstacle: routebox removed
+[INFO] [1789838085.793040653] [fm_dyn_synth_depth_pub]: set_obstacle: routebox removed

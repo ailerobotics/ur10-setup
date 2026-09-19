@@ -1,0 +1,42 @@
+{
+  "ok": true,
+  "steps": {
+    "A_baseline": {
+      "n_pts": 19,
+      "plan_time_s": 0.201,
+      "tcp_mid": [
+        0.571,
+        0.508,
+        0.918
+      ],
+      "obstacle_on_path": true,
+      "limit_violations": []
+    },
+    "B_obstacle": {
+      "planned": true,
+      "n_pts": 27,
+      "plan_time_s": 0.176,
+      "esdf_occupied": 1372,
+      "tcp_path_shift_m": 0.4198,
+      "changed": true,
+      "limit_violations": []
+    },
+    "C_cleared": {
+      "planned": true,
+      "n_pts": 19,
+      "plan_time_s": 0.159,
+      "esdf_occupied": 0,
+      "tcp_path_shift_m": 0.0,
+      "returned": true,
+      "limit_violations": []
+    }
+  },
+  "verdict": {
+    "route_changed_on_appear": true,
+    "route_returned_on_leave": true,
+    "esdf_gained_then_lost_obstacle": true,
+    "all_waypoints_within_measured_limits": true,
+    "occ_present": 1372,
+    "occ_absent": 0
+  }
+}

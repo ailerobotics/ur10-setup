@@ -1,0 +1,4 @@
+[INFO] [1789838811.265565845] [static_transform_publisher_7zsTfFPvvkxcr5eo]: Spinning until stopped - publishing transform
+translation: ('0.000000', '-1.600000', '1.200000')
+rotation: ('0.844600', '0.000000', '0.000000', '0.535400')
+from 'base_link' to 'camera_depth_optical_frame'

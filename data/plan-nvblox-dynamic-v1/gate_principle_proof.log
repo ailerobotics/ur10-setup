@@ -1,0 +1,29 @@
+== gate-principle proof 2026-09-19T17:30:05Z ==
+-- routing_gate: map changes routes but never STOP->motion --
+ok  test_dynamic_layer_changes_the_route
+ok  test_gate_decides_from_camera_state_not_map
+ok  test_map_can_never_start_motion_exhaustive
+ok  test_run_forwards_the_planned_route
+ok  test_stop_never_forwards_regardless_of_map
+
+5 passed
+-- decay model: fresh not missed, stale does not linger --
+ok  test_departed_obstacle_clears_bounded
+ok  test_faster_decay_clears_sooner
+ok  test_fresh_obstacle_not_missed
+ok  test_half_life_positive
+ok  test_validation_rejects_bad_params
+
+5 passed
+-- extrinsics guard: real camera refused until calibrated --
+ok  test_real_accepts_valid_calibration
+ok  test_real_refused_on_failed_recheck
+ok  test_real_refused_on_serial_mismatch
+ok  test_real_refused_when_file_missing
+ok  test_real_refused_when_recheck_required_but_absent
+ok  test_real_refused_when_stale
+ok  test_real_refused_without_calibration_file
+ok  test_sim_returns_provisional
+
+8 passed
+RESULT: PASS — the map only re-routes; the gate alone starts/stops motion
