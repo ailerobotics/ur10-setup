@@ -1,0 +1,42 @@
+# Robot-side human-safety gate — thresholds (task human-gate-core-v1, Phase 1).
+#
+# Every value here is the CONSERVATIVE, PROVISIONAL default from
+# human-safety-s1/report.md §3 and §7. "Provisional" means it is deliberately
+# safe-but-loose and must be RE-DERIVED from measured end-to-end latency (Tr)
+# and stopping time (Ts) in the later owner-present phase (report §8 / §10
+# Phase 4). Tune these UP (safer), never down, until real measurements exist.
+#
+# Read/validated by humangate/gate_config.py. Unknown keys are ignored; missing
+# keys fall back to the conservative defaults baked into that loader.
+
+# --- interface freshness / liveness (report §7.2, §7.3) ---
+# Oldest a state message may be by its OWN evidence stamp before the gate STOPs.
+state_max_age_s: 0.200
+# Wall of silence with no state message -> perception dead -> STOP. Also the
+# window within which heartbeat_seq must advance.
+heartbeat_timeout_s: 0.300
+# A stamp this far in the future vs the gate clock = clock skew -> treat as stale.
+clock_skew_tolerance_s: 0.050
+
+# --- resume gating (report §3, §7.6) ---
+# Continuous healthy-CLEAR the gate must observe ITSELF before leaving STOP.
+clear_dwell_s: 2.0
+
+# --- zone geometry: used ONLY for lost-close classification + logging ---
+# (Zoning/hysteresis proper live on the camera side, report §7.6.)
+stop_radius_m: 2.0
+slow_clear_hysteresis_m: 0.3
+
+# --- primary lever speed-slider fractions the RECORDER logs (report §2.1) ---
+# NOTE: this task issues NO real slider write; these are what it WOULD command.
+operating_speed_fraction: 1.0
+slow_speed_fraction: 0.1
+stop_speed_fraction: 0.0
+
+# --- primary -> backstop fall-through (report §2, §5 #15) ---
+# If driver feedback does not confirm the arm stopped within this deadline after
+# a STOP command, escalate to BACKSTOP (cancel goal, hold).
+backstop_deadline_s: 0.5
+
+# --- gate cycle (report §3 latency budget: gate decide 10-50 ms) ---
+decide_rate_hz: 20.0
