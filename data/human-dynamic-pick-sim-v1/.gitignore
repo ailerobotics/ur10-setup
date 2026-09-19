@@ -1,0 +1,9 @@
+# Raw run logs + full decision/tick streams are regenerable via the e2e scripts
+# (dynamic_pick/sim/run_{mock,ursim,cumotion}_e2e.sh). Keep the committed evidence:
+# ASSERTIONS.txt (per rig, with the measured goal-preemption latency + re-target
+# rate), decision.md, and the cuMotion GPU before/peak snapshots.
+*.log
+pick.jsonl
+decisions.jsonl
+watcher.jsonl
+gpu_samples.txt

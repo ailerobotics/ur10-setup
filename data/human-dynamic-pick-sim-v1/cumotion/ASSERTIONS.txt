@@ -1,0 +1,22 @@
+
+=== dynamic-pick end-to-end assertions (cumotion) ===
+phases exercised: ['FAR', 'GRASP']
+goals sent: 53  preemptions: 0
+plan latency:       median 206.1 ms  (min 169.0, max 393.8, n=53)
+(node summary cross-check: {"kind": "summary", "goals_sent": 53, "preempts": 0, "plan_latency": {"n": 57, "median_ms": 203.9, "min_ms": 86.3, "max_ms": 393.8}, "preempt_latency": null, "retarget_rate_hz": null})
+
+  [PASS] controller produced ticks  (782 ticks)
+  [PASS] controller sent goals (arm followed the target)  (53 goals)
+  [PASS] SOLE AUTHORITY: every goal was forwarded ONLY under a fresh gate RUN  (all RUN)
+  [PASS] every PLAN intent had a FORWARD (RUN) acceptance  (57 PLAN ticks, 0 bad)
+  [PASS] a target that moves while the gate is STOP produces NO plan/motion  (363 STOP ticks with a live target, all held=True)
+  [PASS] preempted the running leg when the target moved (informational on cumotion)  (0 preemptions (mock arm completes legs instantly))
+  [PASS] keep-moving: planned a fresh leg AFTER a STOP (resume to freshest target)  (first STOP t=106075.5103)
+  [PASS] tracker occluded/lost -> hold, never chase a phantom  (117 occluded/lost ticks, all held=True)
+  [PASS] gate: SLOW seen (person approaching)
+  [PASS] gate: STOP seen (person close)
+  [PASS] gate: RUN seen (clear+dwell)
+  [PASS] gate: heartbeat loss -> STOP
+  [PASS] gate: vanish-close does NOT resume (LOST_CLOSE hold)
+
+13/13 checks passed
