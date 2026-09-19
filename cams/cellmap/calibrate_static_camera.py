@@ -161,6 +161,12 @@ def run_offline(a, tagmap):
         if not obs:
             rejected += 1
             continue
+        # drop tags touching the border (corner refinement unreliable there)
+        h_img, w_img = gray.shape[:2]
+        obs = [o for o in obs if not _at_border(o.corners_px, w_img, h_img, a.margin)]
+        if not obs:
+            rejected += 1
+            continue
         try:
             sol = sc.solve_camera_pose(obs, tagmap, K, D)
         except ValueError:

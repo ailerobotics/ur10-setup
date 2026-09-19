@@ -253,7 +253,7 @@ def solve_camera_pose(observations: List[TagObs],
         for o in known:
             tw = tagmap[o.tag_id]
             Tp = _refine_pose_one_tag(tag_corners_base(tw.T_base_tag, tw.size),
-                                      o.corners_px, K, D, T_base_cam)
+                                      o.corners_px, K, D, T_cam_base)
             if Tp is not None:
                 per_tag_pose[o.tag_id] = Tp
 
