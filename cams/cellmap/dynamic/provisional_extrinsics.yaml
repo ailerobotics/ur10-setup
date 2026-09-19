@@ -28,7 +28,7 @@ cameras:
       # These numbers are set by synth_depth_pub.py via look_at(); this block is
       # the fallback/record of what it uses. NOT a survey.
       translation: [0.0, -1.6, 1.2]
-      rotation: [0.8446, 0.0, 0.0, 0.5354]   # ~ -64 deg pitch toward +y/-z
+      rotation: [-0.8507, 0.0, 0.0, 0.5257]   # optical z forward toward +y/-z workspace
       note: "synthetic proof camera pose (look_at eye=[0,-1.6,1.2] target=[0,0.4,0.2]) — NOT a survey"
 
   # The two real fixed D415s, keyed by serial. Left in real mode with NO
