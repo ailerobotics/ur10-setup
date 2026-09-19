@@ -32,12 +32,16 @@ from typing import List, Optional, Tuple
 from action_msgs.srv import CancelGoal
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, Float64
+from std_srvs.srv import Trigger
 from ur_msgs.srv import SetSpeedSliderFraction
 
 SLIDER_SERVICE = "/io_and_status_controller/set_speed_slider"
 SCALING_TOPIC = "/speed_scaling_state_broadcaster/speed_scaling"
 PROGRAM_TOPIC = "/io_and_status_controller/robot_program_running"
 FJT_ACTION_DEFAULT = "/scaled_joint_trajectory_controller/follow_joint_trajectory"
+DASHBOARD_PAUSE = "/dashboard_client/pause"
+DASHBOARD_PLAY = "/dashboard_client/play"
+DASHBOARD_STOP = "/dashboard_client/stop"
 
 
 class SpeedSliderClient:
@@ -141,6 +145,42 @@ class TrajectoryCanceller:
         """Zero goal id + zero stamp = cancel every active goal (hold at position)."""
         req = CancelGoal.Request()   # default GoalInfo: zero uuid, zero stamp
         return self._cli.call_async(req)
+
+
+class DashboardClient:
+    """Dashboard pause/play/stop for the PENDANT-PAUSE stop strategy — the only
+    place the gate touches the dashboard, and ONLY when that strategy is selected.
+
+    * ``pause`` freezes a LOADED, PLAYING PolyScope program on its path (measured on
+      URSim CB3: applied scaling falls to 0, the running FollowJointTrajectory goal
+      survives, and a later ``play`` continues the SAME goal — PENDANT_PAUSE_FINDING.md);
+    * ``play`` resumes the paused program (the same trajectory);
+    * ``stop`` is terminal (tears down external control) — used only defensively.
+
+    Fire-and-forget (async): the effect is confirmed separately on the speed-scaling
+    topic, exactly like the slider, so a dashboard round-trip never stalls the decide
+    loop. Requires a program loaded+playing on the pendant (non-headless); in the
+    cell's headless bring-up these calls are rejected by the robot, which is why the
+    strategy is opt-in (PAUSE_RESUME_FINDING.md)."""
+
+    def __init__(self, node, pause=DASHBOARD_PAUSE, play=DASHBOARD_PLAY, stop=DASHBOARD_STOP):
+        self._node = node
+        self._pause = node.create_client(Trigger, pause)
+        self._play = node.create_client(Trigger, play)
+        self._stop = node.create_client(Trigger, stop)
+
+    def available(self, timeout=2.0) -> bool:
+        return (self._pause.wait_for_service(timeout_sec=timeout)
+                and self._play.wait_for_service(timeout_sec=timeout))
+
+    def pause(self):
+        return self._pause.call_async(Trigger.Request())
+
+    def play(self):
+        return self._play.call_async(Trigger.Request())
+
+    def stop(self):
+        return self._stop.call_async(Trigger.Request())
 
 
 def enumerate_host_subnets() -> Tuple[List[str], List[str]]:

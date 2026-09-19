@@ -1,0 +1,42 @@
+RESULT {"mode": "pendant", "action": "pause_play", "pause_hold": 60.0, "jtc_state_before": "active", "dashboard_before_motion": {"program_state": "PLAYING", "loaded_program": "/ursim/programs/external_control.urp", "program_running": true}, "goal_accepted": true, "dashboard_during_motion": {"program_state": "PLAYING", "loaded_program": "/ursim/programs/external_control.urp", "program_running": true}, "speed_before_pause": 0.06116, "clearly_moving_before_pause": true, "pan_at_pause": -1.28533, "scaling_before_pause": 100.0, "jtc_state_before_pause": "active", "pause_call": {"ok": true, "msg": "Pausing program"}, "froze_after_pause": true, "time_to_freeze_s": 1.807, "stopping_distance_rad": 0.00593, "goal_aborted_by_pause": false, "goal_code_at_pause": null, "pan_drift_during_pause": 0.0, "joint_states_flowing_during_pause": true, "scaling_during_pause_min": 0.0, "scaling_during_pause_last": 0.0, "jtc_state_during_pause": "active", "dashboard_during_pause": {"program_state": "PAUSED", "loaded_program": "/ursim/programs/external_control.urp", "program_running": false}, "goal_done_during_pause": false, "goal_code_during_pause": null, "play_call": {"ok": true, "msg": "Starting program"}, "speed_after_play": 0.05885, "pan_advanced_since_pause": 0.18357, "final_goal_result_code": 0, "final_goal_succeeded": true, "jtc_state_after": "active", "dashboard_after": {"program_state": "PLAYING", "loaded_program": "/ursim/programs/external_control.urp", "program_running": true}, "pause_executed": true, "play_executed": true, "motion_resumed_after_play": true, "true_freeze_and_continue": true}
+[investigate_pause:pendant] --- driver.log tail ---
+[ros2_control_node-1] [INFO] [1789824121.582267854] [controller_manager]: Activating controllers: [ ur_configuration_controller ]
+[ros2_control_node-1] [INFO] [1789824121.589555138] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789824121.598590956] [spawner_joint_state_broadcaster]: Configured and activated ur_configuration_controller
+[ros2_control_node-1] [INFO] [1789824121.599480672] [controller_manager]: Loading controller : 'friction_model_controller' of type 'ur_controllers/FrictionModelController'
+[ros2_control_node-1] [INFO] [1789824121.599503325] [controller_manager]: Loading controller 'friction_model_controller'
+[ros2_control_node-1] [INFO] [1789824121.599978947] [controller_manager]: Controller 'friction_model_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_20vroxnd 
+[spawner-8] [INFO] [1789824121.622608553] [spawner_joint_state_broadcaster]: Loaded friction_model_controller
+[ros2_control_node-1] [INFO] [1789824121.622970679] [controller_manager]: Configuring controller: 'friction_model_controller'
+[ros2_control_node-1] [INFO] [1789824121.630235420] [controller_manager]: Activating controllers: [ friction_model_controller ]
+[ros2_control_node-1] [INFO] [1789824121.637690291] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789824121.646754252] [spawner_joint_state_broadcaster]: Configured and activated friction_model_controller
+[ros2_control_node-1] [INFO] [1789824121.647747655] [controller_manager]: Loading controller : 'scaled_joint_trajectory_controller' of type 'ur_controllers/ScaledJointTrajectoryController'
+[ros2_control_node-1] [INFO] [1789824121.647770489] [controller_manager]: Loading controller 'scaled_joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789824121.648170968] [controller_manager]: Controller 'scaled_joint_trajectory_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_20vroxnd 
+[ros2_control_node-1] [INFO] [1789824121.662743271] [scaled_joint_trajectory_controller]: Using scaling state from the hardware from interface speed_scaling/speed_scaling_factor.
+[spawner-8] [INFO] [1789824121.686654406] [spawner_joint_state_broadcaster]: Loaded scaled_joint_trajectory_controller
+[ros2_control_node-1] [INFO] [1789824121.686959755] [controller_manager]: Configuring controller: 'scaled_joint_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789824121.687117063] [scaled_joint_trajectory_controller]: No specific joint names are used for command interfaces. Using 'joints' parameter.
+[ros2_control_node-1] [INFO] [1789824121.687130078] [scaled_joint_trajectory_controller]: Command interfaces are [position] and state interfaces are [position velocity].
+[ros2_control_node-1] [INFO] [1789824121.687138133] [scaled_joint_trajectory_controller]: Using 'splines' interpolation method.
+[ros2_control_node-1] [INFO] [1789824121.688922686] [scaled_joint_trajectory_controller]: Action status changes will be monitored at 20.00 Hz.
+[ros2_control_node-1] [INFO] [1789824121.695282271] [scaled_joint_trajectory_controller]: Setting initial scaling factor to 1.000000
+[ros2_control_node-1] [INFO] [1789824121.695316696] [scaled_joint_trajectory_controller]: No scaling interface set. This controller will not read speed scaling from the hardware.
+[ros2_control_node-1] [INFO] [1789824121.702355659] [controller_manager]: Activating controllers: [ scaled_joint_trajectory_controller ]
+[ros2_control_node-1] [INFO] [1789824121.709765625] [controller_manager]: Successfully switched controllers!
+[spawner-8] [INFO] [1789824121.718610451] [spawner_joint_state_broadcaster]: Configured and activated scaled_joint_trajectory_controller
+[ros2_control_node-1] [INFO] [1789824121.802916188] [controller_manager]: Deactivating controllers: [ friction_model_controller ]
+[ros2_control_node-1] [INFO] [1789824121.803122419] [controller_manager]: Switch controller timeout is set to 0, using default 1s!
+[ros2_control_node-1] [INFO] [1789824121.805509203] [controller_manager]: Requested controller switch from non-realtime loop
+[ros2_control_node-1] [INFO] [1789824121.805626906] [controller_manager]: Successfully switched controllers!
+[INFO] [spawner-8]: process has finished cleanly [pid 3655406]
+[ros2_control_node-1] [INFO] [1789824127.078322625] [UR_Client_Library:]: Robot requested program
+[ros2_control_node-1] [INFO] [1789824127.078462731] [UR_Client_Library:]: Sent program to robot
+[ros2_control_node-1] [INFO] [1789824127.195648762] [UR_Client_Library:]: Robot connected to reverse interface. Ready to receive control commands.
+[ros2_control_node-1] [INFO] [1789824127.198119146] [controller_manager]: Activating controllers: [ friction_model_controller ]
+[ros2_control_node-1] [INFO] [1789824127.205548037] [controller_manager]: Requested controller switch from non-realtime loop
+[ros2_control_node-1] [INFO] [1789824127.205687792] [controller_manager]: Successfully switched controllers!
+[ros2_control_node-1] [INFO] [1789824134.378728829] [scaled_joint_trajectory_controller]: Received new action goal
+[ros2_control_node-1] [INFO] [1789824134.378798200] [scaled_joint_trajectory_controller]: Accepted new action goal
+[ros2_control_node-1] [INFO] [1789824236.637473657] [scaled_joint_trajectory_controller]: Goal reached, success!

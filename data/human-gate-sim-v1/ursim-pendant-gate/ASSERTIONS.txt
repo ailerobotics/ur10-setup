@@ -1,0 +1,12 @@
+
+=== pendant-pause GATE end-to-end ===
+  [PASS] gate ran the pendant_pause strategy  ({'pendant_pause'})
+  [PASS] gate reached RUN (motion enabled)
+  [PASS] the gate PAUSED the program AFTER motion started (paused=true post-RUN)  (416 paused-STOP decisions after RUN)
+  [PASS] RUN -> paused STOP -> RUN (freeze then resume via the gate)  (run@42, paused@247, resumed@647)
+  [PASS] trajectory progress FROZE mid-motion for >=3 s (the pause)  (flat at tps=0.2197)
+  [PASS] the SAME trajectory then CONTINUED to the goal (progress reached ~1.0)  (max tps=0.9998)
+  [PASS] the ORIGINAL mover goal SUCCEEDED with no replan (code=0)  (finished(code=0))
+  [PASS] no backstop cancel of the active pause (only benign end-of-run heartbeat cancels, if any)  (3 total watcher cancels, 0 non-heartbeat)
+
+8/8 checks passed — the gate froze the arm on its path (PAUSE) and continued the SAME trajectory on CLEAR+dwell (PLAY), no replan, no backstop.

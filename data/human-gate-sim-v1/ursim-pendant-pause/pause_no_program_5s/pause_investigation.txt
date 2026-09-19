@@ -1,0 +1,42 @@
+RESULT {"mode": "pendant", "action": "pause_no_program", "pause_hold": 5.0, "jtc_state_before": "active", "dashboard_before_motion": {"program_state": "PLAYING", "loaded_program": "/ursim/programs/external_control.urp", "program_running": true}, "goal_accepted": true, "dashboard_during_motion": {"program_state": "PLAYING", "loaded_program": "/ursim/programs/external_control.urp", "program_running": true}, "speed_before_pause": 0.05733, "clearly_moving_before_pause": true, "pan_at_pause": -1.28575, "scaling_before_pause": 100.0, "jtc_state_before_pause": "active", "pre_stop_call": {"ok": true, "msg": "Stopped"}, "pause_call": {"ok": false, "err": "pause timed out"}, "froze_after_pause": false, "time_to_freeze_s": null, "stopping_distance_rad": 0.00408, "goal_aborted_by_pause": true, "goal_code_at_pause": -1, "pan_drift_during_pause": 0.0, "joint_states_flowing_during_pause": true, "scaling_during_pause_min": 0.0, "scaling_during_pause_last": 0.0, "jtc_state_during_pause": "inactive", "dashboard_during_pause": {"program_state": {"err": "program_state timed out"}, "loaded_program": {"err": "get_loaded_program timed out"}, "program_running": {"err": "program_running timed out"}}, "goal_done_during_pause": true, "goal_code_during_pause": -1, "play_call": {"ok": false, "msg": "not attempted (action=pause_no_program)"}, "speed_after_play": 0.0, "pan_advanced_since_pause": 0.00408, "final_goal_result_code": -1, "final_goal_succeeded": false, "jtc_state_after": "inactive", "dashboard_after": {"program_state": "STOPPED", "loaded_program": "/ursim/programs/external_control.urp", "program_running": false}, "pause_executed": false, "play_executed": false, "motion_resumed_after_play": false, "true_freeze_and_continue": false}
+[investigate_pause:pendant] --- driver.log tail ---
+[ros2_control_node-1] [INFO] [1789825301.145704444] [controller_manager]: Loading controller : 'forward_effort_controller' of type 'effort_controllers/JointGroupEffortController'
+[ros2_control_node-1] [INFO] [1789825301.145739600] [controller_manager]: Loading controller 'forward_effort_controller'
+[ros2_control_node-1] [INFO] [1789825301.146554614] [controller_manager]: Controller 'forward_effort_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_g0am2yfj 
+[spawner-9] [INFO] [1789825301.169503874] [spawner_joint_trajectory_controller]: Loaded forward_effort_controller
+[ros2_control_node-1] [INFO] [1789825301.169834801] [controller_manager]: Configuring controller: 'forward_effort_controller'
+[ros2_control_node-1] [INFO] [1789825301.170732411] [forward_effort_controller]: configure successful
+[ros2_control_node-1] [INFO] [1789825301.177531149] [controller_manager]: Loading controller : 'force_mode_controller' of type 'ur_controllers/ForceModeController'
+[ros2_control_node-1] [INFO] [1789825301.177560555] [controller_manager]: Loading controller 'force_mode_controller'
+[ros2_control_node-1] [INFO] [1789825301.177934373] [controller_manager]: Controller 'force_mode_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_g0am2yfj 
+[spawner-9] [INFO] [1789825301.193404406] [spawner_joint_trajectory_controller]: Loaded force_mode_controller
+[ros2_control_node-1] [INFO] [1789825301.193707369] [controller_manager]: Configuring controller: 'force_mode_controller'
+[ros2_control_node-1] [INFO] [1789825301.209734618] [controller_manager]: Loading controller : 'passthrough_trajectory_controller' of type 'ur_controllers/PassthroughTrajectoryController'
+[ros2_control_node-1] [INFO] [1789825301.209798329] [controller_manager]: Loading controller 'passthrough_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789825301.210189630] [controller_manager]: Controller 'passthrough_trajectory_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_g0am2yfj 
+[spawner-9] [INFO] [1789825301.233281400] [spawner_joint_trajectory_controller]: Loaded passthrough_trajectory_controller
+[ros2_control_node-1] [INFO] [1789825301.233615342] [controller_manager]: Configuring controller: 'passthrough_trajectory_controller'
+[ros2_control_node-1] [INFO] [1789825301.241543780] [controller_manager]: Loading controller : 'freedrive_mode_controller' of type 'ur_controllers/FreedriveModeController'
+[ros2_control_node-1] [INFO] [1789825301.241571021] [controller_manager]: Loading controller 'freedrive_mode_controller'
+[ros2_control_node-1] [INFO] [1789825301.241970799] [controller_manager]: Controller 'freedrive_mode_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_g0am2yfj 
+[spawner-9] [INFO] [1789825301.265357447] [spawner_joint_trajectory_controller]: Loaded freedrive_mode_controller
+[ros2_control_node-1] [INFO] [1789825301.265742036] [controller_manager]: Configuring controller: 'freedrive_mode_controller'
+[ros2_control_node-1] [INFO] [1789825301.273565505] [controller_manager]: Loading controller : 'tool_contact_controller' of type 'ur_controllers/ToolContactController'
+[ros2_control_node-1] [INFO] [1789825301.273593037] [controller_manager]: Loading controller 'tool_contact_controller'
+[ros2_control_node-1] [INFO] [1789825301.274078927] [controller_manager]: Controller 'tool_contact_controller' node arguments: --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10_update_rate.yaml --params-file /tmp/launch_params_g0am2yfj 
+[spawner-9] [INFO] [1789825301.297488098] [spawner_joint_trajectory_controller]: Loaded tool_contact_controller
+[ros2_control_node-1] [INFO] [1789825301.297895159] [controller_manager]: Configuring controller: 'tool_contact_controller'
+[INFO] [spawner-9]: process has finished cleanly [pid 3834031]
+[ros2_control_node-1] [INFO] [1789825304.475182500] [UR_Client_Library:]: Robot requested program
+[ros2_control_node-1] [INFO] [1789825304.475321383] [UR_Client_Library:]: Sent program to robot
+[ros2_control_node-1] [INFO] [1789825304.594715455] [UR_Client_Library:]: Robot connected to reverse interface. Ready to receive control commands.
+[ros2_control_node-1] [INFO] [1789825304.600815921] [controller_manager]: Activating controllers: [ friction_model_controller ]
+[ros2_control_node-1] [INFO] [1789825304.608200258] [controller_manager]: Requested controller switch from non-realtime loop
+[ros2_control_node-1] [INFO] [1789825304.608333300] [controller_manager]: Successfully switched controllers!
+[ros2_control_node-1] [INFO] [1789825310.757743564] [scaled_joint_trajectory_controller]: Received new action goal
+[ros2_control_node-1] [INFO] [1789825310.757806874] [scaled_joint_trajectory_controller]: Accepted new action goal
+[ros2_control_node-1] [INFO] [1789825319.244136195] [UR_Client_Library:]: Connection to reverse interface dropped.
+[ros2_control_node-1] [INFO] [1789825319.249349019] [controller_manager]: Deactivating controllers: [ friction_model_controller scaled_joint_trajectory_controller ]
+[ros2_control_node-1] [INFO] [1789825319.256278405] [controller_manager]: Requested controller switch from non-realtime loop
+[ros2_control_node-1] [INFO] [1789825319.256401808] [controller_manager]: Successfully switched controllers!
+[dashboard_client-2] [33m[WARN] [1789825351.475501495] [UR_Client_Library:]: Did not got the expected "(?:PAUSED ).*" response within the timeout. Last response was: "STOPPED external_control.urp"[0m

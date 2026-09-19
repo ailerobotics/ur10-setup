@@ -1,0 +1,17 @@
+
+=== dashboard pause/resume investigation (pendant CB3, loaded External Control program) ===
+  [PASS] External Control program was LOADED before motion  (/ursim/programs/external_control.urp)
+  [PASS] scaled_joint_trajectory_controller was ACTIVE  (active / active)
+  [PASS] trajectory goal was accepted
+  [PASS] arm was clearly moving before the pause call  (0.0574 rad/s)
+  [PASS] dashboard PAUSE executed (loaded program)  (Pausing program)
+  [PASS] arm FROZE on its path within a few seconds  (t_freeze=1.807s, drift=0.0 rad)
+  [PASS] applied speed scaling fell to ~0 while paused (a CONFIRMABLE stop)  (min scaling during pause = 0.0)
+  [PASS] the SAME FJT goal SURVIVED the pause (not aborted)  (code_at_pause=None)
+  [PASS] connection stayed up (/joint_states flowing while paused)
+  [PASS] dashboard PLAY executed  (Starting program)
+  [PASS] motion RESUMED on play (arm moving again / pan advanced past pause point)  (speed_after_play=0.05876 rad/s, pan_advanced=0.18463 rad)
+  [PASS] the SAME ORIGINAL goal succeeded with NO replan (code 0)  (result_code=0)
+  [PASS] true freeze-and-continue
+
+13/13 checks passed — pendant finding holds (action=pause_play).

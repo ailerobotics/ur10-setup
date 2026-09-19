@@ -89,7 +89,26 @@ def full():
     ]
 
 
-SCENARIOS = {"full": full}
+def pendant_pause_demo():
+    """A clean freeze-and-continue narrative for the PENDANT-PAUSE gate e2e: settle
+    to RUN and let the mover get well into its motion FIRST, then a person walks close
+    (STOP -> the gate PAUSES the loaded program, the arm freezes MID-motion on its
+    planned path), then a genuine tracked departure + CLEAR dwell (the gate PLAYS the
+    program -> the SAME trajectory continues to completion). The long initial CLEAR
+    covers DDS discovery (~2 s) + the gate's 2 s dwell so RUN + real motion happen well
+    before the STOP; the STOP window is long enough to exceed the pendant freeze
+    confirmation time so the pause fully takes effect. No heartbeat loss and no
+    vanish-close during motion, so nothing but the pause acts on the running goal."""
+    return [
+        (0.0, 12.0, _clear()),         # discovery + dwell -> RUN, then the mover moves
+        (12.0, 14.0, _slow(2.4)),      # person approaching -> SLOW
+        (14.0, 30.0, _stop(1.0)),      # person close -> STOP -> PAUSE (freeze MID-motion)
+        (30.0, 32.0, _slow(2.3)),      # TRACKED leaving -> SLOW (still frozen)
+        (32.0, 80.0, _clear()),        # CLEAR + dwell -> RESUME (play) same trajectory
+    ]
+
+
+SCENARIOS = {"full": full, "pendant_pause_demo": pendant_pause_demo}
 
 
 def state_json_for(phase: dict, now_wall: float, seq: int, *, stale_age: float = 5.0):

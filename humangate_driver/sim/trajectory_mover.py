@@ -57,16 +57,24 @@ class Mover(Node):
         return [self.js.get(j, 0.0) for j in JOINTS]
 
 
-def build_traj(q0, duration, amp=0.5):
-    """A slow there-and-back sweep of shoulder_pan (and a touch of elbow), well
-    within limits, sampled every 0.5 s. Peak velocity stays far below 5%."""
+def build_traj(q0, duration, amp=0.5, profile="sweep"):
+    """A slow motion of shoulder_pan (and a touch of elbow), well within limits,
+    sampled every 0.5 s, peak velocity far below 5%.
+
+    profile="sweep" (default): a there-and-back 0 -> amp -> 0 cosine (the original;
+      good for the cancel/backstop proofs where the arm holds where cancelled).
+    profile="ramp": a MONOTONIC 0 -> amp ramp. Used by the pendant-pause gate e2e so a
+      real freeze is unambiguous: progress advances steadily and stops DEAD if paused,
+      never confused with the cosine's near-zero-velocity turnaround."""
     traj = JointTrajectory()
     traj.joint_names = JOINTS
     n = max(4, int(duration / 0.5))
     for k in range(n + 1):
         frac = k / n
-        # smooth 0 -> amp -> 0 sweep
-        s = 0.5 * (1 - math.cos(2 * math.pi * frac))
+        if profile == "ramp":
+            s = frac                          # monotonic 0 -> 1
+        else:
+            s = 0.5 * (1 - math.cos(2 * math.pi * frac))   # there-and-back
         pt = JointTrajectoryPoint()
         pos = list(q0)
         pos[0] = q0[0] + amp * s              # shoulder_pan
@@ -88,6 +96,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--duration", type=float, default=40.0)
     ap.add_argument("--amp", type=float, default=0.5)
+    ap.add_argument("--profile", choices=["sweep", "ramp"], default="sweep")
     ap.add_argument("--log", default="/tmp/hg/mover.jsonl")
     ap.add_argument("--watch", type=float, default=60.0,
                     help="max wall seconds to watch before giving up")
@@ -99,7 +108,7 @@ def main():
         print("mover: no /joint_states — driver/sim not up", file=sys.stderr)
         n.destroy_node(); rclpy.shutdown(); return 1
     q0 = n.q()
-    traj = build_traj(q0, a.duration, a.amp)
+    traj = build_traj(q0, a.duration, a.amp, a.profile)
     span = abs(a.amp) + 1e-9
 
     if not n.fjt.wait_for_server(timeout_sec=15.0):

@@ -1,0 +1,10 @@
+
+=== dashboard pause/resume investigation (pendant CB3, loaded External Control program) ===
+  [PASS] External Control program was LOADED before motion  (/ursim/programs/external_control.urp)
+  [PASS] scaled_joint_trajectory_controller was ACTIVE  (active / active)
+  [PASS] trajectory goal was accepted
+  [PASS] arm was clearly moving before the pause call  (0.05869 rad/s)
+  [PASS] arm stopped moving after `stop`
+  [PASS] the goal did NOT succeed as a same-goal continue (stop is terminal)  (result_code=-1)
+
+6/6 checks passed — pendant finding holds (action=stop_instead).

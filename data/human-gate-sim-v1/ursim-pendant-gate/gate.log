@@ -1,0 +1,32 @@
+[WARN] [1789826138.050266239] [human_gate_driver]: ARMED for a SIMULATED arm: robot_ip=192.168.56.101 (docker-internal), domain=82. This must NEVER point at real hardware (report §10 Phase 3).
+[WARN] [1789826138.068001200] [human_gate_driver]: STOP strategy = pendant_pause: STOP will PAUSE a pendant-loaded program (freeze on path) and a healthy RESUME will PLAY it. Requires a loaded, playing External Control program (non-headless).
+[INFO] [1789826138.571723585] [human_gate_driver]: human_gate_driver up: sub /human_safety/state, pub /human_gate/decision, FJT /scaled_joint_trajectory_controller/follow_joint_trajectory. Speed slider is the PRIMARY lever; trajectory cancel is the BACKSTOP. SIMULATED arm only.
+[WARN] [1789826138.622404146] [human_gate_driver]: STOP: pause program (freeze on path) (startup: no camera-state received yet)
+[WARN] [1789826140.722093500] [human_gate_driver]: RESUME: play (paused 2.1s) (CLEAR healthy for 2.05 s >= dwell 2.00 s)
+[WARN] [1789826141.272026631] [human_gate_driver]: slider effect NOT confirmed: commanded 1.00, scaling 0.580 after 0.50s
+[ERROR] [1789826141.371894134] [human_gate_driver]: SOLE-WRITER CONFLICT: foreign speed-slider write: observed scaling 0.690 (was 0.630) does not match gate command 1.000 and is not the inert pre-command value 0.0 — the gate is not the sole writer
+[WARN] [1789826150.972160573] [human_gate_driver]: STOP: pause program (freeze on path) (camera zone STOP, nearest person 1.00 m)
+[WARN] [1789826170.972007943] [human_gate_driver]: RESUME: play (paused 20.0s) (CLEAR healthy for 2.00 s >= dwell 2.00 s)
+[WARN] [1789826171.472020941] [human_gate_driver]: slider effect NOT confirmed: commanded 1.00, scaling 0.520 after 0.50s
+[WARN] [1789826217.072065858] [human_gate_driver]: STOP: pause program (freeze on path) (stale state: evidence 212 ms old)
+[WARN] [1789826219.891857489] [human_gate_driver]: slider -> 0 (node shutdown — leaving slider at zero)
+Failed to publish log message to rosout: publisher's context is invalid, at ./src/rcl/publisher.c:423
+Traceback (most recent call last):
+  File "/home/manishsaini/.treehouse/ur10-setup-5940d0/2/ur10-setup/humangate_driver/sim/../gate_driver_node.py", line 285, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/manishsaini/.treehouse/ur10-setup-5940d0/2/ur10-setup/humangate_driver/sim/../gate_driver_node.py", line 269, in main
+    rclpy.spin(node)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/__init__.py", line 247, in spin
+    executor.spin_once()
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 926, in spin_once
+    self._spin_once_impl(timeout_sec)
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 907, in _spin_once_impl
+    handler, entity, node = self.wait_for_ready_callbacks(
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 877, in wait_for_ready_callbacks
+    return next(self._cb_iter)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/ros/jazzy/lib/python3.12/site-packages/rclpy/executors.py", line 785, in _wait_for_ready_callbacks
+    raise ExternalShutdownException()
+rclpy.executors.ExternalShutdownException
