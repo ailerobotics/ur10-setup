@@ -1,0 +1,52 @@
+# Fixed-camera extrinsics for the nvblox dynamic layer.
+#
+# READ THIS: the two fixed D415s are NOT calibrated into base_link yet (the tool
+# is cams/cellmap/calibrate_static_camera.py; the owner has not placed the tags).
+# So every entry here is either:
+#   mode: sim   -> a PROVISIONAL extrinsic used ONLY for replaying recorded or
+#                  synthetic depth in simulation. It is NOT a metric truth.
+#   mode: real  -> refused until a passing calibration_file exists (same guard as
+#                  cams/human_safety/human_safety/camera_poses.py). Flip to real
+#                  and fill calibration_file only after calibrate_static_camera.py
+#                  has written a valid base_to_camera_<serial>_<date>.yaml.
+#
+# extrinsics_guard.py loads this. A real-mode camera with no valid calibration is
+# dropped (no TF) — exactly how an uncalibrated camera behaves today.
+
+cameras:
+  # The synthetic-depth proof camera: a fixed view of the cell used ONLY by
+  # synth_depth_pub.py. The pose is chosen to see the workspace, not surveyed.
+  sim_fixed:
+    mode: sim
+    serial: "SYNTHETIC"
+    child: "fm_dyn_sim_camera_optical_frame"
+    provisional_extrinsic:
+      parent: "base_link"
+      child: "fm_dyn_sim_camera_optical_frame"
+      # base_link -> optical, RealSense convention (z forward, x right, y down).
+      # Camera ~1.6 m in front of and 1.2 m above base, looking down at the cell.
+      # These numbers are set by synth_depth_pub.py via look_at(); this block is
+      # the fallback/record of what it uses. NOT a survey.
+      translation: [0.0, -1.6, 1.2]
+      rotation: [-0.8507, 0.0, 0.0, 0.5257]   # optical z forward toward +y/-z workspace
+      note: "synthetic proof camera pose (look_at eye=[0,-1.6,1.2] target=[0,0.4,0.2]) — NOT a survey"
+
+  # The two real fixed D415s, keyed by serial. Left in real mode with NO
+  # calibration_file, so they are REFUSED until the owner places the tags and
+  # calibrate_static_camera.py writes a passing file. Do not add a provisional
+  # block here: a real camera must not silently inherit a guessed pose.
+  fixed_shelf_d415:
+    mode: real
+    serial: "018322070619"   # example — set to the shelf D415's real serial
+    child: "fixed_shelf_d415_color_optical_frame"
+    calibration_file: ""     # e.g. ../calib/base_to_camera_018322070619_2026-10-01.yaml
+    max_age_days: 30
+    require_recheck: true
+
+  fixed_table_d415:
+    mode: real
+    serial: "018322072103"   # example — set to the table D415's real serial
+    child: "fixed_table_d415_color_optical_frame"
+    calibration_file: ""
+    max_age_days: 30
+    require_recheck: true

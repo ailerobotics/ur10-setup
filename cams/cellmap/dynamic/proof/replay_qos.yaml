@@ -1,0 +1,13 @@
+# QoS override for `ros2 bag play` so the recorded depth is offered RELIABLE, to
+# match nvblox's SYSTEM_DEFAULT (reliable) subscription. Without this the replay
+# publishes best-effort and a reliable nvblox subscriber receives nothing.
+/camera/camera/depth/image_rect_raw:
+  reliability: reliable
+  history: keep_last
+  depth: 5
+  durability: volatile
+/camera/camera/depth/camera_info:
+  reliability: reliable
+  history: keep_last
+  depth: 5
+  durability: volatile

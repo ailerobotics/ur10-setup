@@ -1,0 +1,12 @@
+== nvidia-smi before ==
+memory.total [MiB], memory.used [MiB], memory.free [MiB]
+12288 MiB, 2305 MiB, 9603 MiB
+== launch nvblox dynamic + cuMotion (read_esdf_world) ==
+== start synthetic depth (manual obstacle mode, default downward camera) ==
+== wait for cuMotion move_group action server ==
+   cuMotion up after 2s
+== run route proof driver ==
+SUMMARY {"route_changed_on_appear": true, "route_returned_on_leave": true, "esdf_gained_then_lost_obstacle": true, "all_waypoints_within_measured_limits": true, "occ_present": 1372, "occ_absent": 0}
+ROUTE PROOF PASS
+== peak GPU memory.used during run: 3385 MiB ==
+RESULT: PASS — route detours on appear, returns on leave

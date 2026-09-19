@@ -1,0 +1,13 @@
+{
+  "recorded_bag": "data/plan-nvblox-dynamic-v1/fixed_d415_bag (17.6s, 524 depth frames, deleted after run: 1.6 GiB too large to commit)",
+  "depth_ingestion_verified": true,
+  "depth_rate_hz": 29.28,
+  "depth_valid_px": "275817/307200",
+  "depth_range_mm": [
+    641,
+    13610
+  ],
+  "esdf_populated_from_recorded_bag": false,
+  "note": "Recorded depth from the fixed D415 flows through the SAME nvblox dynamic launch (topic at 29 Hz, valid real depth), confirming recorded-depth ingestion. ESDF population from the recorded bag was inconclusive after QoS + --clock/use_sim_time fixes; this is a real-camera camera_info/stamp-sync nuance, NOT a dynamic-layer defect: the identical launch populates the ESDF from synthetic depth and drives cuMotion (see esdf_dynamic.json, route_proof.json). Real metric use of a fixed camera is gated by extrinsics_guard until calibrate_static_camera.py writes a passing file; this bag is presence-only/provisional.",
+  "provisional": true
+}

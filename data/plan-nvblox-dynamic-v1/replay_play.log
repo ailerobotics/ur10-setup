@@ -1,0 +1,9 @@
+stdin is not a terminal device. Keyboard handling disabled.[INFO] [1789838817.343133932] [rosbag2_player]: Set rate to 1
+[INFO] [1789838817.345610592] [rosbag2_player]: Overriding QoS profile for topic /camera/camera/depth/camera_info
+[INFO] [1789838817.348291610] [rosbag2_player]: Overriding QoS profile for topic /camera/camera/depth/image_rect_raw
+[INFO] [1789838817.351608165] [rosbag2_player]: Adding keyboard callbacks.
+[INFO] [1789838817.351626369] [rosbag2_player]: Press SPACE for Pause/Resume
+[INFO] [1789838817.351632511] [rosbag2_player]: Press CURSOR_RIGHT for Play Next Message
+[INFO] [1789838817.351637691] [rosbag2_player]: Press CURSOR_UP for Increase Rate 10%
+[INFO] [1789838817.351642430] [rosbag2_player]: Press CURSOR_DOWN for Decrease Rate 10%
+[INFO] [1789838817.352801229] [rosbag2_player]: Playback until timestamp: -1
