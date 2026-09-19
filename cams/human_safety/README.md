@@ -186,7 +186,8 @@ accuracy are in `data/human-cam-calib-v1/report.md`. Procedure:
    camera stays presence-only.
 4. Guard against a moved camera: `cams/cellmap/recheck_static_camera.py --calib
    <file> --image … --info …` re-checks that the tags still reproject where the
-   stored pose predicts and stamps `recheck: fail` if not (→ presence-only).
+   stored pose predicts and stamps a `recheck` block with `status: fail` if not
+   (→ presence-only).
 
 An ordinary colour webcam additionally needs a one-time intrinsics calibration
 (`cams/cellmap/calibrate_webcam_intrinsics.py`, chessboard) before PnP is
