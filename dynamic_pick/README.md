@@ -87,14 +87,22 @@ bash sim/run_ursim_e2e.sh
 #     nvblox ESDF, on domain 83. Holds the fleet GPU lock for the whole run and
 #     records peak GPU. Bring up the planner container is sim/start_cumotion_task.sh.
 bash sim/run_cumotion_e2e.sh
+
+# (d) GRASP path (mock hardware) — the target CONVERGES so the tool point enters
+#     NEAR then GRASP while it keeps moving; the grasp completes -> begin_retreat ->
+#     the FIXED retreat leg. Proves the per-phase re-plan policy holds on the
+#     FRESH-leg path too (NEAR limited to the pre-cleared box; GRASP frozen), not
+#     only on preemption. Asserted by sim/assert_grasp.py.
+bash sim/run_grasp_e2e.sh
 ```
 
 `sim/assert_dynamic_pick.py` reads the run logs and prints PASS/FAIL plus the
 **goal-preemption latency** and the **achievable re-target rate at the 5% cap**,
-and exits non-zero if any required behaviour is missing. Scripted perception is in
-`sim/scenarios.py` (human states in the REAL wire format via
-`../humangate/state_adapter.build_state_json`; the moving target as a base-frame
-`PointStamped`).
+and exits non-zero if any required behaviour is missing (`sim/assert_grasp.py` does
+the same for the GRASP path: FAR/NEAR/GRASP/RETREAT exercised, no PLAN while GRASP,
+retreat leg to the fixed pose). Scripted perception is in `sim/scenarios.py` (human
+states in the REAL wire format via `../humangate/state_adapter.build_state_json`;
+the moving target as a base-frame `PointStamped`).
 
 ## Out of scope (report Phase B and later — follow-ups)
 

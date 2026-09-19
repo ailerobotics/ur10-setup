@@ -56,7 +56,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 from gate_acceptance import GateAcceptanceShim, GateView  # noqa: E402
-from pick_phases import PhaseParams, PickPhaseMachine  # noqa: E402
+from pick_phases import GRASP, PhaseParams, PickPhaseMachine  # noqa: E402
 from pick_target_tracker import PickTargetTracker  # noqa: E402
 from planner_port import (  # noqa: E402
     JOINTS, SPEED, AnalyticJointPlanner, CartesianToJointSurrogate, joint_windows)
@@ -82,6 +82,16 @@ class SegmentedPickNode(Node):
         self.deadband_m = float(self._p("deadband_m", 0.03))
         self.n_sustain = int(self._p("n_sustain", 3))
         self.log_path = str(self._p("log", ""))
+        # optional fixed pre-planned retreat pose (base frame, "x,y,z" m). When set,
+        # a completed grasp (TCP settled in GRASP with no leg in flight for
+        # grasp_settle_s) signals begin_retreat and the controller plans the FIXED
+        # retreat leg. Empty (default) leaves retreat unwired, as the full scenario.
+        retreat_xyz = str(self._p("retreat_xyz", ""))
+        self._retreat_target = (np.array([float(v) for v in retreat_xyz.split(",")])
+                                if retreat_xyz else None)
+        self.grasp_settle_s = float(self._p("grasp_settle_s", 3.0))
+        self._grasp_since = None
+        self._retreating = False
 
         lim = yaml.safe_load(open(self.limits_path))
         self.lo, self.hi = joint_windows(lim)
@@ -168,11 +178,32 @@ class SegmentedPickNode(Node):
         else:
             est = self.tracker.step(now)
 
-        intent = self.controller.decide(now, est, tcp, self._gate)
+        intent = self.controller.decide(now, est, tcp, self._gate,
+                                         retreat_target=self._retreat_target)
         self._log_tick(now, intent, est, tcp)
 
         if intent.action == PLAN:
             self._send_leg(intent.goal, now, preempt=intent.preempt)
+
+        self._maybe_begin_retreat(now, intent)
+
+    def _maybe_begin_retreat(self, now, intent):
+        # MINIMUM grasp-completion signalling for the sim: once the TCP has settled
+        # in GRASP with no leg in flight (the approach leg finished), the grasp is
+        # complete; signal the controller to begin the FROZEN retreat. Only active
+        # when a retreat pose is configured; the gate remains the sole authority.
+        if self._retreat_target is None or self._retreating:
+            return
+        if intent.phase != GRASP or self.controller.leg_running(now):
+            self._grasp_since = None
+            return
+        if self._grasp_since is None:
+            self._grasp_since = now
+        elif now - self._grasp_since >= self.grasp_settle_s:
+            self.controller.begin_retreat()
+            self._retreating = True
+            self._log_event(now, "grasp_complete_begin_retreat",
+                            {"settled_s": round(now - self._grasp_since, 2)})
 
     # ---- planning + goal dispatch ---- #
     def _send_leg(self, goal_xyz, now, preempt):
@@ -205,6 +236,12 @@ class SegmentedPickNode(Node):
         g = FollowJointTrajectory.Goal()
         g.trajectory = traj
         send_future = self.fjt.send_goal_async(g)
+        # Mark the leg in-flight and rate-limited at SEND time, not only in the
+        # async accept callback: otherwise a _tick firing between send and accept
+        # sees no leg running / no recent plan and dispatches a duplicate competing
+        # goal. The accept callback refreshes this timing; a rejection clears it.
+        self.controller.note_leg_started(self._committed_goal, time.monotonic(),
+                                         getattr(self, "_leg_duration", 0.0))
         send_future.add_done_callback(
             lambda fut, dt=decide_t, pmt=preempt, pdt=plan_dt: self._on_goal_response(fut, dt, pmt, pdt))
         self._log_event(now, "goal_sent", {
@@ -217,6 +254,10 @@ class SegmentedPickNode(Node):
         gh = fut.result()
         if gh is None or not gh.accepted:
             self.get_logger().warn("goal rejected by controller")
+            # undo the send-time in-flight mark so the phantom leg does not block
+            # re-planning; only when no accepted leg has since taken over.
+            if self._active_gh is None:
+                self.controller.note_leg_finished()
             return
         t_acc = time.time()
         self._active_gh = gh

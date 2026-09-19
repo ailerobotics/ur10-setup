@@ -143,9 +143,42 @@ def target_cumotion():
     return wp
 
 
-HUMAN_SCENARIOS = {"dynamic_pick_full": human_full, "dynamic_pick_cumotion": human_full}
-TARGET_SCENARIOS = {"dynamic_pick_full": target_full, "dynamic_pick_cumotion": target_cumotion}
-SCENARIO_DURATION = {"dynamic_pick_full": 56.0, "dynamic_pick_cumotion": 56.0}
+def human_grasp():
+    """All-CLEAR human timeline (discovery + dwell -> RUN, then a long RUN window):
+    the grasp scenario exercises the near/grasp/retreat PICK path, not the safety
+    gate, so the gate simply reaches RUN and stays there for the whole run."""
+    return [(0.0, 8.0, _clear()), (8.0, 44.0, _clear())]
+
+
+def target_grasp():
+    """A target that keeps MOVING as the TCP closes in, so the tool point passes
+    through the FAR -> NEAR -> GRASP bands (report §3). The arm parks at TCP
+    ~[0.6, 0, 0.35] (prepose = window centre). The target starts ~0.25 m away (FAR)
+    and steps toward a settle point every ~2 s while the arm follows; each step keeps
+    it inside the near-approach box so the LIMITED policy permits the final-approach
+    re-plans. After ~13 s it HOLDS, the TCP settles into GRASP, the grasp completes
+    (segmented_pick_node's grasp_settle) -> begin_retreat -> the FIXED retreat leg."""
+    wp = [(0.0, {"xyz": [0.80, 0.10, 0.45]})]          # FAR from the parked TCP (~0.25 m)
+    steps = [(5.0,  [0.74, 0.07, 0.43]),
+             (7.0,  [0.72, 0.06, 0.42]),
+             (9.0,  [0.70, 0.05, 0.41]),
+             (11.0, [0.695, 0.05, 0.408]),
+             (13.0, [0.69, 0.05, 0.405])]
+    wp.extend((t, {"xyz": xyz}) for t, xyz in steps)
+    wp.append((30.0, {"xyz": [0.69, 0.05, 0.405]}))    # hold: grasp completes -> retreat
+    return wp
+
+
+# fixed pre-planned retreat pose the grasp scenario uses (base frame, m; inside the
+# surrogate workspace box and the measured joint windows).
+GRASP_RETREAT_XYZ = "0.45,-0.25,0.50"
+
+HUMAN_SCENARIOS = {"dynamic_pick_full": human_full, "dynamic_pick_cumotion": human_full,
+                   "dynamic_pick_grasp": human_grasp}
+TARGET_SCENARIOS = {"dynamic_pick_full": target_full, "dynamic_pick_cumotion": target_cumotion,
+                    "dynamic_pick_grasp": target_grasp}
+SCENARIO_DURATION = {"dynamic_pick_full": 56.0, "dynamic_pick_cumotion": 56.0,
+                     "dynamic_pick_grasp": 44.0}
 
 
 def human_state_json(spec: dict, now_wall: float, seq: int) -> str:

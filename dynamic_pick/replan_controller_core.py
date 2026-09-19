@@ -102,6 +102,11 @@ class ReplanController:
     def _leg_running(self, now: float) -> bool:
         return self._leg_end_mono is not None and now < self._leg_end_mono
 
+    def leg_running(self, now: float) -> bool:
+        """Public read of the in-flight timing (the ROS node uses it to detect a
+        completed grasp leg before it signals begin_retreat)."""
+        return self._leg_running(now)
+
     def begin_retreat(self) -> None:
         self.phases.begin_retreat()
 
@@ -129,48 +134,57 @@ class ReplanController:
                           f"acceptance shim HOLD: {ruling.reason}",
                           phase, ruling.gate_action, False, False)
 
-        # 2) gate is RUN + fresh. Choose the goal for this phase.
+        # 2) gate is RUN + fresh. RETREAT is a special case: it plans the FIXED
+        #    pre-planned retreat pose, never the tracker target, so it is not a
+        #    re-target at all — it plans its leg once and never preempts.
         if phase == RETREAT:
             goal = None if retreat_target is None else np.asarray(retreat_target, float).reshape(3)
             if goal is None:
                 return Intent(HOLD, None, "retreat: no retreat pose supplied -> hold",
                               phase, ruling.gate_action, True, False)
-        else:
-            goal = est.committed_target
-            if goal is None or est.state != TRACKING:
-                return Intent(HOLD, None,
-                              f"no committed target (tracker {est.state}) -> hold, do not chase",
+            if self._leg_running(now):
+                return Intent(NOOP, None, "retreat leg running (frozen) -> let it complete",
                               phase, ruling.gate_action, True, False)
-
-        # 3) is a new leg needed?
-        if not self._leg_running(now):
-            # nothing in flight: start this phase's leg (rate-limited so we do not
-            # spam plans while one is being set up).
             if self._rate_limited(now):
-                return Intent(NOOP, None, "gate RUN but within re-plan rate limit -> wait",
+                return Intent(NOOP, None, "retreat: within re-plan rate limit -> wait",
                               phase, ruling.gate_action, True, False)
-            return Intent(PLAN, goal, "gate RUN, no leg in flight -> plan a leg to the target",
+            return Intent(PLAN, goal, "retreat: plan the fixed pre-planned retreat leg",
                           phase, ruling.gate_action, True, False)
 
-        # a leg IS running: only PREEMPT on a genuine move that the phase policy
-        # permits and the rate limit allows.
-        moved = self._goal_differs(goal)
-        if phase == RETREAT:
-            # retreat is frozen and to a fixed pose: never preempt.
-            return Intent(NOOP, None, "retreat leg running (frozen) -> let it complete",
+        # non-RETREAT: the goal is the tracker's committed target.
+        goal = est.committed_target
+        if goal is None or est.state != TRACKING:
+            return Intent(HOLD, None,
+                          f"no committed target (tracker {est.state}) -> hold, do not chase",
                           phase, ruling.gate_action, True, False)
-        if not (est.committed_moved and moved):
+
+        # 3) A leg already running that has NOT genuinely moved just keeps running;
+        #    a genuine move falls through to the shared phase-policy gate below.
+        running = self._leg_running(now)
+        if running and not (est.committed_moved and self._goal_differs(goal)):
             return Intent(NOOP, None, "committed target unchanged -> let the leg run",
                           phase, ruling.gate_action, True, False)
+
+        # 4) THE SINGLE per-phase re-plan gate. EVERY plan toward the tracker target
+        #    — a fresh first leg AND a preemption of a running one — passes through
+        #    here, so no path can plan around the phase policy: FAR allows it; NEAR
+        #    only inside the pre-cleared box; GRASP is FROZEN (a leg completing in
+        #    grasp must NOT re-plan to a moved object — report §3).
         replan = self.phases.rule_replan(goal)
         if not replan.allow_replan:
-            return Intent(NOOP, None, f"target moved but {replan.reason} -> let the leg run",
+            lead = "target moved but" if running else "gate RUN but"
+            tail = "let the leg run" if running else "hold, do not plan"
+            return Intent(NOOP, None, f"{lead} {replan.reason} -> {tail}",
                           phase, ruling.gate_action, True, False)
+
+        # 5) the rate limit applies to both a fresh leg and a preemption.
         if self._rate_limited(now):
-            return Intent(NOOP, None, "target moved but within re-plan rate limit -> wait",
+            return Intent(NOOP, None, "gate RUN but within re-plan rate limit -> wait",
                           phase, ruling.gate_action, True, False)
-        return Intent(PLAN, goal, f"target moved ({replan.reason}) -> preempt with a fresh leg",
-                      phase, ruling.gate_action, True, True)
+
+        reason = (f"target moved ({replan.reason}) -> preempt with a fresh leg" if running
+                  else f"gate RUN, no leg in flight -> plan a leg to the target ({replan.reason})")
+        return Intent(PLAN, goal, reason, phase, ruling.gate_action, True, running)
 
     # ---- helpers ---------------------------------------------------------- #
     def _rate_limited(self, now: float) -> bool:

@@ -97,14 +97,131 @@ def test_grasp_phase_freezes_preemption():
     phases = PickPhaseMachine(PhaseParams(near_enter_m=0.2, grasp_enter_m=0.05))
     c = ReplanController(min_replan_interval_s=0.0, phases=phases)
     tgt = (0.6, 0.0, 0.3)
-    # drive TCP to grasp radius so phase becomes GRASP
-    tcp = np.array([0.6, 0.0, 0.31])   # ~1 cm from target
-    i0 = c.decide(100.0, _est(committed=tgt), tcp, _run(100.0))
+    # start a leg while FAR (a leg must be running to test that GRASP freezes its
+    # preemption; you never START in grasp — you arrive there via a running leg).
+    i0 = c.decide(100.0, _est(committed=tgt), np.array([0.2, 0.0, 0.3]), _run(100.0))
+    assert i0.action == PLAN
     c.note_leg_started(i0.goal, 100.0, 10.0)
-    # target "moves" but we are in GRASP -> frozen -> NOOP (never preempt)
-    i1 = c.decide(101.0, _est(committed=(0.7, 0.0, 0.3), moved=True), tcp, _run(101.0))
+    # TCP now at the grasp radius -> GRASP; target jitters within it -> frozen -> NOOP
+    grasp_tcp = np.array([0.6, 0.0, 0.31])   # ~1 cm from target
+    i1 = c.decide(101.0, _est(committed=(0.61, 0.0, 0.30), moved=True), grasp_tcp, _run(101.0))
     assert c.phases.phase == "GRASP"
     assert i1.action == NOOP
+
+
+def test_no_fresh_plan_to_moved_target_in_near():
+    """A leg that COMPLETES in NEAR with the committed target moved OUTSIDE the
+    pre-cleared box must NOT re-plan to that moved target (LIMITED policy) — the
+    fresh-leg path is gated by the phase policy, not only the preempt path."""
+    from pick_phases import PhaseParams, PickPhaseMachine
+    phases = PickPhaseMachine(PhaseParams(near_enter_m=0.2, grasp_enter_m=0.03,
+                                          near_box_half_m=0.10))
+    c = ReplanController(min_replan_interval_s=0.0, phases=phases)
+    tgt = (0.6, 0.0, 0.3)
+    # a leg runs in FAR toward the target
+    i0 = c.decide(100.0, _est(committed=tgt), np.array([0.35, 0.0, 0.3]), _run(100.0))
+    assert i0.action == PLAN
+    c.note_leg_started(i0.goal, 100.0, 10.0)
+    # TCP arrives in the near band -> NEAR (box centred at tgt)
+    near_tcp = np.array([0.55, 0.0, 0.3])
+    c.decide(101.0, _est(committed=tgt), near_tcp, _run(101.0))
+    assert c.phases.phase == "NEAR"
+    # the leg completes; the target then jumps 0.15 m -> OUTSIDE the 0.10 m box
+    c.note_leg_finished()
+    moved = (0.75, 0.0, 0.3)
+    i = c.decide(102.0, _est(committed=moved, moved=True), near_tcp, _run(102.0))
+    assert c.phases.phase == "NEAR"
+    assert i.action != PLAN and i.goal is None
+
+
+def test_no_fresh_plan_to_moved_target_in_grasp():
+    """A leg that COMPLETES in GRASP with the target moved must NOT re-plan to the
+    moved target (FROZEN): the fresh-leg path is frozen too, not just preemption."""
+    from pick_phases import PhaseParams, PickPhaseMachine
+    phases = PickPhaseMachine(PhaseParams(near_enter_m=0.2, grasp_enter_m=0.05))
+    c = ReplanController(min_replan_interval_s=0.0, phases=phases)
+    tgt = (0.6, 0.0, 0.3)
+    i0 = c.decide(100.0, _est(committed=tgt), np.array([0.2, 0.0, 0.3]), _run(100.0))
+    assert i0.action == PLAN
+    c.note_leg_started(i0.goal, 100.0, 10.0)
+    grasp_tcp = np.array([0.6, 0.0, 0.31])   # within grasp radius -> GRASP
+    c.decide(101.0, _est(committed=tgt), grasp_tcp, _run(101.0))
+    assert c.phases.phase == "GRASP"
+    # leg completes; target moves -> a fresh leg must NOT chase it (frozen)
+    c.note_leg_finished()
+    i = c.decide(102.0, _est(committed=(0.62, 0.0, 0.30), moved=True), grasp_tcp, _run(102.0))
+    assert c.phases.phase == "GRASP"
+    assert i.action != PLAN and i.goal is None
+
+
+def test_no_fresh_plan_to_moved_target_in_retreat():
+    """In RETREAT the tracker target is ignored entirely: the ONLY goal ever planned
+    is the fixed pre-planned retreat pose, never the (moved) pick target."""
+    retreat = np.array([0.1, 0.0, 0.5])
+    moved = (0.9, 0.0, 0.3)
+    c = ReplanController(min_replan_interval_s=0.0)
+    c.begin_retreat()
+    # nothing in flight, target has moved far: a fresh RETREAT leg goes ONLY to the
+    # fixed retreat pose.
+    i = c.decide(100.0, _est(committed=moved, moved=True), np.array([0.6, 0, 0.3]),
+                 _run(100.0), retreat_target=retreat)
+    assert i.action == PLAN
+    assert np.allclose(i.goal, retreat) and not np.allclose(i.goal, moved)
+    # and with NO retreat pose supplied it HOLDS rather than chasing the moved target
+    c2 = ReplanController(min_replan_interval_s=0.0)
+    c2.begin_retreat()
+    i2 = c2.decide(100.0, _est(committed=moved, moved=True), np.array([0.6, 0, 0.3]),
+                   _run(100.0))
+    assert i2.action == HOLD and i2.goal is None
+
+
+def test_scripted_near_grasp_retreat_sequence():
+    """Scripted (pure) end-to-end sequence: an approach leg drives FAR->NEAR->GRASP
+    toward a target that keeps jittering, the grasp completes -> begin_retreat ->
+    the retreat leg goes to the FIXED pose. No PLAN in NEAR/GRASP ever targets a
+    moved target outside the box."""
+    from pick_phases import PhaseParams, PickPhaseMachine
+    phases = PickPhaseMachine(PhaseParams(near_enter_m=0.2, grasp_enter_m=0.05,
+                                          near_box_half_m=0.10))
+    c = ReplanController(min_replan_interval_s=0.0, phases=phases)
+    retreat = np.array([0.2, -0.2, 0.5])
+
+    # FAR: fresh leg to the target
+    i = c.decide(100.0, _est(committed=(0.6, 0.0, 0.3)), np.array([0.2, 0.0, 0.3]),
+                 _run(100.0), retreat_target=retreat)
+    assert i.action == PLAN and c.phases.phase == "FAR" and not i.preempt
+    c.note_leg_started(i.goal, 100.0, 5.0)
+
+    # leg completes; TCP in the near band, a small jitter INSIDE the box is planned
+    c.note_leg_finished()
+    near_tcp = np.array([0.50, 0.0, 0.3])
+    i = c.decide(106.0, _est(committed=(0.605, 0.0, 0.3), moved=True), near_tcp,
+                 _run(106.0), retreat_target=retreat)
+    assert c.phases.phase == "NEAR" and i.action == PLAN
+    c.note_leg_started(i.goal, 106.0, 2.0)
+
+    # leg completes; a jump OUTSIDE the box must NOT be chased
+    c.note_leg_finished()
+    i = c.decide(109.0, _est(committed=(0.78, 0.0, 0.3), moved=True), near_tcp,
+                 _run(109.0), retreat_target=retreat)
+    assert c.phases.phase == "NEAR" and i.action != PLAN
+
+    # TCP reaches the target -> GRASP; frozen even for a completed leg
+    grasp_tcp = np.array([0.605, 0.0, 0.31])
+    c.decide(110.0, _est(committed=(0.605, 0.0, 0.3)), grasp_tcp, _run(110.0),
+             retreat_target=retreat)
+    assert c.phases.phase == "GRASP"
+    c.note_leg_finished()
+    i = c.decide(111.0, _est(committed=(0.63, 0.0, 0.3), moved=True), grasp_tcp,
+                 _run(111.0), retreat_target=retreat)
+    assert i.action != PLAN
+
+    # grasp complete -> begin_retreat -> the retreat leg goes to the FIXED pose
+    c.begin_retreat()
+    i = c.decide(112.0, _est(committed=(0.9, 0.0, 0.3), moved=True), grasp_tcp,
+                 _run(112.0), retreat_target=retreat)
+    assert c.phases.phase == "RETREAT"
+    assert i.action == PLAN and np.allclose(i.goal, retreat)
 
 
 def test_retreat_uses_fixed_pose_and_freezes():
