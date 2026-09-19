@@ -6,8 +6,10 @@ this phase, **only records what it would command**. It never touches the robot.
 
 This is **Phase 1** of the phased plan in the design report
 `human-safety-s1/report.md` (§10): *interface freeze + gate skeleton, no robot.*
-Wiring these decisions to the real driver (speed slider + trajectory cancel),
-first against a simulated arm, is the next, separate change (Phase 3).
+This package stays plan-only. Wiring these decisions to the real driver (speed
+slider + trajectory cancel) against a **simulated** arm (Phase 3) is done in a
+**separate** package, `humangate_driver/`, kept out of this one so this package
+stays provably plan-only — see `humangate_driver/README.md`.
 
 ## What this is NOT — the one thing to read first
 
@@ -31,9 +33,9 @@ clear, so the certified hard stops rarely have to fire. That is all it claims.
 ## How the feature fits together
 
 ```
- cameras ──► human-detect-core-v1 (parallel task)         THIS TASK (Phase 1)
+ cameras ──► cams/human_safety (committed)                THIS PACKAGE (Phase 1)
             detect + track + fuse   ──►  /human_safety/state  ──►  human_gate
-            publishes CLEAR/SLOW/STOP,        (state message)       decide RUN/SLOW/
+            publishes CLEAR/SLOW/STOP,     (std_msgs/String JSON)   decide RUN/SLOW/
             nearest distance, health,                               STOP/BACKSTOP,
             heartbeat                                               RECORD only
 ```
@@ -78,7 +80,7 @@ runtime (importing the package pulls no driver package).
 | File | Role |
 |---|---|
 | `camera_state.py` | the gate's stable representation of the camera-side state (report §7.1). Pure. |
-| `state_adapter.py` | thin adapter wire-message → `CameraState`; **swap point** for the real perception message (see below). Pure. |
+| `state_adapter.py` | thin adapter: the camera side's real `std_msgs/String` JSON wire format → `CameraState` (see below). Pure. |
 | `gate_config.py` / `gate_params.yaml` | thresholds, all provisional report defaults in one place. Pure. |
 | `gate_core.py` | the pure, deterministic decision core (all rules above). No ROS. |
 | `command_port.py` | abstract command port + `RecorderPort` (records, never sends). Pure. |
@@ -88,22 +90,19 @@ runtime (importing the package pulls no driver package).
 | `human_gate.launch.py` | launch the node on the isolated domain. |
 | `test_*.py` | offline unit/property tests + the one ROS integration test. |
 
-## Interface contract status (report §7)
+## Interface contract (report §7)
 
-The perception package on branch `fm/human-detect-core-v1` is **not yet committed
-to this worktree** (its branch is at the same commit as `main`), so there is no
-custom message to build against. Per the task brief we built the gate against
-report §7 through the adapter and recorded exactly what must be confirmed when
-the real message lands — see `state_adapter.CONTRACT_TO_CONFIRM` and
+The perception package is now committed as `cams/human_safety`, and the gate
+consumes its **real** wire format: a `std_msgs/String` on `/human_safety/state`
+carrying the JSON produced by
+`cams/human_safety/human_safety/json_util.py::state_to_json`. This JSON transport
+is the **permanent** contract, not a stand-in — that package is not colcon-built,
+so it deliberately uses no custom `.msg`. `state_adapter.py` parses this format
+into `CameraState` and is the single place that changes if a field is renamed;
+its module docstring maps every payload field and spells out the two
+safety-critical mappings (the evidence-vs-publication staleness stamp and the
+known-only distance honesty). The original interface confirm-list is in
 `data/human-gate-core-v1/decision.md`.
-
-**Provisional transport:** until the custom message exists, the gate consumes the
-state as a `std_msgs/String` carrying a JSON object with the §7 field names. This
-keeps the whole gate (including the ROS integration test) runnable now without
-depending on an uncommitted package. When the message lands, diff it against §7,
-fill in `state_adapter.parse_custom_msg`, and point the node's subscription at the
-real type — a one-line change each (the JSON keys already equal the intended
-field names).
 
 ## Parameters (all PROVISIONAL — tune up, never down; report §3/§7)
 
