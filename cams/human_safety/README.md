@@ -156,26 +156,41 @@ comes up for the wrist; a fixed-camera extrinsic is added to
 `params/camera_poses.yaml`), the same node immediately produces 3-D positions —
 no code change. `human-safety-s1` §6 reaches the same conclusion from the repo.
 
-### Calibrating a fixed camera into `base_link` (procedure — a separate task owns the tool)
+### Calibrating a fixed camera into `base_link` (the tool now exists)
 
-This package does **not** ship the fixed-camera calibrator; a separate
-calibration task owns it (`human-safety-s1` §6 / Phase 2). The documented
-procedure, reusing the existing cellmap AprilTag tooling, is:
+The fixed-camera calibrator (`human-safety-s1` §6 / Phase 2) is committed under
+`cams/cellmap/` and its geometry is unit-tested; full detail and measured
+accuracy are in `data/human-cam-calib-v1/report.md`. Procedure:
 
-1. Place a printed 36h11 AprilTag (`cams/cellmap/tags/`, 120 mm) at a **known
-   `base_link` pose** in the fixed camera's view (e.g. tag 1 at
-   `(-0.506, -1.058, -0.057)`).
-2. Detect the tag in the camera's **colour** image and solve `camera → tag` by
-   PnP with the colour intrinsics (same approach as
-   `cams/cellmap/validate_tag1.py` / `handeye_calibrate.py`).
-3. Compose with the known `base_link → tag` to get `base_link → camera`; write it
-   into `params/camera_poses.yaml` (`calibrated: true`). This launch then starts
-   a `static_transform_publisher` for it.
-4. Validate against a second tag and against the wrist camera's already-trusted
-   view (target < 5 px reprojection / < 1 cm, per `cams/placement-report.html`).
+1. Place a printed 36h11 AprilTag (`cams/cellmap/tags/`, 120 mm) **flat, face-up**
+   at a **mapped `base_link` pose** in the fixed camera's view — the known tag
+   poses live in `cams/cellmap/tags/tag_world_poses.yaml` (id0 at
+   `(0.116, -1.058, -0.057)`, id1 at `(-0.505, -1.058, -0.058)`). Two tags in
+   view is better (enables the tag-separation fixture check).
+2. Solve the extrinsic (colour PnP against the mapped tags; a colour-only camera
+   works — omit `--depth`):
+   ```
+   ROS_DOMAIN_ID=80 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 \
+     cams/cellmap/calibrate_static_camera.py --serial <SERIAL> --role <role> \
+     --image /<role>/color/image_raw --info /<role>/color/camera_info \
+     --depth /<role>/aligned_depth/image --depth-scale 1.0 \
+     --optical-frame <role>_color_optical_frame
+   ```
+   It writes `cams/cellmap/calib/base_to_camera_<serial>_<date>.yaml` and reports
+   reprojection, the tag-separation fixture check, and (RealSense) depth-vs-PnP
+   against the < 5 px / < 1 cm target.
+3. Add a **serial-keyed** entry to `params/camera_poses.yaml` pointing at that
+   file; this launch then publishes the static TF and the camera reports 3-D
+   positions. The loader (`human_safety/camera_poses.py`) refuses to publish an
+   uncalibrated, stale, serial-mismatched, or failed-recheck calibration — such a
+   camera stays presence-only.
+4. Guard against a moved camera: `cams/cellmap/recheck_static_camera.py --calib
+   <file> --image … --info …` re-checks that the tags still reproject where the
+   stored pose predicts and stamps `recheck: fail` if not (→ presence-only).
 
-A colour-only camera (webcam) additionally needs a one-time intrinsics
-(checkerboard/ChArUco) calibration before PnP is trustworthy.
+An ordinary colour webcam additionally needs a one-time intrinsics calibration
+(`cams/cellmap/calibrate_webcam_intrinsics.py`, chessboard) before PnP is
+trustworthy; a RealSense uses its factory colour intrinsics from `camera_info`.
 
 ---
 

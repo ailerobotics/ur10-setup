@@ -1,0 +1,61 @@
+frame_id: base_link
+derived: '2026-09-19T12:48:22'
+dictionary: apriltag_36h11
+provenance:
+  method: T_base_tag = T_base_tool @ T_tool0_optical @ T_cam_tag, per wrist hand-eye
+    view; translation median, rotation Markley quaternion mean
+  wrist_calib: tool0_to_camera_2026-09-03.yaml
+  samples:
+  - samples-2026-09-03-tag0.yaml
+  - samples-2026-09-03-tag1.yaml
+  absolute_accuracy_note: positions inherit the wrist hand-eye budget (cross-tag 8.4
+    mm / 1.06 deg; validated 1.87 mm scale, 0.68 mm table plane). The per-tag consistency
+    figures are the INTERNAL fit spread, not the absolute error.
+  placement_note: tags were re-placed between 2026-08-27 and 2026-09-03; these are
+    the 2026-09-03 positions (they match human-safety-s1 report tag1 (-0.506,-1.058,-0.057)).
+    Re-derive if the tags are moved again.
+tags:
+  0:
+    tag_id: 0
+    tag_size_m: 0.12
+    samples: 18
+    position:
+    - 0.1158614442700651
+    - -1.057888366520137
+    - -0.056626899506836095
+    quaternion_xyzw:
+    - 0.0007320852997867005
+    - -0.0034279877810540205
+    - -0.0062158153925613744
+    - 0.9999745379707887
+    normal:
+    - -0.006864902009208171
+    - -0.0014215178403888488
+    - 0.9999754259017736
+    consistency_pos_med_mm: 2.0401623244920626
+    consistency_pos_max_mm: 4.091967048181925
+    range_m:
+    - 0.3443003638900133
+    - 0.6085173340377267
+  1:
+    tag_id: 1
+    tag_size_m: 0.12
+    samples: 18
+    position:
+    - -0.5054471497795592
+    - -1.057488262731026
+    - -0.057578430022356436
+    quaternion_xyzw:
+    - -0.0012730912023846978
+    - 0.002572776124425191
+    - 0.005249590951447038
+    - -0.9999821007681321
+    normal:
+    - -0.005158826563530403
+    - -0.002519124785534392
+    - 0.9999835201236082
+    consistency_pos_med_mm: 1.9769612636376852
+    consistency_pos_max_mm: 3.352522023187775
+    range_m:
+    - 0.32686828059458084
+    - 0.6204319288081699

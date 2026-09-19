@@ -24,6 +24,12 @@ recorded in `cellmap-report.html` as they happen.
 | File | Runs where | Does |
 |---|---|---|
 | `handeye_calibrate.py` | host | AX = XB eye-in-hand calibration from AprilTag 0 + TF; gated sampling, 5 solvers, residuals, `calib/tool0_to_camera_<date>.yaml` |
+| `staticcam.py` (+ `tools/test_staticcam.py`) | host, no ROS | pure geometry for calibrating a **FIXED** camera into base_link by AprilTag PnP (pose composition, robust averaging, moved-camera recheck); unit-tested on synthetic tag views with ground truth |
+| `calibrate_static_camera.py` | host, domain 80 (or `--from-images` offline) | fixed-camera → base_link solver: detect mapped 36h11 tags in the **colour** image, PnP with colour intrinsics, compose with the known tag pose, average, validate (< 5 px reproj / < 1 cm depth / tag-separation fixture) → `calib/base_to_camera_<serial>_<date>.yaml`. Works colour-only (no depth). |
+| `recheck_static_camera.py` | host, domain 80 | moved-camera guard: do the mapped tags still reproject where the stored pose says? stamps `recheck: fail` (→ camera side treats it as uncalibrated) |
+| `calibrate_webcam_intrinsics.py` | host | one-time chessboard intrinsics for an ordinary colour webcam (a RealSense uses factory `camera_info`) |
+| `tools/derive_tag_world_poses.py` → `tags/tag_world_poses.yaml` | host, no ROS | derive each printed tag's full 6-DoF **base_link** pose from the trusted wrist hand-eye (the ground truth the static-camera solver uses) |
+| `tools/make_synthetic_tag_scene.py` | host, no ROS | render the real tag PNGs from a known camera pose (offline test + report evidence for the static-camera solver) |
 | `../approach/wrist_rig.launch.py` | host, domain 0 | the wrist camera; `calib:=auto` publishes the calibrated `tool0 → camera_link` (default), `calib:=guess` the old mount guess; `camera_params:=../cellmap/d435i_wrist_serial.yaml` pins the D435i by serial |
 | `tools/make_tags.py` → `tags/` | host | print-exact AprilTag 36h11 sheets (120 mm, corner labels A-D, 100 mm ruler), drawn as **vector** cells and self-verified by re-rendering the finished PDF and re-detecting it |
 | `tools/tag_corners.py` | host | arm-measured pose of tag 1 (TCP touches corners A, B, C; dwell-detected from TF or `--pendant` readings) |
