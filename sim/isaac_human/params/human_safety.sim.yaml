@@ -1,0 +1,77 @@
+# human_safety configuration — ISAAC SIM variant.
+#
+# This ONLY re-points the cameras (topics, frames, poses) at the Isaac-simulated
+# streams and selects the compute device. The `safety:` block below is a VERBATIM
+# copy of cams/human_safety/params/human_safety.yaml — no zone radius, score
+# threshold, dwell or budget is changed. tests/test_sim_config.py asserts this
+# block is byte-for-byte identical to the real config, so a result can never be
+# flattered by loosening a safety number here.
+#
+# The simulated cameras DO have a trustworthy base_link pose (params/
+# camera_poses.sim.yaml carries an inline base_link<-optical TF for each, derived
+# from the same look-at that places the Isaac camera prim), so unlike the real
+# rig today they contribute 3-D positions, not presence-only.
+
+base_frame: base_link
+ground_z: 0.0
+height_prior: 1.7
+detector: keypoint_rcnn
+device: cuda            # sim-only device selection; run wrapper may override to cpu
+score_thresh: 0.6
+fusion_rate: 15.0
+viz_rate: 6.0
+
+cameras:
+  # WRIST D435i stand-in — eye-in-hand, near the arm, forward-down the corridor.
+  # In sim the arm is static, so the wrist has a fixed base_link pose (inline TF).
+  - role: wrist
+    color_topic: /sim/wrist/color/image_raw
+    info_topic:  /sim/wrist/color/camera_info
+    depth_topic: /sim/wrist/depth/image
+    depth_info_topic: /sim/wrist/depth/camera_info
+    has_depth: true
+    optical_frame: wrist_color_optical_frame
+    max_rate: 15.0
+    min_range: 0.1
+    max_range: 8.0
+    pose_source: tf
+
+  # SHELF D415 stand-in — high, near-frontal, looking down the approach corridor.
+  - role: shelf
+    color_topic: /sim/shelf/color/image_raw
+    info_topic:  /sim/shelf/color/camera_info
+    depth_topic: /sim/shelf/depth/image
+    depth_info_topic: /sim/shelf/depth/camera_info
+    has_depth: true
+    optical_frame: shelf_color_optical_frame
+    max_rate: 15.0
+    min_range: 0.1
+    max_range: 8.0
+    pose_source: tf
+
+  # TABLE D415 stand-in — wide side view across the transit volume.
+  - role: table
+    color_topic: /sim/table/color/image_raw
+    info_topic:  /sim/table/color/camera_info
+    depth_topic: /sim/table/depth/image
+    depth_info_topic: /sim/table/depth/camera_info
+    has_depth: true
+    optical_frame: table_color_optical_frame
+    max_rate: 15.0
+    min_range: 0.1
+    max_range: 8.0
+    pose_source: tf
+
+safety:
+  reach_radius: 1.30      # UR10 reach; envelope = cylinder of this radius about base z
+  stop_radius: 0.70       # STOP within reach+this = 2.0 m of base (human-safety-s1 §3, PROVISIONAL)
+  slow_radius: 2.00       # SLOW ring (any person present also forces >= SLOW)  PROVISIONAL
+  hysteresis: 0.30        # extra clearance to de-escalate (anti-chatter)
+  min_clear_dwell: 2.0    # must be clear this long before leaving STOP
+  frame_age_budget: 0.5   # frame age over this but still answering -> SLOW
+  detector_stall_timeout: 1.5   # no fresh frame this long / no status -> STOP
+  reaction_time_budget: 0.7     # img->state latency over this -> STOP (fault 5)
+  lost_close_margin: 0.30
+  lost_hold_time: 3.0     # hold STOP this long after losing a close track
+  presence_floor_slow: true
+  slow_on_any_person: true   # small cell: any confirmed person present -> >= SLOW
