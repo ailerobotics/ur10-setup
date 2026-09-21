@@ -20,8 +20,21 @@ set -eo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-CAMS="${1:-wrist}"
-DEVICE="${2:-cuda}"
+
+# --record captures the fixed OBSERVER camera + every processed detector frame
+# for the offline video composer (make_video.py). It draws the SLOW/STOP rings +
+# state beacon and loops the walk so there is 60-90 s of motion — but starts NO
+# WebRTC stream (streaming only adds GPU load). Positional args stay [cams] [device].
+RECORD=0
+POS=()
+for a in "$@"; do
+  case "$a" in
+    --record) RECORD=1 ;;
+    *) POS+=("$a") ;;
+  esac
+done
+CAMS="${POS[0]:-wrist}"
+DEVICE="${POS[1]:-cuda}"
 
 _ncams=$(awk -F, '{c=0; for(i=1;i<=NF;i++) if($i!="") c++; print c}' <<<"$CAMS")
 if [ "${_ncams:-1}" -gt 1 ]; then
@@ -46,6 +59,25 @@ GRAPH_LOG="$RUNDIR/graph.log"
 REC_RUN_LOG="$RUNDIR/recorder.log"
 SETTLE="${SETTLE_SECONDS:-30}"        # render + detector warmup before motion
 SESSION_CAP="${SESSION_CAP:-1140}"    # <20 min hard wall-clock cap (brief)
+
+# Record-mode extras: observer + detector frame dumps, looped walk for a 60-90 s
+# clip. Scene max-seconds defaults to 300 (one walk) but the record run loops the
+# walk for RECORD_WALK_SECS of motion (capped to keep the raw dump small).
+MAXSECS=300
+ISAAC_EXTRA=()
+REC_EXTRA_STR=""
+if [ "$RECORD" = 1 ]; then
+  OBS_DIR="$RUNDIR/observer_frames"; OBS_IDX="$RUNDIR/observer_index.jsonl"
+  DET_DIR="$RUNDIR/detector_frames"; DET_IDX="$RUNDIR/detector_index.jsonl"
+  MAXSECS="${RECORD_WALK_SECS:-100}"
+  SETTLE="${SETTLE_SECONDS:-20}"
+  ISAAC_EXTRA=(--record --loop-walk --config "$CFG"
+               --observer-frames-dir "$OBS_DIR" --observer-index "$OBS_IDX"
+               --observer-size "${OBSERVER_SIZE:-1280x720}")
+  REC_EXTRA_STR="--record-all-frames --detector-frames-dir '$DET_DIR' --detector-index '$DET_IDX'"
+  echo "[session] RECORD mode: observer -> $OBS_DIR, detector -> $DET_DIR," \
+       "looped walk for ${MAXSECS}s (NO WebRTC stream)."
+fi
 
 # shellcheck source=/dev/null
 source "$HERE/preflight.sh"
@@ -87,7 +119,8 @@ trap cleanup EXIT INT TERM
   source "$HERE/isaac_env.sh"
   exec "${CONDA_PREFIX}/bin/python" "$HERE/isaac_scene.py" \
     --cams "$CAMS" --gt-log "$GT_LOG" \
-    --settle-seconds "$SETTLE" --max-seconds 300 --sim-hz "${SIM_HZ:-5.0}"
+    --settle-seconds "$SETTLE" --max-seconds "$MAXSECS" --sim-hz "${SIM_HZ:-5.0}" \
+    ${ISAAC_EXTRA[@]+"${ISAAC_EXTRA[@]}"}
 ) >"$ISAAC_LOG" 2>&1 &
 isaac_pid=$!
 echo "[session] Isaac pid $isaac_pid; waiting for cameras to publish ..."
@@ -120,7 +153,7 @@ setsid bash -c "
   export ROS_DOMAIN_ID=88 ROS_LOCALHOST_ONLY=1 \
          RMW_IMPLEMENTATION=rmw_fastrtps_cpp FASTDDS_BUILTIN_TRANSPORTS=UDPv4
   exec '$VENV_PY' '$HERE/recorder_node.py' --config '$CFG' --cams '$CAMS' \
-    --out '$REC_LOG' --frames-dir '$RUNDIR/frames' --seconds 400
+    --out '$REC_LOG' --frames-dir '$RUNDIR/frames' --seconds 400 $REC_EXTRA_STR
 " >"$REC_RUN_LOG" 2>&1 &
 rec_pid=$!
 echo "[session] recorder pid $rec_pid; log $REC_LOG"
@@ -142,6 +175,22 @@ while kill -0 "$isaac_pid" 2>/dev/null; do
 done
 echo "[session] Isaac path finished (or capped); letting recorder flush ..."
 sleep 3
+
+# Record path: check the recorded state stream is not STOP-pinned by latency
+# BEFORE anyone spends time composing a video from it. The check exits non-zero
+# when unhealthy (too many states over the reaction budget, or too few distinct
+# zones); that is the CHECK failing loudly, never the session — so it is guarded.
+if [ "$RECORD" = 1 ]; then
+  echo "[session] record health check ..."
+  if python3 "$HERE/record_health.py" --run "$RUNDIR" --config "$CFG"; then
+    :
+  else
+    echo "[session] !!! RECORD HEALTH FAILED: the recorded clip is likely" \
+         "STOP-pinned by latency and would demonstrate nothing. Re-record with" \
+         "a SINGLE camera / lower SIM_HZ before composing a video. (See" \
+         "$RUNDIR/record_health.json.)" >&2
+  fi
+fi
 
 # cleanup() runs on EXIT (stops recorder, graph, isaac by PID).
 echo "[session] RUNDIR=$RUNDIR"

@@ -156,6 +156,22 @@ def build_scene_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--zone-beacon", action="store_true",
                     help="best-effort: colour a beacon at the robot green/amber/"
                          "red from /human_safety/state")
+    # -- record additions (offline video, NO WebRTC) ----------------------- #
+    ap.add_argument("--record", action="store_true",
+                    help="capture the fixed OBSERVER camera (cell + rings + "
+                         "beacon) to JPEG frames for the offline video composer; "
+                         "draws the rings + beacon like the live view but with NO "
+                         "WebRTC stream (streaming only adds GPU load)")
+    ap.add_argument("--observer-frames-dir", default=None,
+                    help="directory for the recorded observer JPEG frames")
+    ap.add_argument("--observer-index", default=None,
+                    help="JSONL index (one {path,t} per saved observer frame)")
+    ap.add_argument("--observer-size", default="1280x720",
+                    help="observer capture size WxH (even dims; default 1280x720)")
+    ap.add_argument("--observer-every", type=int, default=1,
+                    help="SAVE every Nth observer frame to disk (throttles JPEG "
+                         "writes only; the render product still renders every sim "
+                         "step, so this does NOT reduce GPU load)")
     return ap
 
 

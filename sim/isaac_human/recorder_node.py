@@ -42,7 +42,9 @@ _SKELETON = [(5, 7), (7, 9), (6, 8), (8, 10), (11, 13), (13, 15), (12, 14),
 
 
 class Recorder(Node):
-    def __init__(self, cfg_path, roles, out_path, frames_dir, frame_period):
+    def __init__(self, cfg_path, roles, out_path, frames_dir, frame_period,
+                 detector_frames_dir=None, detector_index=None,
+                 record_all=False, max_record_frames=6000):
         super().__init__("isaac_human_recorder")
         self.cfg = load_config(cfg_path)
         self.roles = roles
@@ -57,6 +59,19 @@ class Recorder(Node):
         self._last_zone = None
         self.n_state = 0
         self.n_det = 0
+        # -- record-all detector frames (offline video composer) ----------- #
+        # Save an annotated JPEG for EVERY processed detector frame (deduped by
+        # the underlying image's recv time so each unique image is saved once),
+        # into detector_frames_dir with a JSONL index, capped by count.
+        self.record_all = record_all and detector_frames_dir is not None
+        self.detector_frames_dir = detector_frames_dir
+        self._det_idx_f = None
+        self._last_rec_img_recv = {}   # role -> recv time of last saved image
+        self._rec_count = 0
+        self.max_record_frames = max_record_frames
+        if self.record_all:
+            os.makedirs(detector_frames_dir, exist_ok=True)
+            self._det_idx_f = open(detector_index, "w")
 
         self.create_subscription(String, "/human_safety/state",
                                  self._on_state, 10)
@@ -134,7 +149,35 @@ class Recorder(Node):
             self.out.flush()
             self.n_det += 1
             self._latest_dets[role] = (time.time(), dets)
+            # record-all: save the annotated frame for THIS processed detection,
+            # once per unique underlying image (deduped by image recv time), so
+            # the video composer gets every frame the detector actually saw.
+            if self.record_all:
+                self._maybe_record_detector_frame(role, dets)
         return cb
+
+    def _maybe_record_detector_frame(self, role, dets):
+        if self._rec_count >= self.max_record_frames:
+            return
+        img = self._latest_img.get(role)
+        if img is None:
+            return
+        img_recv = img[0]
+        if self._last_rec_img_recv.get(role) == img_recv:
+            return                          # already saved this image
+        self._last_rec_img_recv[role] = img_recv
+        im = self._annotate(role, img[1], dets)
+        if im is None:
+            return
+        now = time.time()
+        fname = os.path.join(self.detector_frames_dir,
+                             f"det_{role}_{int(now * 1000)}.jpg")
+        im.convert("RGB").save(fname, quality=75)
+        self._det_idx_f.write(json.dumps({
+            "path": fname, "t": now, "role": role,
+            "zone": self._last_zone, "n_persons": len(dets)}) + "\n")
+        self._det_idx_f.flush()
+        self._rec_count += 1
 
     def _make_img_cb(self, role):
         def cb(msg):
@@ -162,12 +205,14 @@ class Recorder(Node):
                                  dets[1] if dets else [], now)
             self._last_saved[role] = now
 
-    def _save_annotated(self, role, rgb, dets, now):
+    def _annotate(self, role, rgb, dets):
+        """Draw the detector's boxes + keypoints + a zone banner onto the colour
+        image and return the PIL image (or None if PIL is unavailable)."""
         try:
             from PIL import Image as PImage, ImageDraw
         except Exception as e:  # noqa: BLE001
             self.get_logger().warn(f"PIL unavailable, cannot annotate: {e}")
-            return
+            return None
         im = PImage.fromarray(np.ascontiguousarray(rgb.astype(np.uint8)))
         d = ImageDraw.Draw(im)
         for det in dets:
@@ -189,6 +234,12 @@ class Recorder(Node):
         banner = f"{role}  zone={self._last_zone}  persons={len(dets)}"
         d.rectangle([0, 0, im.width, 18], fill=(0, 0, 0))
         d.text((3, 3), banner, fill=(255, 255, 255))
+        return im
+
+    def _save_annotated(self, role, rgb, dets, now):
+        im = self._annotate(role, rgb, dets)
+        if im is None:
+            return
         fname = os.path.join(
             self.frames_dir, f"{role}_{int(now * 1000)}_{self._last_zone}.png")
         im.save(fname)
@@ -203,11 +254,25 @@ def main(argv=None):
     ap.add_argument("--frames-dir", required=True)
     ap.add_argument("--seconds", type=float, default=200.0)
     ap.add_argument("--frame-period", type=float, default=4.0)
+    ap.add_argument("--record-all-frames", action="store_true",
+                    help="save an annotated JPEG for EVERY processed detector "
+                         "frame (not sparse stills) for the offline video")
+    ap.add_argument("--detector-frames-dir", default=None,
+                    help="directory for the record-all detector JPEG frames")
+    ap.add_argument("--detector-index", default=None,
+                    help="JSONL index for the record-all detector frames")
+    ap.add_argument("--max-record-frames", type=int, default=6000,
+                    help="hard cap on record-all detector frames (disk guard)")
     args, ros_args = ap.parse_known_args(argv)
     roles = [r.strip() for r in args.cams.split(",") if r.strip()]
 
     rclpy.init(args=ros_args)
-    node = Recorder(args.config, roles, args.out, args.frames_dir, args.frame_period)
+    node = Recorder(args.config, roles, args.out, args.frames_dir,
+                    args.frame_period,
+                    detector_frames_dir=args.detector_frames_dir,
+                    detector_index=args.detector_index,
+                    record_all=args.record_all_frames,
+                    max_record_frames=args.max_record_frames)
     t0 = time.time()
     try:
         while time.time() - t0 < args.seconds and rclpy.ok():
@@ -217,8 +282,11 @@ def main(argv=None):
     finally:
         node.get_logger().info(
             f"recorder done: {node.n_state} state msgs, {node.n_det} detection "
-            f"msgs, {node._saved_count} frames saved")
+            f"msgs, {node._saved_count} stills, {node._rec_count} record-all "
+            f"detector frames")
         node.out.close()
+        if node._det_idx_f is not None:
+            node._det_idx_f.close()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
