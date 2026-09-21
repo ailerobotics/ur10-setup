@@ -135,6 +135,13 @@ def state_to_json(s: SafetyState) -> str:
                              if s.distance_status.value == "known" else None),
         "nearest_distance_base": (_num(s.nearest_distance_base)
                                   if s.distance_status.value == "known" else None),
+        # DIAGNOSTIC body-centre distances (what the zone used before the
+        # nearest-point fix). Additive: existing consumers ignore these; the zone
+        # is driven by nearest_distance/nearest_distance_base above.
+        "nearest_distance_centre": (_num(s.nearest_distance_centre)
+                                    if s.distance_status.value == "known" else None),
+        "nearest_distance_base_centre": (_num(s.nearest_distance_base_centre)
+                                         if s.distance_status.value == "known" else None),
         "nearest_track_id": s.nearest_track_id,
         "any_person_visible": s.any_person_visible,
         "reasons": list(s.reasons),                # which rules force non-CLEAR

@@ -120,26 +120,45 @@ def valid_depth_samples(depth, mask, fx, fy, cx, cy, min_range, max_range,
 
 
 def lift_depth(depth, bbox, K, min_range, max_range, keypoints=None,
-               nearest_percentile=5.0, min_valid=25):
+               nearest_percentile=5.0, min_valid=25, fg_band=1.0):
     """Robust body-centre + nearest credible point from depth, optical frame.
 
-    Returns ``(center, nearest, n_valid)``. ``center`` is the component-wise
-    median of the valid deprojected points (robust to the background ring and to
-    depth speckle). ``nearest`` is the point at the ``nearest_percentile`` of
-    range — NOT the single closest pixel, so one flying near-range speckle can't
-    pull the safety distance in. Both are None when fewer than ``min_valid``
-    depth pixels survive (caller then falls back to monocular or presence).
+    Returns ``(center, nearest, n_valid)``. ``nearest`` is the point at the
+    ``nearest_percentile`` of range — NOT the single closest pixel, so one flying
+    near-range speckle can't pull the safety distance in.
+
+    ``center`` is the component-wise median of the **foreground cluster only**:
+    the valid points whose range is within ``fg_band`` metres of the near surface
+    (``nearest_percentile`` of range). A plain median over the whole person box is
+    *not* robust to the floor/wall visible inside the box — in clean depth the
+    background behind the person can be more than half of the valid pixels, which
+    drags a component-wise median metres into the background (the overhead camera
+    seeing the most floor is the worst; a wide-armed pose amplifies it). Clustering
+    in range around the near surface keeps only the body's own depth band, so the
+    centre no longer over-states the person's distance. If too few foreground
+    points survive the band, fall back to the all-points median (never worse than
+    before). ``fg_band`` (≈ a person's front-to-back depth plus margin) is generous
+    on purpose: clipping the far side of the body only biases the centre *toward*
+    the robot (the safe direction) and the zone anyway reacts to ``nearest``.
+
+    Both outputs are None when fewer than ``min_valid`` depth pixels survive
+    (caller then falls back to monocular or presence).
     """
     fx, fy, cx, cy = K
     mask = _region_mask(depth.shape, bbox, keypoints)
     pts = valid_depth_samples(depth, mask, fx, fy, cx, cy, min_range, max_range)
     if pts.shape[0] < min_valid:
         return None, None, pts.shape[0]
-    center = np.median(pts, axis=0)
     rng = np.linalg.norm(pts, axis=1)
     thresh = np.percentile(rng, nearest_percentile)
     near_pts = pts[rng <= thresh]
     nearest = np.median(near_pts, axis=0)
+    # Foreground-only body centre: keep the body's own depth band off the near
+    # surface, drop the background ring behind it.
+    fg = pts[rng <= thresh + fg_band]
+    if fg.shape[0] < min_valid:
+        fg = pts
+    center = np.median(fg, axis=0)
     return center, nearest, pts.shape[0]
 
 

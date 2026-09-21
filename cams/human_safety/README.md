@@ -117,8 +117,14 @@ the shrunk box for the robust depth region).
 ## 3-D methods & expected error
 
 - **Depth** (`geometry.lift_depth`): robust body centre = component-wise median
-  of valid deprojected points inside the shrunk person box; **nearest** = median
-  of the closest `nearest_percentile` (default 5 %) of ranges, so one flying
+  of the **foreground cluster only** — the valid points within `fg_band` (default
+  1.0 m) of the near surface. A plain median over the whole box is *not* robust to
+  the floor/wall visible inside the person box: in clean depth the background can
+  be more than half the valid pixels and drags a component-wise median metres into
+  the background (the overhead camera seeing the most floor is worst; a wide-armed
+  pose amplifies it), which **over-states** the person's distance. Clustering in
+  range keeps only the body's own depth band. **nearest** = median of the closest
+  `nearest_percentile` (default 5 %) of ranges, so one flying
   near-range speckle cannot pull the safety distance in. Invalid depth (0/NaN)
   and anything outside `[min_range, max_range]` is dropped (handles holes and the
   RealSense min/max range). Expected 1-σ ≈ **1 % of range + 2 cm** depth noise,
@@ -222,8 +228,10 @@ schema is stable and `schema_version`-tagged so a rename is a one-line change.
   "heartbeat_seq": 412,            // monotonic; gate STOPs if it stalls
   "zone": "CLEAR|SLOW|STOP",
   "distance_status": "known|unknown|none",  // UNKNOWN is NOT 'far' (see below)
-  "nearest_distance": 1.34,        // to reach envelope, metres; null unless distance_status==known
-  "nearest_distance_base": 2.64,   // to base origin, metres; null unless known
+  "nearest_distance": 1.34,        // to reach envelope, metres; null unless distance_status==known — NEAREST credible body point (zone driver)
+  "nearest_distance_base": 2.64,   // to base origin, metres; null unless known — NEAREST credible body point
+  "nearest_distance_centre": 1.51,        // DIAGNOSTIC: body-CENTRE -> reach envelope (pre-fix zone driver); null unless known
+  "nearest_distance_base_centre": 2.81,   // DIAGNOSTIC: body-CENTRE -> base origin; null unless known
   "nearest_track_id": 7,
   "any_person_visible": true,
   "reasons": ["…which rules force non-CLEAR…"],
@@ -245,6 +253,23 @@ as clear. Published at a fixed **≥10 Hz** (default 15 Hz, measured 15.0 Hz) �
 
 Defaults from `human-safety-s1` §3 (conservative placeholders, **not** derived
 separation distances — a certified analysis would tighten them):
+
+**Zones react to the nearest credible body point.** The zone distance for each
+confirmed track is `min(centre distance, nearest-point distance)` — never larger
+than the body centre — so an outstretched hand inside the STOP ring engages STOP
+even while the person's centre is still outside it. The track's nearest point is
+copied from the latest detection **unfiltered**, so its *range* is first passed
+through a short robust filter (`NearestRangeFilter`, `safety.py`): it keeps the
+last `nearest_filter_window` (5) raw ranges, drops the `nearest_filter_reject` (1)
+closest as a possible single-frame speckle, and takes the **min of the rest**.
+This leans toward the robot (the safe direction) — a single-frame depth speckle is
+dropped (no STOP chatter), while a genuinely close reading survives once it
+persists two frames (~0.13 s at 15 Hz) and a single far outlier does not release
+early (slow-away; the minimum-clear dwell provides the rest of the hysteretic
+exit). A presence-only / monocular track whose nearest point equals its centre
+therefore behaves exactly as before. `lost_close` bookkeeping uses this same
+combined distance. The body-centre distances are still published as
+`nearest_distance_centre` / `nearest_distance_base_centre` for diagnostics.
 
 - **STOP** when a person is within **2.0 m of the robot base**
   (`reach_radius 1.30 + stop_radius 0.70`), **or** any presence-only camera sees
@@ -352,7 +377,7 @@ shared GPU); 3 detectors **~1.87 GB** GPU total; all cameras presence-only
   GPU / no ROS): geometry (depth + monocular lifting, transforms), association,
   tracker lifecycle, safety zones/hysteresis/dwell and every health rule, config,
   JSON round-trip, and a **replay regression** (`tests/data/synthetic_approach.jsonl`
-  — CLEAR→SLOW→STOP→dwell→CLEAR). 49 tests, ~0.4 s.
+  — CLEAR→SLOW→STOP→dwell→CLEAR). ~68 tests, ~0.5 s.
 - **Detector check** on public sample images: `tools/detector_selfcheck.py`.
 - **Live plumbing check** on the real cameras: `tools/live_check.py`.
 - **Replay regression from a real recording:** `run_live.sh` writes a JSONL every
