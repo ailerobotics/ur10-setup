@@ -69,10 +69,19 @@ def _tracks_from_rec(rec: dict, use_nearest: bool):
     return out
 
 
-def reconstruct(state_records, params, use_nearest: bool):
+def reconstruct(state_records, params, use_nearest: bool,
+                ignore_latency_fault: bool = False):
     """Replay recorded live states through the safety machine. Returns analysis
     'state' dicts (t, evidence_stamp, zone, distance_status, nearest_distance*,
-    nearest_track_id, tracks)."""
+    nearest_track_id, tracks).
+
+    ``ignore_latency_fault``: pass ``latency=None`` to the evaluator so the
+    img->state latency fault (latency > reaction_time_budget -> STOP) is disabled
+    and the state is driven by distance + hysteresis + dwell + the per-camera
+    health floor ONLY. Everything else is identical. This isolates whether a STOP
+    is genuinely distance-driven or was latched by the latency fault (the confound
+    the first harness report carried), so a "no missed STOP" claim can be shown to
+    be about distance, not about a fail-safe STOP that happened to already be on."""
     ev = SafetyEvaluator(params)
     out = []
     for rec in state_records:
@@ -80,7 +89,8 @@ def reconstruct(state_records, params, use_nearest: bool):
         tracks = _tracks_from_rec(rec, use_nearest)
         health = [_health_from_rec(c) for c in rec.get("cameras", [])]
         ev_stamp = rec.get("evidence_stamp")
-        latency = (now - ev_stamp) if ev_stamp is not None else None
+        latency = None if ignore_latency_fault else (
+            (now - ev_stamp) if ev_stamp is not None else None)
         any_presence = rec.get("distance_status") == "unknown"
         s = ev.evaluate(tracks, health, now, any_presence=any_presence,
                         source_stamp=ev_stamp, latency=latency)
@@ -99,6 +109,34 @@ def reconstruct(state_records, params, use_nearest: bool):
                        for t in s.tracks],
         })
     return out
+
+
+def true_nearest_ring_crossings(truth_records, ring):
+    """Inward crossings (dist -> below ``ring``) of the TRUE nearest body point to
+    base. List of crossing times. Uses ``dist_base_nearest`` when present."""
+    recs = [r for r in truth_records if r.get("present")]
+    recs.sort(key=lambda r: r["t"])
+    out = []
+    for a, b in zip(recs, recs[1:]):
+        da = a.get("dist_base_nearest", a["dist_base"])
+        db = b.get("dist_base_nearest", b["dist_base"])
+        if da >= ring > db:
+            f = (da - ring) / (da - db) if da != db else 0.0
+            out.append(a["t"] + f * (b["t"] - a["t"]))
+    return out
+
+
+def stop_engagement(states, crossing_t, truth: ac.Truth):
+    """(dt, true_nearest_at_stop) for the first STOP at or after ``crossing_t``:
+    how long after the person's true nearest body point crossed the ring the state
+    became STOP, and the true nearest distance at that moment. dt None if never."""
+    for s in sorted(states, key=lambda r: r["t"]):
+        if s["t"] >= crossing_t and s["zone"] == "STOP":
+            tr = truth.at(s["t"])
+            near = (tr.get("dist_base_nearest", tr["dist_base"])
+                    if tr else None)
+            return s["t"] - crossing_t, near
+    return None, None
 
 
 def zone_changes(states):
@@ -175,8 +213,18 @@ def build_comparison(run_dir, params, reach, stop, budget):
         except Exception:  # noqa: BLE001
             return True
 
+    ring = reach + stop
+    crossings = true_nearest_ring_crossings(truth_records, ring)
+
     old = reconstruct(state_records, params, use_nearest=False)
     new = reconstruct(state_records, params, use_nearest=True)
+    # DISTANCE-ONLY: latency fault disabled, so STOP is driven by distance +
+    # hysteresis + dwell only. This is what tells us a "no missed STOP" is really
+    # about distance, not a fail-safe latency STOP that was already latched.
+    old_do = reconstruct(state_records, params, use_nearest=False,
+                         ignore_latency_fault=True)
+    new_do = reconstruct(state_records, params, use_nearest=True,
+                         ignore_latency_fault=True)
 
     # Fidelity: reconstructed NEW zones vs the live published zones.
     live_zones = [r.get("zone") for r in state_records]
@@ -186,16 +234,24 @@ def build_comparison(run_dir, params, reach, stop, budget):
 
     def side(states):
         rep = ac.build_report(states, [], truth_records, in_fov, reach, stop, budget)
+        eng = [stop_engagement(states, c, truth) for c in crossings]
         return {
             "zone_changes": zone_changes(states),
             "stop_time_s": stop_time_s(states),
             "missed_stops": rep.missed_stops,
             "n_missed": len(rep.missed_stops),
+            "worst_missed_inside_m": (max(ring - m["min_true_dist"]
+                                          for m in rep.missed_stops)
+                                      if rep.missed_stops else 0.0),
+            "worst_missed_dur_s": (max(m["duration"] for m in rep.missed_stops)
+                                   if rep.missed_stops else 0.0),
+            "stop_engagement": [
+                {"dt_after_crossing_s": dt, "true_nearest_at_stop_m": near}
+                for dt, near in eng],
             "signed_err_vs_nearest": _summ_signed(
                 signed_dist_errors(states, truth, "dist_base_nearest")),
             "signed_err_vs_root": _summ_signed(
                 signed_dist_errors(states, truth, "dist_base")),
-            "stop_latencies": rep.stop_latencies,
             "verdict": rep.verdict,
             "verdict_ok": rep.verdict_ok,
         }
@@ -204,9 +260,14 @@ def build_comparison(run_dir, params, reach, stop, budget):
         "run_dir": run_dir,
         "n_states": len(state_records),
         "fidelity_new_vs_live_frac": fidelity_frac,
-        "stop_boundary_m": reach + stop,
+        "stop_boundary_m": ring,
+        "true_nearest_ring_crossings_t": crossings,
+        # latency fault ON (as published live) — masked by fail-safe STOP
         "old": side(old),
         "new": side(new),
+        # latency fault OFF — distance-driven only (the honest safety picture)
+        "old_distance_only": side(old_do),
+        "new_distance_only": side(new_do),
     }
 
 
@@ -224,19 +285,29 @@ def main(argv=None):
 
     def fmt(s):
         se = s["signed_err_vs_nearest"]
-        return (f"  zone_changes={s['zone_changes']}  stop_time={s['stop_time_s']:.1f}s  "
-                f"missed_stops={s['n_missed']}\n"
+        eng = s["stop_engagement"]
+        eng_s = "; ".join(
+            (f"STOP {e['dt_after_crossing_s']:.2f}s after crossing at true-nearest "
+             f"{e['true_nearest_at_stop_m']:.2f}m")
+            if e["dt_after_crossing_s"] is not None else "never STOP"
+            for e in eng) or "(no true ring crossing)"
+        return (f"  missed_stops={s['n_missed']} "
+                f"(worst {s['worst_missed_dur_s']:.2f}s, "
+                f"{s['worst_missed_inside_m']:.2f}m inside)  "
+                f"zone_changes={s['zone_changes']}  stop_time={s['stop_time_s']:.1f}s\n"
+                f"  {eng_s}\n"
                 f"  signed err vs TRUE NEAREST body point: median={se['median']:+.2f} "
-                f"worst={se.get('worst', float('nan')):+.2f} m (n={se['n']})\n"
-                f"  {s['verdict']}")
+                f"worst={se.get('worst', float('nan')):+.2f} m (n={se['n']})")
 
     print(f"run: {comp['run_dir']}  states={comp['n_states']}  "
           f"NEW-reconstruction matches live zones: "
           f"{comp['fidelity_new_vs_live_frac']*100:.1f}%")
-    print("OLD (centre-based, pre-fix):")
-    print(fmt(comp["old"]))
-    print("NEW (nearest-point, this fix):")
-    print(fmt(comp["new"]))
+    print("=== latency fault ON (as published live; STOP may be a masked fail-safe) ===")
+    print("OLD (centre-based, pre-fix):");  print(fmt(comp["old"]))
+    print("NEW (nearest-point, this fix):"); print(fmt(comp["new"]))
+    print("=== DISTANCE-ONLY (latency fault disabled; distance+hysteresis+dwell only) ===")
+    print("OLD (centre-based, pre-fix):");  print(fmt(comp["old_distance_only"]))
+    print("NEW (nearest-point, this fix):"); print(fmt(comp["new_distance_only"]))
 
     if args.json:
         with open(args.json, "w") as f:

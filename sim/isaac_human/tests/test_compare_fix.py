@@ -46,3 +46,37 @@ def test_reconstruction_matches_without_nearest_gap():
     old = compare_fix.reconstruct(recs, p, use_nearest=False)
     new = compare_fix.reconstruct(recs, p, use_nearest=True)
     assert [s["zone"] for s in old] == [s["zone"] for s in new]
+
+
+def _rec_lat(t, centre_base, nearest_base, latency):
+    r = _rec(t, centre_base, nearest_base)
+    r["evidence_stamp"] = t - latency
+    return r
+
+
+def test_latency_fault_masks_stop_until_disabled():
+    # A person FAR outside the STOP ring (no distance STOP), but the pipeline
+    # latency blows the reaction budget every frame -> the live/latency-ON replay
+    # STOPs (fail-safe), which would MASK the distance behaviour. With the latency
+    # fault disabled, the same records are CLEAR/SLOW (distance-driven). This is
+    # the confound the distance-only mode exists to expose.
+    p = SafetyParams()   # reaction_time_budget 0.7; person at base 3.0 -> env 1.7
+    recs = [_rec_lat(0.1 * i, 3.0, 3.0, latency=1.2) for i in range(1, 6)]
+    on = compare_fix.reconstruct(recs, p, use_nearest=True, ignore_latency_fault=False)
+    off = compare_fix.reconstruct(recs, p, use_nearest=True, ignore_latency_fault=True)
+    assert on[-1]["zone"] == "STOP"        # latency fault forces fail-safe STOP
+    assert off[-1]["zone"] != "STOP"       # distance-only: not a STOP (person far)
+
+
+def test_distance_only_reveals_a_late_stop_the_latency_fault_hid():
+    # Person walks inside the ring, but latency is over budget the whole time, so
+    # the latency-ON replay is STOP throughout (looks perfect). Distance-only shows
+    # the truth: with a persistent +0.6 m over-stating nearest, STOP engages late.
+    p = SafetyParams()
+    # centre far, nearest reads 2.7 base while the person is actually at 2.0 (env
+    # 0.7 == exactly the ring) -> distance-only would NOT STOP (nearest over-states)
+    recs = [_rec_lat(0.1 * i, 4.0, 2.7, latency=1.2) for i in range(1, 8)]
+    on = compare_fix.reconstruct(recs, p, use_nearest=True, ignore_latency_fault=False)
+    off = compare_fix.reconstruct(recs, p, use_nearest=True, ignore_latency_fault=True)
+    assert all(s["zone"] == "STOP" for s in on)      # latency masks everything
+    assert all(s["zone"] != "STOP" for s in off)     # distance-only: nearest 2.7 -> env 1.4, no STOP
