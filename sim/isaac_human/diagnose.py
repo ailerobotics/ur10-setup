@@ -113,7 +113,6 @@ def main() -> int:
 
     # -- 1. signed error published-minus-true, three truth definitions ------- #
     per_def = {"root": [], "centroid": [], "nearest_body": []}
-    pub_vs_true = []   # (true_root_dist, published) for the crossing analysis
     for s in states:
         if s.get("distance_status") != "known":
             continue

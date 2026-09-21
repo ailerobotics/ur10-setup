@@ -99,7 +99,6 @@ def _plots(outdir, gt, states, reach, stop, slow):
     import matplotlib.pyplot as plt
     import numpy as np
 
-    truth = ac.Truth(gt)
     stop_ring = reach + stop
     slow_ring = reach + slow
 

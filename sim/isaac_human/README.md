@@ -129,9 +129,9 @@ python3 sim/isaac_human/gen_sim_config.py     # writes params/camera_poses.sim.y
 
 - **Latency vs the reaction budget.** The detector forces STOP when
   `img→state latency > reaction_time_budget` (0.7 s). Isaac's RTX rendering
-  competes with the detectors for the one GPU, so **3 cameras** can push the
+  competes with the detectors for the one GPU, so **2+ cameras** push the
   latency past 0.7 s and pin the state at STOP (masking the distance logic). The
-  default run uses **2 cameras** to keep the whole pipeline under the budget.
+  default run uses a **single camera** to keep the whole pipeline under the budget.
   This is a property of sharing one 12 GB card, not of the detector — the real
   rig (cameras on USB, no renderer competing) measured ~0.26 s.
 - **SLOW is presence-driven, not a distance ring.** `slow_on_any_person` (small
