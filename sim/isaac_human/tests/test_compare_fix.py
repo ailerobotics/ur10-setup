@@ -3,7 +3,6 @@
 machine with old (centre) vs new (nearest) logic, differing only by the distance
 rule."""
 import compare_fix
-from human_safety.config import load_config
 from human_safety.safety import SafetyParams
 
 
