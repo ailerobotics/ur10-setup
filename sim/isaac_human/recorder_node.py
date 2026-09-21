@@ -112,6 +112,12 @@ class Recorder(Node):
                 "t": x.get("stamp"), "n_persons": len(dets),
                 "positioned": positioned,
                 "scores": [d.get("score") for d in dets],
+                # per-camera 3-D positions (base_link) + nearest points, so the
+                # analysis can split accuracy by camera and compare the median
+                # body-centre against the nearest credible point.
+                "positions": [d.get("position") for d in dets],
+                "nearest_points": [d.get("nearest_point") for d in dets],
+                "methods": [d.get("method") for d in dets],
             }
             self.out.write(json.dumps(rec) + "\n")
             self.out.flush()

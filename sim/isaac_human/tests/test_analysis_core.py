@@ -105,6 +105,26 @@ def test_missed_stop_detected_loudly():
     assert iv["min_true_dist"] < BOUNDARY
 
 
+def test_missed_stop_uses_nearest_body_when_present():
+    # Root is OUTSIDE the ring the whole time, but the nearest body point is
+    # INSIDE — a distance-biased state reads the (farther) centre and stays SLOW.
+    # The nearest-body truth must catch this as a missed STOP.
+    recs = []
+    for i in range(20):
+        t = 100.0 + i * 0.1
+        root_d = 2.3                      # root always outside the 2.0 m ring
+        near_d = 1.5                      # but a hand/torso is inside
+        recs.append({"t": t, "present": True, "root": [0.1, -2.3, 0.0],
+                     "centre": [0.1, -2.3, 0.9], "dist_base": root_d,
+                     "dist_base_nearest": near_d})
+    states = [_state(r["t"], "SLOW", tracks=[{"id": 1, "position": [0.1, -2.6, 0.9]}],
+                     nd_base=2.6, tid=1) for r in recs]
+    rep = ac.build_report(states, [], recs, _all_in_fov, REACH, STOP, BUDGET)
+    assert not rep.verdict_ok
+    assert len(rep.missed_stops) == 1
+    assert abs(rep.missed_stops[0]["min_true_dist"] - 1.5) < 1e-9
+
+
 def test_late_transition_latency():
     # Person crosses the ring at t=1.0; STOP is published 0.5 s late.
     truth_recs = _straight_line_truth(t0=0.0, dt=0.1, y_start=-3.0, y_end=-1.0, n=21)

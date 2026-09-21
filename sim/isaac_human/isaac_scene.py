@@ -136,7 +136,7 @@ def main() -> int:
         import omni.timeline
         import omni.graph.core as og
         import omni.replicator.core as rep
-        from pxr import Gf, Sdf, UsdGeom, UsdLux
+        from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux
 
         import cell_layout as layout
 
@@ -223,15 +223,49 @@ def main() -> int:
                               layout.PERSON_DWELL_S)
         t_start = time.time()
 
+        # World-bounding-box ground truth: the TRUE body extent in base_link each
+        # frame (not just the placed root), so the analysis can compare the
+        # detector against (a) the body centroid and (b) the nearest body point
+        # to the base z-axis, and prove exactly where the real body is.
+        person_prim = stage.GetPrimAtPath(Sdf.Path("/World/Person"))
+        bbox_cache = UsdGeom.BBoxCache(
+            Usd.TimeCode.Default(),
+            [UsdGeom.Tokens.default_, UsdGeom.Tokens.render, UsdGeom.Tokens.proxy])
+
+        def _true_body(px, py):
+            """(centroid_xyz, nearest_xy_to_base, bbox_min, bbox_max) in base.
+            Falls back to the placed root if the world bound is empty/invalid."""
+            bbox_cache.Clear()
+            rng = bbox_cache.ComputeWorldBound(person_prim).ComputeAlignedRange()
+            if rng.IsEmpty():
+                return ([px, py, layout.PERSON_CENTRE_Z], [px, py],
+                        [px, py, 0.0], [px, py, layout.PERSON_BODY_HEIGHT])
+            mn, mx = rng.GetMin(), rng.GetMax()
+            cen = [0.5 * (mn[0] + mx[0]), 0.5 * (mn[1] + mx[1]),
+                   0.5 * (mn[2] + mx[2])]
+            # nearest point of the xy footprint to the base z-axis (origin): clamp
+            # (0,0) into [xmin,xmax]x[ymin,ymax].
+            nx = max(mn[0], min(0.0, mx[0]))
+            ny = max(mn[1], min(0.0, mx[1]))
+            return cen, [nx, ny], [mn[0], mn[1], mn[2]], [mx[0], mx[1], mx[2]]
+
         def record_gt(x, y):
             now = time.time()
             root = [x, y, 0.0]
-            centre = [x, y, layout.PERSON_CENTRE_Z]
-            dist = math.hypot(x, y)
+            cen, near_xy, bmin, bmax = _true_body(x, y)
+            centre = cen                      # TRUE body centroid (world bbox)
+            nearest_body = [near_xy[0], near_xy[1], 0.0]
+            dist = math.hypot(x, y)           # to placed root (feet), horizontal
+            dist_centroid = math.hypot(cen[0], cen[1])
+            dist_nearest = math.hypot(near_xy[0], near_xy[1])
             gt_f.write(json.dumps({
                 "t": now, "sim_time": float(timeline.get_current_time()),
                 "present": True, "root": root, "centre": centre,
+                "nearest_body": nearest_body,
+                "bbox_min": bmin, "bbox_max": bmax,
                 "dist_base": dist,
+                "dist_base_centroid": dist_centroid,
+                "dist_base_nearest": dist_nearest,
             }) + "\n")
             gt_f.flush()
 

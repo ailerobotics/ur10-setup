@@ -71,8 +71,11 @@ class Truth:
         i = bisect.bisect_left(self.ts, t)
         if i < len(self.ts) and self.ts[i] == t:
             r = self.recs[i]
-            return {"present": r["present"], "root": r["root"],
-                    "centre": r["centre"], "dist_base": r["dist_base"]}
+            out = {"present": r["present"], "root": r["root"],
+                   "centre": r["centre"], "dist_base": r["dist_base"]}
+            if "dist_base_nearest" in r:
+                out["dist_base_nearest"] = r["dist_base_nearest"]
+            return out
         lo = self.recs[i - 1]
         hi = self.recs[i]
         span = hi["t"] - lo["t"]
@@ -81,12 +84,18 @@ class Truth:
 
         def lerp_vec(u, v):
             return [u[k] + a * (v[k] - u[k]) for k in range(len(u))]
-        return {
+        out = {
             "present": present,
             "root": lerp_vec(lo["root"], hi["root"]),
             "centre": lerp_vec(lo["centre"], hi["centre"]),
             "dist_base": lo["dist_base"] + a * (hi["dist_base"] - lo["dist_base"]),
         }
+        # Optional stricter truth: nearest true body point to the base z-axis.
+        if "dist_base_nearest" in lo and "dist_base_nearest" in hi:
+            out["dist_base_nearest"] = (
+                lo["dist_base_nearest"]
+                + a * (hi["dist_base_nearest"] - lo["dist_base_nearest"]))
+        return out
 
 
 def _dist2d(a, b) -> float:
@@ -275,10 +284,16 @@ def missed_stops(states: List[dict], truth: Truth, reach_radius: float,
     cur = None
     for s in ss:
         tr = truth.at(s["t"])
-        inside = tr is not None and tr["present"] and tr["dist_base"] < boundary
+        if tr is None or not tr["present"]:
+            true_close = None
+        else:
+            # "inside the ring" means ANY true body part inside -> use the nearest
+            # true body point when the ground truth provides it, else the root.
+            true_close = tr.get("dist_base_nearest", tr["dist_base"])
+        inside = true_close is not None and true_close < boundary
         violating = inside and s["zone"] != "STOP"
         if violating:
-            d = tr["dist_base"]
+            d = true_close
             if cur is None:
                 cur = {"start": s["t"], "end": s["t"], "min_true_dist": d}
             else:
@@ -331,10 +346,12 @@ def build_report(states: List[dict], dets: List[dict], truth_records: List[dict]
     if r.missed_stops:
         worst = min(iv["min_true_dist"] for iv in r.missed_stops)
         longest = max(iv["duration"] for iv in r.missed_stops)
-        r.verdict = (f"FAIL: {len(r.missed_stops)} missed-STOP interval(s); "
-                     f"person reached {worst:.2f} m inside the "
-                     f"{r.stop_boundary_m:.2f} m ring while not STOP, "
-                     f"up to {longest:.2f} s.")
+        inside_by = r.stop_boundary_m - worst
+        r.verdict = (f"FAIL: {len(r.missed_stops)} missed-STOP interval(s); the "
+                     f"person's nearest true body point reached {worst:.2f} m from "
+                     f"base ({inside_by:.2f} m inside the {r.stop_boundary_m:.2f} m "
+                     f"STOP ring) while the state was not STOP, for up to "
+                     f"{longest:.2f} s (> the reaction budget).")
         r.verdict_ok = False
     else:
         any_stop = any(s["zone"] == "STOP" for s in states)

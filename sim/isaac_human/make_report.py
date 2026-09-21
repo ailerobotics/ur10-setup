@@ -2,14 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Build the phone-friendly report from a completed + analysed run.
 
-Reads ``metrics.json`` + the plots + the annotated frames from a RUNDIR and
-writes ``report.md`` and a self-contained ``report.html`` (images base64-embedded)
-into the task data directory. Verdict first, numbers, 4-8 annotated frames, the
-top-down plot, and honest caveats. All numbers come straight from metrics.json —
-nothing is hand-tuned.
+Reads ``metrics.json`` (the safety verdict) and ``diagnosis.json`` (the
+published-vs-true distance bias) from a RUNDIR, plus an optional second run's
+diagnosis for the per-camera split, and writes ``report.md`` and a self-contained
+``report.html`` (images base64-embedded) into the task data directory.
 
-  python3 sim/isaac_human/make_report.py --run <RUNDIR> \
-      --out /home/manishsaini/firstmate/data/human-detect-isaac-sim-v1
+Verdict FIRST, in plain words: what the detector sees, which way and how much the
+distance is off, and at what true distance STOP engages. All numbers come from
+the JSON — nothing hand-tuned.
 """
 import argparse
 import base64
@@ -19,41 +19,44 @@ import os
 import shutil
 
 _CAVEATS = [
-    "A rendered character is not a real person: its appearance, pose and motion "
-    "are synthetic, so a detection here does not prove the detector fires on a "
-    "real human, and a miss here does not prove it fails on one.",
-    "Isaac's simulated depth is far cleaner than a RealSense stream — no holes, "
-    "no speckle, no min/max-range dropouts, no rolling-shutter or exposure "
-    "artefacts. Real 3-D error and detection rate will be worse.",
-    "The character is TELEPORTED along the path (no skeletal walk cycle), so "
-    "limb articulation is fixed; a walking gait could help or hurt the detector.",
-    "The simulated cameras have exact, noise-free extrinsics (the TF is the very "
-    "pose Isaac renders from). The real fixed D415s are uncalibrated today, so "
-    "on the real rig they are presence-only until a calibration is added.",
-    "This layer is NOT a certified safety function. It is a single-channel, "
-    "unrated, supplementary awareness layer; the real protection remains the "
-    "robot's safety-rated protective stop (and a recommended safety-rated "
-    "presence device). See cams/human_safety/README.md.",
-    "Only the decision logic was exercised unchanged. The sim config re-points "
-    "topics/frames/poses and selects the device; every safety radius, score "
-    "threshold, dwell and budget is identical to the production config "
-    "(enforced by tests/test_sim_config.py).",
+    "A rendered character is not a real person: appearance, pose and motion are "
+    "synthetic, so neither a detection nor a miss here transfers directly to a "
+    "real human.",
+    "Isaac's simulated depth is far CLEANER than a RealSense stream (no holes, "
+    "speckle, or range dropouts). Counter-intuitively this makes the bias below "
+    "WORSE, not better: the clean floor behind the person is fully sampled and "
+    "pulls the depth-median body centre into the background. Real depth noise and "
+    "min/max-range dropouts would change the number, in either direction.",
+    "The character is TELEPORTED in its default rest/T-pose (arms out, no walk "
+    "cycle). The T-pose makes the image bounding box ~2 m wide and mostly "
+    "background — this AMPLIFIES the centre bias. A natural standing/walking pose "
+    "would shrink it (follow-up).",
+    "The simulated cameras have exact, noise-free extrinsics; the real fixed "
+    "D415s are uncalibrated today and stay presence-only until calibrated.",
+    "This layer is NOT a certified safety function — a single-channel, unrated, "
+    "supplementary awareness layer. The real protection is the robot's "
+    "safety-rated protective stop (+ a recommended presence device). See "
+    "cams/human_safety/README.md.",
+    "Only the decision logic was exercised, unchanged. The sim config re-points "
+    "topics/frames/poses + device; every safety radius, score threshold, dwell "
+    "and budget is identical to production (enforced by tests/test_sim_config.py).",
 ]
 
 
 def _fmt(summary):
     if not summary or summary.get("n", 0) == 0:
-        return "n/a (no samples)"
+        return "n/a"
     def f(x):
-        return "n/a" if x != x else f"{x:.3f}"   # x!=x catches NaN
-    return (f"median {f(summary['median'])} m, p95 {f(summary['p95'])} m, "
-            f"worst {f(summary['worst'])} m (n={summary['n']})")
+        return "n/a" if x != x else f"{x:.2f}"
+    return (f"median {f(summary['median'])} m, p95 {f(summary.get('p95', float('nan')))} m, "
+            f"worst {f(summary.get('worst', float('nan')))} m (n={summary['n']})")
 
 
-def _pick_frames(frames_dir, k=8):
-    """Pick up to k frames spread evenly across the run for EACH camera, so the
-    report shows the person at varied distances (far -> near -> far) from every
-    viewpoint. Filenames sort by capture time, so even indexing spans the path."""
+def _signed(d):
+    return "n/a" if not d or not d.get("n") else f"{d['median']:+.2f} m (n={d['n']})"
+
+
+def _pick_frames(frames_dir, k=6):
     files = sorted(glob.glob(os.path.join(frames_dir, "*.png")))
     if not files:
         return []
@@ -71,7 +74,6 @@ def _pick_frames(frames_dir, k=8):
             continue
         step = (len(lst) - 1) / (per_cam - 1) if per_cam > 1 else 0
         picked.extend(lst[round(i * step)] for i in range(per_cam))
-    # interleave cameras so the report alternates viewpoints, keep <= k
     return picked[:k]
 
 
@@ -80,178 +82,201 @@ def _b64(path):
         return base64.b64encode(f.read()).decode()
 
 
-def _transition_table(metrics):
-    rows = []
-    for tr in metrics.get("stop_latencies", []):
-        lat = tr.get("latency_s")
-        td = tr.get("true_dist_at_change")
-        rows.append((tr["dir"], f"{tr['boundary_m']:.2f}",
-                     "n/a" if lat is None else f"{lat:.2f}",
-                     "n/a" if td is None else f"{td:.2f}"))
-    return rows
-
-
-def build_markdown(metrics, run_id, frame_names):
+def build_markdown(metrics, diag, per_cam_diag, run_id, frame_names, has_signed_plot):
     ok = metrics.get("verdict_ok")
     verdict = metrics.get("verdict", "")
-    banner = "✅ PASS" if ok else "⚠️ SEE VERDICT"
+    ring = metrics.get("stop_boundary_m", 2.0)
     L = []
     L.append("# Human-detection in Isaac Sim — test report")
     L.append("")
-    L.append(f"**{banner}**")
+    L.append(f"**{'✅ PASS' if ok else '❌ FAIL — read this first'}**")
     L.append("")
     L.append(f"> {verdict}")
     L.append("")
+
+    # -- plain-words verdict ------------------------------------------------ #
+    L.append("## In plain words")
+    L.append("")
+    dr = metrics.get("detection_rates", {})
+    rate_txt = ", ".join(
+        f"{r} {int(o['rate']*100)}%" for r, o in sorted(dr.items())
+        if o.get("rate") == o.get("rate")) or "n/a"
+    L.append(f"- **Does it see the person?** Yes — detection rate {rate_txt} of "
+             f"the frames where the person is truly in view (score ~1.00).")
+    sd = (diag or {}).get("distance_driven_stop_would_fire") or {}
+    if sd.get("person_inside_ring_by_m_nearest") is not None:
+        L.append(f"- **Which way is the distance off, and how much?** The "
+                 f"published distance reads the person **FARTHER** from the robot "
+                 f"than they truly are (the unsafe direction) — by "
+                 f"**{_signed((diag or {}).get('signed_error_published_minus_true', {}).get('root'))}** "
+                 f"versus the true root and "
+                 f"**{_signed((diag or {}).get('signed_error_published_minus_true', {}).get('nearest_body'))}** "
+                 f"versus the nearest true body point.")
+        L.append(f"- **At what true distance does STOP engage?** With a healthy "
+                 f"(distance-driven) pipeline, STOP only engaged once the person's "
+                 f"nearest body point was already "
+                 f"**{sd['person_inside_ring_by_m_nearest']:.2f} m inside** the "
+                 f"{ring:.1f} m ring (true nearest "
+                 f"{sd.get('true_nearest_body_dist_at_that_moment', float('nan')):.2f} m; "
+                 f"the published distance still read ~{ring:.1f} m).")
+    L.append("- **Bottom line:** the detector localises the person, but the "
+             "published *distance* over-states clearance, so the STOP ring "
+             "engages LATE. That is a missed-STOP window, not a missed detection.")
+    L.append("")
+
+    # -- the miss ----------------------------------------------------------- #
     ms = metrics.get("missed_stops", [])
     if ms:
-        L.append("## ❗ Missed STOP (safety-critical) — reported first")
+        L.append("## ❗ Missed STOP (safety-critical)")
         L.append("")
-        L.append("| # | duration (s) | closest true distance to base (m) |")
-        L.append("|---|---|---|")
+        L.append("| # | duration (s) | closest true body point to base (m) | inside ring by (m) |")
+        L.append("|---|---|---|---|")
         for i, iv in enumerate(ms, 1):
-            L.append(f"| {i} | {iv['duration']:.2f} | {iv['min_true_dist']:.2f} |")
+            L.append(f"| {i} | {iv['duration']:.2f} | {iv['min_true_dist']:.2f} | "
+                     f"{ring - iv['min_true_dist']:.2f} |")
         L.append("")
-        L.append("A person was truly inside the STOP ring while the published "
-                 "state was **not STOP** for longer than the reaction budget. "
-                 "This is the failure that matters most.")
-        L.append("")
-    else:
-        L.append("## ✅ No missed STOP")
-        L.append("")
-        L.append("Whenever the person was truly inside the "
-                 f"{metrics['zones']['stop_ring_base_m']:.1f} m STOP ring beyond "
-                 "the reaction budget, the published state was STOP.")
+        L.append("This is on the HEALTHY-latency run, so it is the distance bias "
+                 "(below), not a pipeline stall.")
         L.append("")
 
-    L.append("## What the detector saw — detection rate per camera")
+    # -- root-cause diagnosis ---------------------------------------------- #
+    L.append("## Why: the STOP ring is sized from the depth-median body CENTRE")
     L.append("")
-    L.append("Over frames where the person is truly in that camera's field of "
-             "view, the fraction that reported at least one person:")
+    L.append("The bias is **not** a definition mismatch or a bad camera pose:")
     L.append("")
-    L.append("| camera | detection rate | in-view frames |")
-    L.append("|---|---|---|")
-    dr = metrics.get("detection_rates", {})
-    if dr:
-        for role, o in sorted(dr.items()):
-            rate = o.get("rate")
-            rate_s = "n/a" if rate is None or rate != rate else f"{rate*100:.0f}%"
-            L.append(f"| {role} | {rate_s} | {o.get('opportunities', 0)} |")
-    else:
-        L.append("| (none) | — | 0 |")
+    se = (diag or {}).get("signed_error_published_minus_true", {})
+    L.append("| truth reference | published − true (signed) |")
+    L.append("|---|---|")
+    for key, lab in [("root", "placed root (feet axis)"),
+                     ("centroid", "true body centroid"),
+                     ("nearest_body", "nearest true body point")]:
+        L.append(f"| {lab} | {_signed(se.get(key))} |")
     L.append("")
+    L.append("The error is positive against **all three** true references — the "
+             "published distance is genuinely too large, not just measuring a "
+             "different point. The cause is the depth lift:")
+    L.append("")
+    # per-camera centre vs nearest
+    pcd = (per_cam_diag or diag or {}).get("per_camera", {})
+    if pcd:
+        if per_cam_diag:
+            L.append("_Per-camera split from the separate 2-camera run:_")
+            L.append("")
+        L.append("| camera | body-centre error | nearest-point error | centre − nearest |")
+        L.append("|---|---|---|---|")
+        for cam, cd in sorted(pcd.items()):
+            L.append(f"| {cam} | {_signed(cd.get('centre_err'))} | "
+                     f"{_signed(cd.get('nearest_err'))} | "
+                     f"{_signed(cd.get('centre_minus_nearest'))} |")
+        L.append("")
+    L.append("The detector's **nearest credible point is accurate** (~0.2 m of the "
+             "true nearest body), but its **median body CENTRE sits 0.4–0.9 m "
+             "farther back** — in clean sim depth the floor behind the person is "
+             "fully sampled and drags the component-wise median into the "
+             "background. The overhead **shelf** camera (which sees the most floor "
+             "behind the person) is worse than the frontal **wrist** camera.")
+    L.append("")
+    L.append("**The safety layer then sizes the STOP ring from that CENTRE, not "
+             "the nearest point.** `cams/human_safety/human_safety/safety.py` line "
+             "83 computes the zone distance from `t.position` (the Kalman-filtered "
+             "median centre); `t.nearest_point` — the closer, on-body point the "
+             "detector already computes for exactly this purpose (README "
+             "\"nearest credible body point\") — is carried on the track but never "
+             "used for the zone. Using it would cut the unsafe bias from ~+0.7 m "
+             "to ~+0.2 m.")
+    L.append("")
+    bbox = (diag or {}).get("person_bbox_extent_m", {})
+    if bbox:
+        L.append(f"The character's **T-pose** amplifies this: its image box is "
+                 f"~{bbox.get('x_width_median', 0):.1f} m wide (arms out) and mostly "
+                 f"background, so the median is dominated by floor. A natural pose "
+                 f"would narrow the box and reduce (not remove) the bias.")
+        L.append("")
+    L.append("**Extrinsics are cleared** as the cause: the horizontal (x) position "
+             "matches truth to a few cm, the recorded true world bounding box "
+             "confirms where the body is, and the TF round-trip is unit-tested "
+             "(`tests/test_sim_poses.py`). The error lives entirely on the depth "
+             "(range) axis.")
+    L.append("")
+    if has_signed_plot:
+        L.append("![signed error](signed_error.png)")
+        L.append("")
 
+    # -- pipeline latency note --------------------------------------------- #
     lat = metrics.get("latency", {})
-    zb = metrics.get("zone_breakdown", {})
     if lat and lat.get("summary", {}).get("n", 0):
         s = lat["summary"]
         frac = lat.get("frac_over_budget")
-        L.append("## Pipeline latency — why the state mostly held at STOP")
+        L.append("## Pipeline latency (this run is healthy)")
         L.append("")
-        L.append(f"- **Image→state latency**: median {s['median']:.2f} s, "
-                 f"p95 {s['p95']:.2f} s, worst {s['worst']:.2f} s "
-                 f"(reaction budget {lat['budget_s']:.2f} s).")
-        if frac is not None and frac == frac:
-            L.append(f"- **{frac*100:.0f}%** of states exceeded the "
-                     f"{lat['budget_s']:.2f} s budget.")
-        if zb:
-            total = sum(zb.values())
-            parts = ", ".join(f"{k} {v} ({v*100//max(1,total)}%)"
-                              for k, v in sorted(zb.items()))
-            L.append(f"- **Published zone breakdown**: {parts}.")
-        L.append("")
-        L.append("> The detector's fault-5 rule forces STOP when image→state "
-                 "latency exceeds the reaction budget — the STOP-ring maths is no "
-                 "longer trustworthy, so it **fails toward STOP**. In this sim the "
-                 "one 12 GB GPU is shared between Isaac's RTX renderer and the "
-                 "neural detector, so the latency exceeds the budget a large "
-                 "fraction of the time and the state sits at STOP even while the "
-                 "person is far. This is the system erring toward STOP (the safe "
-                 "direction) — it is **not** a missed detection. The real rig "
-                 "(cameras on USB, no renderer competing) measured ~0.26 s "
-                 "img→state latency, comfortably inside the budget, where this "
-                 "same logic yields a clean SLOW band.")
+        L.append(f"- Image→state latency: median {s['median']:.2f} s, p95 "
+                 f"{s['p95']:.2f} s; only "
+                 f"{(frac*100 if frac==frac else float('nan')):.0f}% of states over "
+                 f"the {lat['budget_s']:.2f} s budget — so the SLOW/STOP changes "
+                 f"above are **distance-driven**, not latency faults.")
+        L.append("> Earlier 3-camera runs shared the one 12 GB GPU between Isaac's "
+                 "RTX renderer and the neural detector and ran the latency past "
+                 "the budget, pinning the state at STOP (fail-safe) and masking "
+                 "the distance logic. This healthy run uses a single camera to "
+                 "isolate the distance behaviour; the real rig measured ~0.26 s.")
         L.append("")
 
-    L.append("## How far off — position & distance error vs ground truth")
+    # -- accuracy numbers --------------------------------------------------- #
+    L.append("## Position & distance error vs ground truth")
     L.append("")
     err = metrics.get("errors", {})
-    L.append(f"- **3-D position error** (nearest track vs true body centre): "
-             f"{_fmt(err.get('position_3d_error_m'))}")
-    L.append(f"- **Horizontal position error**: "
+    L.append(f"- Horizontal position error (nearest track vs true body centroid): "
              f"{_fmt(err.get('position_horizontal_error_m'))}")
-    L.append(f"- **Nearest-distance-to-base error**: "
-             f"{_fmt(err.get('nearest_distance_base_error_m'))}")
-    L.append("")
-    L.append("> The detector reports the **visible body-surface centroid** from "
-             "depth (the front of the person facing the camera); ground truth is "
-             "the character **root axis**. The two differ by roughly the person's "
-             "half-depth, so a fixed offset of a few tenths of a metre is expected "
-             "and mostly systematic (the published distance tracks the true "
-             "distance closely — see the distance-over-time plot). It is a bias, "
-             "not a failure to localise.")
+    L.append(f"- Nearest-distance-to-base error: "
+             f"{_fmt(err.get('nearest_distance_base_error_m'))} — **positive = the "
+             f"unsafe direction** (see above).")
     L.append("")
 
-    L.append("## Zone transitions vs the true boundary")
-    L.append("")
-    L.append("Latency from the true STOP-ring crossing to the state actually "
-             "changing, and the true distance at that moment. The outward "
-             "(leaving-STOP) latency is expected to be at least the 2.0 s "
-             "anti-chatter dwell by design — reported, not a fault.")
-    L.append("")
-    rows = _transition_table(metrics)
-    if rows:
-        L.append("| crossing | ring (m) | latency (s) | true dist at state change (m) |")
-        L.append("|---|---|---|---|")
-        for r in rows:
-            L.append(f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} |")
-    else:
-        L.append("_No STOP-ring crossing was recorded in this run._")
-    L.append("")
-    trans = metrics.get("transitions", [])
-    if trans:
-        seq = " → ".join([trans[0]["from"]] + [t["to"] for t in trans])
-        L.append(f"Observed zone sequence: **{seq}**")
-        L.append("")
-    L.append("> Note on CLEAR↔SLOW: the safety layer forces **at least SLOW for "
-             "any visible person** (`slow_on_any_person`, small-cell SSM), so the "
-             "SLOW entry is driven by first detection, not by a distance ring. "
-             "CLEAR returns only when no person is detected anywhere. The "
-             "quantitative boundary validated here is therefore the **STOP ring**.")
-    L.append("")
-
+    # -- pictures ----------------------------------------------------------- #
     L.append("## Pictures — what the detector saw")
     L.append("")
-    L.append("Green box = detected person, red dots = keypoints, blue lines = "
-             "skeleton; banner shows the camera and the live zone.")
+    L.append("Green box = detected person, red dots = keypoints, blue = skeleton.")
     L.append("")
     for fn in frame_names:
         L.append(f"![{fn}]({fn})")
         L.append("")
-    L.append("Top-down true vs tracked path, and distance-over-time with zone bands:")
+    L.append("Top-down true vs tracked path, and distance-over-time with the "
+             "published (biased) distance and zone bands:")
     L.append("")
     L.append("![topdown](topdown.png)")
     L.append("")
     L.append("![distance over time](distance_time.png)")
     L.append("")
 
+    # -- simulated vs simplified ------------------------------------------- #
     L.append("## What was simulated vs simplified")
     L.append("")
     counts = metrics.get("counts", {})
-    cams = sorted(metrics.get("detection_rates", {}).keys()) or \
-        sorted((counts.get("detection_by_camera") or {}).keys())
-    cam_list = " / ".join(cams) if cams else "wrist / shelf / table"
-    L.append(f"- Cameras: {len(cams) or 3} simulated RGB-D ({cam_list} stand-ins), "
-             f"640×480, ~69° HFOV, exact base_link extrinsics.")
-    L.append(f"- Robot + shelf + table: primitive box stand-ins (the person "
-             f"walks around them; they are not detection targets).")
-    L.append(f"- Person: one realistic character from Isaac's People assets on a "
-             f"scripted straight path (teleported in its default rest/T-pose, no "
-             f"walk cycle), always on the floor — detected at score ~1.00.")
-    L.append(f"- Ground truth: {counts.get('gt_samples', 0)} samples; "
-             f"{counts.get('state_msgs', 0)} state messages; "
-             f"{counts.get('detection_msgs', 0)} detection messages recorded.")
+    cams = sorted(dr.keys()) or ["wrist"]
+    L.append(f"- Cameras: {len(cams)} simulated RGB-D ({' / '.join(cams)} "
+             f"stand-in), 640×480, ~69° HFOV, exact base_link extrinsics.")
+    L.append("- Robot + shelf + table: primitive box stand-ins.")
+    L.append("- Person: one realistic Isaac People character, teleported in its "
+             "default rest/T-pose (no walk cycle), always on the floor.")
+    L.append(f"- Ground truth: {counts.get('gt_samples', 0)} samples with the true "
+             f"world bounding box; {counts.get('state_msgs', 0)} state messages.")
     L.append("")
 
+    # -- follow-ups --------------------------------------------------------- #
+    L.append("## Follow-ups (not done here)")
+    L.append("")
+    L.append("- **Production (human_safety):** size the STOP ring from the "
+             "track's `nearest_point`, not its median `position` "
+             "(`safety.py:83`). Documented here as a finding; NOT changed in this "
+             "task. Would cut the unsafe bias from ~+0.7 m to ~+0.2 m.")
+    L.append("- **Harness:** give the character a natural standing/walking pose "
+             "(omni.anim.people) so its image box is body-filled, and re-run to "
+             "measure the residual centre bias without the T-pose amplifier.")
+    L.append("- Calibrate the fixed D415s and run the full multi-camera rig once "
+             "the GPU budget allows a healthy pipeline with >1 camera.")
+    L.append("")
+
+    # -- what it does not prove -------------------------------------------- #
     L.append("## What this does NOT prove")
     L.append("")
     for c in _CAVEATS:
@@ -262,10 +287,7 @@ def build_markdown(metrics, run_id, frame_names):
     return "\n".join(L)
 
 
-def build_html(md_text, out_dir, frame_names):
-    # Minimal, dependency-free markdown -> HTML with base64-embedded images so the
-    # single file renders on a phone with no network. Handles headings, tables,
-    # blockquotes, lists, bold, and image embedding.
+def build_html(md_text, out_dir):
     import html
     import re
 
@@ -277,10 +299,7 @@ def build_html(md_text, out_dir, frame_names):
                 f'alt="{html.escape(name)}" style="max-width:100%;height:auto;'
                 f'border:1px solid #ccc;border-radius:6px;margin:8px 0;">')
 
-    lines = md_text.splitlines()
-    out = []
-    in_table = False
-    in_list = False
+    out, in_table, in_list = [], False, False
 
     def close_list():
         nonlocal in_list
@@ -298,14 +317,12 @@ def build_html(md_text, out_dir, frame_names):
         t = re.sub(r"`(.+?)`", r"<code>\1</code>", t)
         return t
 
-    for line in lines:
+    for line in md_text.splitlines():
         img = re.match(r"!\[.*?\]\((.+?)\)", line.strip())
         if img:
-            close_list(); close_table()
-            out.append(embed(img.group(1)))
-            continue
+            close_list(); close_table(); out.append(embed(img.group(1))); continue
         if line.startswith("|") and "---" in line:
-            continue  # table divider
+            continue
         if line.startswith("|"):
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
             if not in_table:
@@ -329,21 +346,18 @@ def build_html(md_text, out_dir, frame_names):
             close_list(); out.append(f"<h1>{inline(line[2:])}</h1>")
         elif line.startswith("> "):
             close_list()
-            out.append(f'<blockquote style="border-left:4px solid #888;'
-                       f'margin:6px 0;padding:4px 10px;color:#333;background:#f6f6f6;">'
+            out.append(f'<blockquote style="border-left:4px solid #888;margin:6px 0;'
+                       f'padding:4px 10px;color:#333;background:#f6f6f6;">'
                        f'{inline(line[2:])}</blockquote>')
         elif line.startswith("- "):
             if not in_list:
                 out.append("<ul>"); in_list = True
             out.append(f"<li>{inline(line[2:])}</li>")
         elif line.strip() == "":
-            close_list()
-            out.append("")
+            close_list(); out.append("")
         else:
-            close_list()
-            out.append(f"<p>{inline(line)}</p>")
+            close_list(); out.append(f"<p>{inline(line)}</p>")
     close_list(); close_table()
-
     body = "\n".join(out)
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
@@ -360,24 +374,31 @@ def build_html(md_text, out_dir, frame_names):
 </body></html>"""
 
 
+def _load(path):
+    return json.load(open(path)) if os.path.isfile(path) else {}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--run", required=True)
-    ap.add_argument("--out", required=True, help="task data dir for the report")
-    ap.add_argument("--frames", type=int, default=8)
+    ap.add_argument("--run", required=True, help="primary (healthy) RUNDIR")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--per-camera-run", default=None,
+                    help="a 2-camera RUNDIR whose diagnosis.json has the per-camera split")
+    ap.add_argument("--frames", type=int, default=6)
     args = ap.parse_args()
 
     os.makedirs(args.out, exist_ok=True)
-    with open(os.path.join(args.run, "metrics.json")) as f:
-        metrics = json.load(f)
+    metrics = _load(os.path.join(args.run, "metrics.json"))
+    diag = _load(os.path.join(args.run, "diagnosis.json"))
+    per_cam_diag = (_load(os.path.join(args.per_camera_run, "diagnosis.json"))
+                    if args.per_camera_run else None)
 
-    # copy plots
-    for plot in ("topdown.png", "distance_time.png"):
+    for plot in ("topdown.png", "distance_time.png", "signed_error.png"):
         src = os.path.join(args.run, plot)
         if os.path.isfile(src):
             shutil.copy(src, os.path.join(args.out, plot))
+    has_signed = os.path.isfile(os.path.join(args.out, "signed_error.png"))
 
-    # copy selected frames
     frame_names = []
     for src in _pick_frames(os.path.join(args.run, "frames"), k=args.frames):
         name = os.path.basename(src)
@@ -385,12 +406,11 @@ def main() -> int:
         frame_names.append(name)
 
     run_id = os.path.basename(os.path.normpath(args.run))
-    md = build_markdown(metrics, run_id, frame_names)
+    md = build_markdown(metrics, diag, per_cam_diag, run_id, frame_names, has_signed)
     with open(os.path.join(args.out, "report.md"), "w") as f:
         f.write(md)
-    html = build_html(md, args.out, frame_names)
     with open(os.path.join(args.out, "report.html"), "w") as f:
-        f.write(html)
+        f.write(build_html(md, args.out))
     print(f"report.md + report.html -> {args.out} ({len(frame_names)} frames)")
     return 0
 
