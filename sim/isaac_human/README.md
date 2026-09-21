@@ -129,6 +129,70 @@ Regenerate the camera-pose TF file after editing `cell_layout.py`:
 python3 sim/isaac_human/gen_sim_config.py     # writes params/camera_poses.sim.yaml
 ```
 
+## Watch it live (WebRTC)
+
+The earlier runs were headless with no picture — you only got plots afterwards.
+`run_live_view.sh` runs the **same** scene + detector graph but also streams the
+viewport over WebRTC so you can watch the person walk in and out from a phone or
+laptop on the tailnet, live.
+
+```bash
+sim/isaac_human/run_live_view.sh            # single camera (wrist), cuda, 30 min
+sim/isaac_human/run_live_view.sh wrist cpu  # detector on cpu
+SESSION_SECS=600 sim/isaac_human/run_live_view.sh   # shorter session (<= 30 min)
+```
+
+It preflights (GPU ≥ 8 GB free, RAM ≥ 10 GB, ports **49100** and the client port
+free, a tailnet IP present, Blender not running), takes the fleet GPU lock, boots
+Isaac with the livestream on, brings up the real detector graph + recorder exactly
+as `run_session.sh`, **loops** the person's in-and-out walk for the whole session
+so there is always motion, serves the browser client, and prints:
+
+```
+ LIVE VIEW UP
+   open  http://<tailnet-ip>:<client-port>   (Tailscale on)
+```
+
+Open that link from any browser with Tailscale up (the page defaults the stream
+host to whoever served it, so no query string is needed). On exit it stops
+**everything it started by PID** and confirms ports 49100 + the client port and
+the GPU are released. Session length defaults to 30 min and is **hard-capped at
+30 min**.
+
+- **The picture.** A fixed observer camera frames the whole cell (robot stand-in,
+  the person's full path, the floor). Two flat rings are drawn on the floor at the
+  radii the detector actually uses, **read from the sim config** (never
+  hard-coded): **amber = SLOW** (`reach_radius + slow_radius`, 3.30 m here) and
+  **red = STOP** (`reach_radius + stop_radius`, 2.00 m here) — the same radii and
+  colours as the RViz markers. A beacon sphere above the robot turns
+  green/amber/red from `/human_safety/state` (best-effort; if the ROS subscribe
+  fails it stays neutral and the scene still streams).
+- **The client.** Served in place from the owner's
+  `/home/manishsaini/workspaces/shelfbot/tools/webrtc_client` (read-only, **not
+  copied** — it carries a vendored NVIDIA streaming library), by
+  `python3 -m http.server` bound to the **tailnet IP only** on port 8080 (or the
+  next free port, skipping reserved ranges). If it does not connect, override with
+  `?server=<ip>&signalingPort=49100`.
+- **The state will often read STOP — that is expected here.** Streaming (RTX) plus
+  the detector share the one 12 GB card, so the img→state latency usually exceeds
+  the 0.70 s reaction budget and the layer forces a fail-safe STOP. That is the
+  **latency fault stopping safely**, not the distance logic; on the real rig
+  (cameras on USB, no renderer competing) latency measured ~0.26 s. See "Latency
+  vs the reaction budget" above.
+- **Proving media / the H.264 trap.** The Kit stream is **H.264**;
+  open-source/headless Chromium has no H.264 decoder and its renderer pegs on the
+  stream, so a black `<video>` or a hung `getStats()` in such a browser proves
+  **nothing** either way. The real decoder is the owner's **phone/laptop**. From
+  this box you can only confirm the server side: the livestream extension is up,
+  49100 is listening, the client page answers, and Kit allocates ICE/media UDP
+  sockets when a client connects.
+- **Exposure.** The client page binds to the tailnet IP only. Kit binds the
+  signalling port **49100/TCP and the media UDP** on `0.0.0.0` (all interfaces) —
+  a Kit default, not settable without touching Kit — so on a multi-homed host
+  those are reachable on the LAN too, not tailnet-only. Streaming on the tailnet
+  is the intended use. The streamed `SimulationApp` is **viewport-only** (no
+  interactive editor or script console).
+
 ### Environment / GPU / memory guards
 
 - `isaac_env.sh` sets the conda env (`env_isaaclab`) and the bundled-ROS2-Jazzy
@@ -184,6 +248,11 @@ python3 -m pytest sim/isaac_human/tests/ -q
   `human_safety.geometry` back to the true base point (so the pose the detector
   uses is exactly the pose Isaac renders from).
 - `test_domain_guard.py` — the domain guard defaults to 88 and refuses 0/42/77.
+- `test_live_view.py` — the live-view helpers: SLOW/STOP ring radii read from the
+  sim config match the detector (`reach+slow` / `reach+stop`, amber/red), the
+  client-port picker honours the forbidden set and scans past busy ports, the
+  scene argument parser (`--livestream`/`--public-ip`/`--loop-walk`/`--config`/
+  `--zone-beacon`), the zone-beacon colours, and the preflight refusal cases.
 - `test_compare_fix.py` — the old-vs-new replay reconstructs zones from recorded
   states, using the nearest point (new) vs the centre (old).
 - `test_after_run_replay.py` — regression guard replaying a committed after-run
@@ -218,6 +287,8 @@ sim/isaac_human/
   boot_smoke_test.py    Isaac side of the boot smoke test
   ros_frame_probe.py    system-ROS frame counter (proves cross-process DDS)
   run_session.sh        full session: Isaac + real graph + recorder, one GPU lock
+  run_live_view.sh      "Watch it live": run_session + WebRTC livestream + client
+  live_view.py          PURE live-view helpers: ring radii, port picker, arg parser
   isaac_scene.py        the scene: cell, cameras, person, ground-truth recording
   recorder_node.py      logs state/tracks/detections + annotated frames (venv)
   sim_poses.py          PURE pose maths (look-at -> USD xform + base<-optical TF)

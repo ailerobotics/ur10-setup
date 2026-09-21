@@ -103,27 +103,20 @@ def _resolve_person_usd():
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--cams", default="wrist,shelf,table")
-    ap.add_argument("--gt-log", required=True, help="ground-truth JSONL output")
-    ap.add_argument("--max-seconds", type=float, default=180.0,
-                    help="hard wall-clock cap for the whole run")
-    ap.add_argument("--settle-seconds", type=float, default=4.0,
-                    help="render warm-up before the person starts moving")
-    ap.add_argument("--sim-hz", type=float, default=5.0,
-                    help="cap Isaac's update/publish rate (Hz). Isaac renders "
-                         "faster than the detectors drain, so uncapped the DDS "
-                         "image queue backs up and detections are stale (latency "
-                         "> the 0.7 s reaction budget -> permanent STOP). Capping "
-                         "to a rate the detectors keep up with keeps frames fresh "
-                         "and frees GPU for inference.")
-    args, _ = ap.parse_known_args()
+    import live_view
+    args, _ = live_view.build_scene_arg_parser().parse_known_args()
 
     roles = [r.strip() for r in args.cams.split(",") if r.strip()]
 
-    sim = SimulationApp({"headless": True, "width": 640, "height": 480})
+    # Livestreaming needs a viewport big enough to be watchable on a phone; the
+    # headless analysis runs stay at the small 640x480 render the detectors use.
+    if args.livestream:
+        sim = SimulationApp({"headless": True, "width": 1280, "height": 720})
+    else:
+        sim = SimulationApp({"headless": True, "width": 640, "height": 480})
     rc = 1
     gt_f = None
+    beacon = None
     try:
         from isaacsim.core.utils.extensions import enable_extension
         enable_extension("isaacsim.ros2.bridge")
@@ -131,6 +124,28 @@ def main() -> int:
         import omni.kit.app
         for _ in range(60):
             omni.kit.app.get_app().update()
+
+        # -- WebRTC livestream (owner's shelfbot pattern) ------------------- #
+        # Enable AFTER the app is up: point ICE at the tailnet IP so a phone on
+        # the tailnet can reach the media, on the fixed signalling port, then
+        # turn on the extension. Best-effort: a livestream failure must not sink
+        # the run (the detection graph is the point), so warn and carry on.
+        if args.livestream:
+            try:
+                import carb
+                public_ip = args.public_ip or "127.0.0.1"
+                settings = carb.settings.get_settings()
+                settings.set("/app/livestream/publicEndpointAddress", public_ip)
+                settings.set("/app/livestream/port", int(args.livestream_port))
+                omni.kit.app.get_app().get_extension_manager(
+                    ).set_extension_enabled_immediate(
+                    "omni.kit.livestream.webrtc", True)
+                print(f"[isaac_scene] WebRTC livestream ON — publicEndpointAddress "
+                      f"{public_ip}, signalling port {args.livestream_port}",
+                      flush=True)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[isaac_scene] WARN: livestream enable failed ({exc!r}); "
+                      "continuing headless.", flush=True)
 
         import omni.usd
         import omni.timeline
@@ -169,6 +184,23 @@ def main() -> int:
         box("/World/Shelf", *layout.SHELF_BOX)
         box("/World/Table", *layout.TABLE_BOX)
 
+        # -- SLOW / STOP floor rings (livestream only) -------------------- #
+        # Flat coloured circles at the SAME radii the detector uses, read from
+        # the safety config (never hard-coded). Makes the streamed picture
+        # meaningful: the person visibly crosses amber (SLOW) then red (STOP).
+        if args.livestream and args.config:
+            try:
+                import live_view
+                reach, stop_r, slow_r = live_view.read_zone_radii(args.config)
+                for spec in live_view.zone_ring_specs(reach, stop_r, slow_r):
+                    _build_floor_ring(stage, spec, Gf, Sdf, UsdGeom)
+                print(f"[isaac_scene] floor rings: SLOW r={reach + slow_r:.2f} m, "
+                      f"STOP r={reach + stop_r:.2f} m (from {args.config})",
+                      flush=True)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[isaac_scene] WARN: could not draw zone rings ({exc!r}).",
+                      flush=True)
+
         # -- person ------------------------------------------------------- #
         person_usd, note = _resolve_person_usd()
         print(f"[isaac_scene] person: {note}", flush=True)
@@ -197,6 +229,13 @@ def main() -> int:
             cam = layout.camera(role)
             _build_camera(stage, cam, og, rep, Gf, Sdf, UsdGeom)
 
+        # -- streamed viewport framing + live-zone beacon (livestream only) - #
+        beacon = None
+        if args.livestream:
+            _frame_overview_viewport()
+            if args.zone_beacon:
+                beacon = _ZoneBeacon(stage, Gf, Sdf, UsdGeom)
+
         omni.timeline.get_timeline_interface().play()
         # Wall-clock settle (NOT a tick count): under GPU contention Isaac ticks
         # slowly, so a fixed tick count would block for minutes. This gives the
@@ -207,6 +246,8 @@ def main() -> int:
         def throttled_update():
             t = time.time()
             sim.update()
+            if beacon is not None:
+                beacon.pump()
             dt = time.time() - t
             if dt < sim_period:
                 time.sleep(sim_period - dt)
@@ -270,15 +311,29 @@ def main() -> int:
             gt_f.flush()
 
         print(f"[isaac_scene] path playback: {len(segments)} legs, "
-              f"asset={'people' if person_is_asset else 'primitive'}", flush=True)
-        # Walk the planned (x, y) samples, teleporting the root each sim step.
-        for (x, y) in _walk_samples(segments, step_dt=1.0 / 15.0):
-            if time.time() - t_start > args.max_seconds:
-                print("[isaac_scene] hit max-seconds cap; ending path early.", flush=True)
+              f"asset={'people' if person_is_asset else 'primitive'}, "
+              f"loop={'on' if args.loop_walk else 'off'}", flush=True)
+        # Walk the planned (x, y) samples, teleporting the root each sim step. In
+        # loop mode (the live-view session) repeat the in-and-out walk until the
+        # max-seconds cap so the owner always has motion to watch.
+        capped = False
+        lap = 0
+        while not capped:
+            lap += 1
+            for (x, y) in _walk_samples(segments, step_dt=1.0 / 15.0):
+                if time.time() - t_start > args.max_seconds:
+                    print("[isaac_scene] hit max-seconds cap; ending path.",
+                          flush=True)
+                    capped = True
+                    break
+                p_translate.Set(Gf.Vec3d(x, y, 0.0))
+                throttled_update()
+                record_gt(x, y)
+            if not args.loop_walk:
                 break
-            p_translate.Set(Gf.Vec3d(x, y, 0.0))
-            throttled_update()
-            record_gt(x, y)
+            if not capped:
+                print(f"[isaac_scene] lap {lap} complete; looping the walk.",
+                      flush=True)
         print("[isaac_scene] path complete; holding a moment for the last frames.",
               flush=True)
         for _ in range(int(2.0 * args.sim_hz)):
@@ -290,6 +345,8 @@ def main() -> int:
         traceback.print_exc()
         rc = 2
     finally:
+        if beacon is not None:
+            beacon.shutdown()
         if gt_f is not None:
             gt_f.close()
         try:
@@ -352,6 +409,137 @@ def _build_camera(stage, cam, og, rep, Gf, Sdf, UsdGeom):
     )
     print(f"[isaac_scene] camera '{cam.role}' -> rgb {topics['rgb']}, depth "
           f"{topics['depth']}, info {topics['info']} (frame {frame})", flush=True)
+
+
+def _build_floor_ring(stage, spec, Gf, Sdf, UsdGeom, width=0.10, n=96):
+    """Draw one zone as a flat coloured annulus (a thick ring) on the floor at
+    radius ``spec.radius`` about base_link. A ring band, not a filled disk, so the
+    two zones read as concentric circles like the RViz markers. Slightly raised
+    off z=0 (STOP just above SLOW) to avoid z-fighting with the ground."""
+    import math
+    r = float(spec.radius)
+    inner = max(0.0, r - 0.5 * width)
+    outer = r + 0.5 * width
+    z = 0.02 if spec.name == "STOP" else 0.015
+    pts, counts, idx = [], [], []
+    for k in range(n):
+        a = 2.0 * math.pi * k / n
+        ca, sa = math.cos(a), math.sin(a)
+        pts.append((inner * ca, inner * sa, z))
+        pts.append((outer * ca, outer * sa, z))
+    for k in range(n):
+        i0, i1 = 2 * k, 2 * k + 1
+        i2, i3 = (2 * ((k + 1) % n)), (2 * ((k + 1) % n) + 1)
+        # quad (i0 inner, i1 outer, i3 next-outer, i2 next-inner)
+        idx.extend([i0, i1, i3, i2])
+        counts.append(4)
+    m = UsdGeom.Mesh.Define(stage, Sdf.Path(f"/World/ZoneRing_{spec.name}"))
+    m.CreatePointsAttr([Gf.Vec3f(*p) for p in pts])
+    m.CreateFaceVertexCountsAttr(counts)
+    m.CreateFaceVertexIndicesAttr(idx)
+    m.CreateDoubleSidedAttr(True)
+    r0, g0, b0, a0 = spec.rgba
+    m.CreateDisplayColorAttr([Gf.Vec3f(r0, g0, b0)])
+    m.CreateDisplayOpacityAttr([float(a0)])
+
+
+def _frame_overview_viewport(eye=(5.5, 1.0, 3.0), target=(0.2, -2.4, 0.5)):
+    """Point the streamed persp viewport at the whole cell — a fixed observer
+    that keeps the robot stand-in, the person's full path and the floor in view.
+    Best-effort: framing must never sink the run."""
+    try:
+        from isaacsim.core.utils.viewports import set_camera_view
+        set_camera_view(eye=list(eye), target=list(target),
+                        camera_prim_path="/OmniverseKit_Persp")
+        # Wide FOV so the whole corridor fits.
+        import omni.usd
+        from pxr import UsdGeom as _UsdGeom
+        stage = omni.usd.get_context().get_stage()
+        persp = _UsdGeom.Camera(stage.GetPrimAtPath("/OmniverseKit_Persp"))
+        if persp:
+            persp.GetFocalLengthAttr().Set(12.0)
+            persp.GetHorizontalApertureAttr().Set(24.0)
+        print(f"[isaac_scene] viewport framed on the cell (eye={eye}, "
+              f"target={target}).", flush=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[isaac_scene] WARN: could not frame overview viewport ({exc!r}).",
+              flush=True)
+
+
+class _ZoneBeacon:
+    """Best-effort live-zone indicator: a sphere above the robot column that turns
+    green / amber / red from the detector's published ``/human_safety/state``.
+
+    Read-only supplement to the picture — it subscribes on the SIM domain (88,
+    set by isaac_env.sh) via Isaac's BUNDLED rclpy. Every step is wrapped so a
+    ROS hiccup can never take down the render loop; if setup fails the beacon is
+    simply inert and the scene still streams. The state routinely reads STOP for
+    latency reasons on this shared card — that is the safety layer stopping, and
+    the beacon shows it honestly.
+    """
+
+    def __init__(self, stage, Gf, Sdf, UsdGeom):
+        self._ok = False
+        self._node = None
+        self._did_init = False
+        self._last = None
+        self._color_attr = None
+        import live_view
+        self._zone_color = live_view.zone_color
+        try:
+            sph = UsdGeom.Sphere.Define(stage, Sdf.Path("/World/ZoneBeacon"))
+            sph.GetRadiusAttr().Set(0.16)
+            UsdGeom.Xformable(sph).AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, 1.95))
+            sph.CreateDisplayColorAttr([Gf.Vec3f(*self._zone_color(None))])
+            self._color_attr = sph.GetDisplayColorAttr()
+            self._Gf = Gf
+        except Exception as exc:  # noqa: BLE001
+            print(f"[isaac_scene] WARN: zone beacon prim failed ({exc!r}).",
+                  flush=True)
+            return
+        try:
+            import rclpy
+            from std_msgs.msg import String
+            if not rclpy.ok():
+                rclpy.init(args=None)
+                self._did_init = True
+            self._rclpy = rclpy
+            self._node = rclpy.create_node("isaac_zone_beacon")
+            self._node.create_subscription(String, "/human_safety/state",
+                                           self._on_state, 10)
+            self._ok = True
+            print("[isaac_scene] zone beacon subscribed to /human_safety/state.",
+                  flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[isaac_scene] WARN: zone beacon ROS setup failed ({exc!r}); "
+                  "beacon stays neutral.", flush=True)
+
+    def _on_state(self, msg):
+        try:
+            import json
+            zone = json.loads(msg.data).get("zone")
+            if zone != self._last:
+                self._last = zone
+                self._color_attr.Set([self._Gf.Vec3f(*self._zone_color(zone))])
+        except Exception:  # noqa: BLE001
+            pass
+
+    def pump(self):
+        if not self._ok:
+            return
+        try:
+            self._rclpy.spin_once(self._node, timeout_sec=0.0)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def shutdown(self):
+        try:
+            if self._node is not None:
+                self._node.destroy_node()
+            if self._did_init and self._rclpy.ok():
+                self._rclpy.shutdown()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _primitive_person(stage, Gf, Sdf, UsdGeom):
