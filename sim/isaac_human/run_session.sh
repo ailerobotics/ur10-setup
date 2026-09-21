@@ -176,6 +176,22 @@ done
 echo "[session] Isaac path finished (or capped); letting recorder flush ..."
 sleep 3
 
+# Record path: check the recorded state stream is not STOP-pinned by latency
+# BEFORE anyone spends time composing a video from it. The check exits non-zero
+# when unhealthy (too many states over the reaction budget, or too few distinct
+# zones); that is the CHECK failing loudly, never the session — so it is guarded.
+if [ "$RECORD" = 1 ]; then
+  echo "[session] record health check ..."
+  if python3 "$HERE/record_health.py" --run "$RUNDIR" --config "$CFG"; then
+    :
+  else
+    echo "[session] !!! RECORD HEALTH FAILED: the recorded clip is likely" \
+         "STOP-pinned by latency and would demonstrate nothing. Re-record with" \
+         "a SINGLE camera / lower SIM_HZ before composing a video. (See" \
+         "$RUNDIR/record_health.json.)" >&2
+  fi
+fi
+
 # cleanup() runs on EXIT (stops recorder, graph, isaac by PID).
 echo "[session] RUNDIR=$RUNDIR"
 echo "RUNDIR=$RUNDIR"   # last line: machine-readable for the caller

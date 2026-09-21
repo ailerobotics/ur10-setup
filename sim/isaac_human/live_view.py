@@ -169,7 +169,9 @@ def build_scene_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--observer-size", default="1280x720",
                     help="observer capture size WxH (even dims; default 1280x720)")
     ap.add_argument("--observer-every", type=int, default=1,
-                    help="capture every Nth sim step (throttle observer render)")
+                    help="SAVE every Nth observer frame to disk (throttles JPEG "
+                         "writes only; the render product still renders every sim "
+                         "step, so this does NOT reduce GPU load)")
     return ap
 
 

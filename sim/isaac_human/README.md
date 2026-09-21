@@ -208,6 +208,24 @@ GPU load) and saves, into the run directory under `~/.cache/isaac_human_sim/`:
 The walk is **looped** (`RECORD_WALK_SECS`, default 100 s) so there is a full
 in-and-out several times over for the composer to pick a 60–90 s window from.
 
+`OBSERVER_SIZE` / `--observer-every` note: `--observer-every N` throttles the JPEG
+**writes to disk** only — the observer render product renders on **every** sim
+step once attached, so a larger `N` does NOT reduce GPU load. The single lever
+that keeps latency under budget is the **single-camera** default; a second camera
+(or a live WebRTC stream on top) is what pushes img→state latency past the 0.70 s
+reaction budget and pins STOP.
+
+After a `--record` run, `run_session.sh` runs `record_health.py` on the recorded
+state stream and **fails loudly** (non-zero from the check, never from the
+session) when the clip would be STOP-pinned: more than 20 % of localised states
+over the 0.70 s reaction budget, or fewer than two distinct zones. It writes
+`record_health.json` into the run dir. Run it standalone on any run:
+
+```bash
+python3 sim/isaac_human/record_health.py --run "$RUN" \
+    --config sim/isaac_human/params/human_safety.sim.yaml
+```
+
 ```bash
 # 1. record a session (GPU lock, ~2-3 min). RUNDIR is the last printed line.
 sim/isaac_human/run_session.sh wrist cuda --record
@@ -241,6 +259,15 @@ Raw frames are large: keep the JPEG dump small (`RECORD_WALK_SECS`), and once th
 MP4 is verified **delete your own raw frames** (`observer_frames/`,
 `detector_frames/`) with literal paths, keeping the MP4. Large artefacts (frames,
 MP4, the base64 page) stay OUT of git.
+
+**Delivered recording session (2026-09-21, `run_20260921T143401Z`, single wrist
+camera, cuda).** Health check verdict **OK**: 1873 state messages over the looped
+walk, **2 distinct zones** (STOP 1359 / SLOW 514 — the person is inside the SLOW
+ring the whole clip, so no CLEAR), image→state latency **median 0.420 s, p95
+0.781 s, worst 1.265 s**, and **7.2 %** of localised states over the 0.70 s
+reaction budget (well under the 20 % STOP-pinned threshold). The composed MP4 is
+**5.2 MB** (1280×720, H.264/yuv420p/+faststart, verified), phone-playable from
+`data/isaac-human-video-v1/video.html`.
 
 ### Environment / GPU / memory guards
 
@@ -297,6 +324,10 @@ python3 -m pytest sim/isaac_human/tests/ -q
   `human_safety.geometry` back to the true base point (so the pose the detector
   uses is exactly the pose Isaac renders from).
 - `test_domain_guard.py` — the domain guard defaults to 88 and refuses 0/42/77.
+- `test_analysis_core.py` — the pure judgement incl. `record_health` (the record
+  path's post-run STOP-pinned check): OK on a varied healthy run, FAIL when most
+  states are over budget or only one zone appears, `None` zones ignored for the
+  distinct count, thresholds configurable.
 - `test_video_compose.py` — the video composer's pure parts (`video_compose.py`):
   timestamp alignment / frame-hold, even-dimension sizing, size-cap bitrate
   choice, label formatting, the distance-vs-time trace mapping and the
@@ -350,6 +381,7 @@ sim/isaac_human/
                         (--record: fixed observer camera -> JPEG frames + index)
   recorder_node.py      logs state/tracks/detections + annotated frames (venv)
                         (--record-all-frames: every processed detector frame)
+  record_health.py      post-record STOP-pinned check (zones + over-budget frac)
   sim_poses.py          PURE pose maths (look-at -> USD xform + base<-optical TF)
   cell_layout.py        PURE scene geometry: cameras + person path (source of truth)
   gen_sim_config.py     regenerate params/camera_poses.sim.yaml from cell_layout

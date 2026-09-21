@@ -181,3 +181,59 @@ def test_summarize_percentiles():
     assert s["median"] == 2.5
     assert s["worst"] == 4.0
     assert s["n"] == 4
+
+
+def _healthy_states(n=20, over=2):
+    """n localised states across CLEAR/SLOW/STOP; `over` of them over budget."""
+    zones = ["CLEAR", "SLOW", "STOP"]
+    states = []
+    for i in range(n):
+        lat = 0.9 if i < over else 0.3
+        states.append({"t": 100.0 + i, "evidence_stamp": 100.0 + i - lat,
+                       "zone": zones[i % 3]})
+    return states
+
+
+def test_record_health_ok_on_varied_healthy_run():
+    h = ac.record_health(_healthy_states(n=20, over=2), budget_s=0.7)
+    assert h["ok"] is True
+    assert h["distinct_zones"] == 3
+    assert h["reasons"] == []
+    assert abs(h["latency"]["frac_over_budget"] - 0.1) < 1e-9
+
+
+def test_record_health_fails_when_mostly_over_budget():
+    # 12 of 20 states over the 0.70 s budget (60% > 20%).
+    h = ac.record_health(_healthy_states(n=20, over=12), budget_s=0.7)
+    assert h["ok"] is False
+    assert any("reaction budget" in r for r in h["reasons"])
+
+
+def test_record_health_fails_on_single_zone():
+    states = [{"t": 100.0 + i, "evidence_stamp": 100.0 + i - 0.3, "zone": "STOP"}
+              for i in range(20)]
+    h = ac.record_health(states, budget_s=0.7)
+    assert h["ok"] is False
+    assert h["distinct_zones"] == 1
+    assert any("distinct zone" in r for r in h["reasons"])
+
+
+def test_record_health_ignores_none_zone_for_distinct_count():
+    states = ([{"t": 100.0 + i, "evidence_stamp": 100.0 + i - 0.3, "zone": None}
+               for i in range(5)]
+              + [{"t": 200.0 + i, "evidence_stamp": 200.0 + i - 0.3, "zone": "SLOW"}
+                 for i in range(5)]
+              + [{"t": 300.0 + i, "evidence_stamp": 300.0 + i - 0.3, "zone": "STOP"}
+                 for i in range(5)])
+    h = ac.record_health(states, budget_s=0.7)
+    assert h["distinct_zones"] == 2
+    assert None not in h["zone_breakdown"]
+    assert h["ok"] is True
+
+
+def test_record_health_thresholds_are_configurable():
+    states = _healthy_states(n=20, over=2)   # 10% over budget, 3 zones
+    strict = ac.record_health(states, budget_s=0.7, max_frac_over_budget=0.05)
+    assert strict["ok"] is False
+    lenient = ac.record_health(states, budget_s=0.7, min_distinct_zones=4)
+    assert lenient["ok"] is False

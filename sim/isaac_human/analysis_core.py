@@ -230,6 +230,52 @@ def zone_breakdown(states: List[dict]) -> Dict[str, int]:
     return out
 
 
+def record_health(states: List[dict], budget_s: float,
+                  max_frac_over_budget: float = 0.20,
+                  min_distinct_zones: int = 2) -> Dict:
+    """Post-run health of a recorded run, from the state stream alone (no ground
+    truth needed): the zone distribution and the fraction of localised states
+    whose image->state latency exceeded the reaction budget.
+
+    A recorded clip is judged UNHEALTHY — ``ok=False`` — when either symptom of a
+    latency-pinned run is present:
+
+      * more than ``max_frac_over_budget`` of localised states are over the
+        reaction budget (the detector's fail-safe rule then pins STOP, so the
+        clip shows STOP throughout and demonstrates nothing), or
+      * fewer than ``min_distinct_zones`` distinct zones ever appear (no
+        CLEAR->SLOW->STOP progression to see).
+
+    Pure: plain dicts in, plain dict out, so it is unit-tested on synthetic logs
+    and reused by the ``record_health.py`` CLI the record path runs. Does NOT
+    change any threshold or the budget — it only reports against them."""
+    zones = zone_breakdown([s for s in states if s.get("zone") is not None])
+    distinct = len(zones)
+    lat = latency_stats(states, budget_s)
+    frac = lat["frac_over_budget"]
+    reasons: List[str] = []
+    frac_bad = frac == frac and frac > max_frac_over_budget  # NaN-safe (no states)
+    if frac_bad:
+        reasons.append(
+            f"{frac * 100:.0f}% of localised states are over the {budget_s:.2f} s "
+            f"reaction budget (> {max_frac_over_budget * 100:.0f}%); the detector "
+            f"pins STOP and the clip demonstrates nothing")
+    if distinct < min_distinct_zones:
+        reasons.append(
+            f"only {distinct} distinct zone(s) {sorted(zones)} appeared "
+            f"(< {min_distinct_zones}); no CLEAR->SLOW->STOP progression to see")
+    return {
+        "ok": not reasons,
+        "zone_breakdown": zones,
+        "distinct_zones": distinct,
+        "n_states": lat["summary"]["n"],
+        "latency": lat,
+        "max_frac_over_budget": max_frac_over_budget,
+        "min_distinct_zones": min_distinct_zones,
+        "reasons": reasons,
+    }
+
+
 def zone_transitions(states: List[dict]) -> List[dict]:
     """The ordered zone changes: [{t, from, to}]."""
     out = []
