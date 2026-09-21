@@ -133,6 +133,29 @@ def detection_rate_per_camera(dets: List[dict], truth: Truth, in_fov_fn,
     return out
 
 
+def detection_scores(dets: List[dict], truth: Truth, in_fov_fn) -> Dict[str, float]:
+    """Summary of the detector's confidence over in-view frames that reported a
+    person: the best score per such frame, then median / min / n. Same visibility
+    gate as ``detection_rate_per_camera``, so the score phrase in the report is
+    measured, not assumed. Frames with no reported person or no score contribute
+    nothing (``n`` counts only scored hits)."""
+    best: List[float] = []
+    for d in dets:
+        tr = truth.at(d["t"])
+        if tr is None or not tr["present"]:
+            continue
+        if not in_fov_fn(d["camera"], tr["centre"]):
+            continue
+        scs = [s for s in (d.get("scores") or []) if s is not None]
+        if scs:
+            best.append(max(scs))
+    return {
+        "n": len(best),
+        "median": _percentile(best, 50) if best else float("nan"),
+        "min": min(best) if best else float("nan"),
+    }
+
+
 def _nearest_track_pos(state: dict) -> Optional[list]:
     tid = state.get("nearest_track_id")
     for t in state.get("tracks", []):
@@ -314,6 +337,7 @@ def missed_stops(states: List[dict], truth: Truth, reach_radius: float,
 @dataclass
 class RunReport:
     detection_rates: Dict[str, dict] = field(default_factory=dict)
+    detection_score: dict = field(default_factory=dict)
     errors: Dict[str, dict] = field(default_factory=dict)
     transitions: List[dict] = field(default_factory=list)
     stop_latencies: List[dict] = field(default_factory=list)
@@ -332,6 +356,7 @@ def build_report(states: List[dict], dets: List[dict], truth_records: List[dict]
     r = RunReport()
     r.stop_boundary_m = stop_boundary_m(reach_radius, stop_radius)
     r.detection_rates = detection_rate_per_camera(dets, truth, in_fov_fn)
+    r.detection_score = detection_scores(dets, truth, in_fov_fn)
     r.errors = position_errors(states, truth)
     r.transitions = zone_transitions(states)
     r.stop_latencies = stop_transition_latencies(

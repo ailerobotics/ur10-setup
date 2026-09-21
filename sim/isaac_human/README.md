@@ -80,11 +80,13 @@ scripted path, and stops everything it started by PID:
 #    camera frame reaches the ROS side. ~1 min.
 sim/isaac_human/run_boot_smoke.sh
 
-# 2. full session. Default 2 cameras (shelf,table) keeps the RTX renderer and the
-#    detectors within the 12 GB card so the img->state latency stays under the
-#    0.7 s reaction budget; 3 cameras (wrist,shelf,table) also works but adds GPU
-#    contention. device is cuda (default) or cpu.
-sim/isaac_human/run_session.sh shelf,table cuda
+# 2. full session. Default is a SINGLE camera (wrist): on this shared 12 GB card
+#    only one camera keeps the RTX renderer + the detector within budget so the
+#    img->state latency stays under the 0.70 s reaction budget. 2+ cameras run the
+#    latency PAST the budget (fail-safe STOP, masks the distance behaviour) and the
+#    script warns; a 2-camera run is only for the per-camera accuracy split.
+#    device is cuda (default) or cpu.
+sim/isaac_human/run_session.sh wrist cuda
 #   -> prints RUNDIR=<...> ; logs + frames land under ~/.cache/isaac_human_sim/run_*
 
 # 3. analyse the run (offline, no GPU), diagnose the distance bias, build report.

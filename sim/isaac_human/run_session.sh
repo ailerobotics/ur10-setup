@@ -6,7 +6,10 @@
 # frames for the offline analysis.
 #
 #   sim/isaac_human/run_session.sh [cams] [device]
-#     cams    comma list of camera roles (default wrist,shelf,table)
+#     cams    comma list of camera roles (default: wrist -- a SINGLE camera, the
+#             measured-healthy set that keeps img->state latency under the 0.70 s
+#             reaction budget on this shared 12 GB card). 2+ cameras run the
+#             latency past the budget and pin the state at fail-safe STOP.
 #     device  cuda (default) | cpu   -- detector compute device (SIM config only)
 #
 # SIMULATION ONLY. Domain 88, localhost only, FastDDS UDPv4. Touches no real
@@ -17,8 +20,16 @@ set -eo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-CAMS="${1:-wrist,shelf,table}"
+CAMS="${1:-wrist}"
 DEVICE="${2:-cuda}"
+
+_ncams=$(awk -F, '{c=0; for(i=1;i<=NF;i++) if($i!="") c++; print c}' <<<"$CAMS")
+if [ "${_ncams:-1}" -gt 1 ]; then
+  echo "[session] WARNING: $_ncams cameras requested ($CAMS). On this shared 12 GB" \
+       "card only a SINGLE camera keeps img->state latency under the 0.70 s reaction" \
+       "budget; 2+ cameras run the latency past the budget and pin the state at" \
+       "fail-safe STOP, masking the distance behaviour. Proceeding as requested." >&2
+fi
 LOCK="${FLEET_GPU_LOCK:-$HOME/.cache/fleet-gpu.lock}"
 VENV_PY="$HOME/venvs/human-safety/bin/python"
 

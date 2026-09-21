@@ -56,6 +56,63 @@ def _signed(d):
     return "n/a" if not d or not d.get("n") else f"{d['median']:+.2f} m (n={d['n']})"
 
 
+def _overall_rate(detection_rates):
+    """Opportunity-weighted overall detection rate across cameras, or None when no
+    camera ever had the person confirmed in its FOV (no measurement opportunity)."""
+    tot_opp = sum(int(o.get("opportunities", 0)) for o in detection_rates.values())
+    tot_hit = sum(int(o.get("hits", 0)) for o in detection_rates.values())
+    return (tot_hit / tot_opp) if tot_opp else None
+
+
+def _score_phrase(score):
+    n = (score or {}).get("n", 0)
+    med = (score or {}).get("median")
+    if not n or med is None or med != med:
+        return ""
+    return f" (median detection score {med:.2f})"
+
+
+def see_person_line(detection_rates, score, yes_rate=0.90):
+    """The 'does it see the person?' bullet, DERIVED from the measured detection
+    rate and score — no baked-in answer. No opportunity -> No data; overall rate
+    >= yes_rate -> Yes; some hits -> Partially; zero hits -> No."""
+    rate_txt = ", ".join(
+        f"{r} {int(o['rate'] * 100)}%" for r, o in sorted(detection_rates.items())
+        if o.get("rate") == o.get("rate")) or "n/a"
+    overall = _overall_rate(detection_rates)
+    sp = _score_phrase(score)
+    if overall is None:
+        body = ("**No data** — the person was never confirmed in any camera's "
+                "field of view during the run, so detection could not be measured.")
+    elif overall >= yes_rate:
+        body = (f"**Yes** — detection rate {rate_txt} of the frames where the "
+                f"person is truly in view{sp}.")
+    elif overall > 0.0:
+        body = (f"**Partially** — detected in {overall * 100:.0f}% overall "
+                f"({rate_txt}) of the frames where the person is truly in view{sp}.")
+    else:
+        body = ("**No** — the person was truly in view but the detector reported "
+                f"nobody in any of those frames{sp}.")
+    return f"- **Does it see the person?** {body}"
+
+
+def bottom_line(distance_stop, detection_rates):
+    """The bottom-line bullet, honest about whether detection happened and whether
+    a STOP-ring crossing was even exercised on this run."""
+    overall = _overall_rate(detection_rates)
+    if (distance_stop or {}).get("person_inside_ring_by_m_nearest") is not None:
+        return ("- **Bottom line:** the detector localises the person, but the "
+                "published *distance* over-states clearance, so the STOP ring "
+                "engages LATE. That is a missed-STOP window, not a missed detection.")
+    if overall:
+        return ("- **Bottom line:** the detector localises the person, but this run "
+                "produced no STOP-ring crossing to measure the distance-driven STOP "
+                "timing — read the accuracy numbers below on their own.")
+    return ("- **Bottom line:** the detector did not report the person on this run, "
+            "so no distance conclusion can be drawn — check detection before "
+            "reading the numbers below.")
+
+
 def _pick_frames(frames_dir, k=6):
     files = sorted(glob.glob(os.path.join(frames_dir, "*.png")))
     if not files:
@@ -98,11 +155,7 @@ def build_markdown(metrics, diag, per_cam_diag, run_id, frame_names, has_signed_
     L.append("## In plain words")
     L.append("")
     dr = metrics.get("detection_rates", {})
-    rate_txt = ", ".join(
-        f"{r} {int(o['rate']*100)}%" for r, o in sorted(dr.items())
-        if o.get("rate") == o.get("rate")) or "n/a"
-    L.append(f"- **Does it see the person?** Yes — detection rate {rate_txt} of "
-             f"the frames where the person is truly in view (score ~1.00).")
+    L.append(see_person_line(dr, metrics.get("detection_score", {})))
     sd = (diag or {}).get("distance_driven_stop_would_fire") or {}
     if sd.get("person_inside_ring_by_m_nearest") is not None:
         L.append(f"- **Which way is the distance off, and how much?** The "
@@ -119,9 +172,7 @@ def build_markdown(metrics, diag, per_cam_diag, run_id, frame_names, has_signed_
                  f"{ring:.1f} m ring (true nearest "
                  f"{sd.get('true_nearest_body_dist_at_that_moment', float('nan')):.2f} m; "
                  f"the published distance still read ~{ring:.1f} m).")
-    L.append("- **Bottom line:** the detector localises the person, but the "
-             "published *distance* over-states clearance, so the STOP ring "
-             "engages LATE. That is a missed-STOP window, not a missed detection.")
+    L.append(bottom_line(sd, dr))
     L.append("")
 
     # -- the miss ----------------------------------------------------------- #
