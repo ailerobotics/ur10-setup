@@ -107,8 +107,10 @@ known-only distance honesty). The original interface confirm-list is in
 ## Parameters (all PROVISIONAL — tune up, never down; report §3/§7)
 
 See `gate_params.yaml`. Key defaults: `state_max_age_s=0.2`,
-`heartbeat_timeout_s=0.3`, `clear_dwell_s=2.0`, `stop_radius_m=2.0`,
-`slow_speed_fraction=0.1`, `stop_speed_fraction=0.0`, `backstop_deadline_s=0.5`.
+`heartbeat_timeout_s=0.3`, `clear_dwell_s=2.0`, `stop_radius_m=2.25` (mirrors the
+camera STOP **trigger** ring — protective 2.0 m + estimator margin 0.25 m, see
+`data/human-safety-stop-margin-v1`; used only for lost-close classification +
+logging), `slow_speed_fraction=0.1`, `stop_speed_fraction=0.0`, `backstop_deadline_s=0.5`.
 These are conservative placeholders to be **re-derived from measured** end-to-end
 latency (Tr) and stopping time (Ts) in the owner-present phase (report §8 / §10
 Phase 4).

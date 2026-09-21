@@ -24,7 +24,10 @@ clear_dwell_s: 2.0
 
 # --- zone geometry: used ONLY for lost-close classification + logging ---
 # (Zoning/hysteresis proper live on the camera side, report §7.6.)
-stop_radius_m: 2.0
+# Mirrors the camera STOP TRIGGER ring: protective 2.0 m + estimator margin 0.25 m
+# = 2.25 m (cams/human_safety stop_margin, data/human-safety-stop-margin-v1).
+# Conservative direction only — never treat 2.0-2.25 m as clear while perception STOPs.
+stop_radius_m: 2.25
 slow_clear_hysteresis_m: 0.3
 
 # --- primary lever speed-slider fractions the RECORDER logs (report §2.1) ---

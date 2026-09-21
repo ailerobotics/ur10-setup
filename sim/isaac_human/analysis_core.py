@@ -13,10 +13,19 @@ Record shapes (all times are wall-clock seconds, all positions base_link metres)
            "tracks":[{"id","position":[x,y,z]}]}
   det   : {"t", "camera", "n_persons":int, "positioned":bool}
 
-The STOP boundary is ``reach_radius + stop_radius`` metres from the base origin
-(2.0 m by default) — the same envelope the safety layer uses. The missed-STOP
-budget is the reaction-time budget (0.7 s): a person truly inside the STOP zone
-while the state is not STOP for LONGER than that is a real, reportable miss.
+The judged STOP boundary here is the PROTECTIVE ring, ``reach_radius +
+stop_radius`` metres from the base origin (2.0 m by default). This is deliberately
+NOT the zone's STOP *trigger* ring: the safety layer commands STOP a
+``stop_margin`` earlier (at 2.25 m of base) to cover the estimator's over-statement
+(cams/human_safety ``SafetyParams.stop_trigger``,
+data/human-safety-stop-margin-v1). The margin exists to make the trigger fire
+BEFORE the protective ring; the honest test of whether that worked is still
+"was the person ever truly inside the 2.0 m PROTECTIVE ring without STOP?", so
+every judgement below (missed_stops, boundary crossings, transition latencies)
+measures against ``reach_radius + stop_radius`` and must be passed the bare
+``stop_radius`` (never ``stop_radius + stop_margin``). The missed-STOP budget is the
+reaction-time budget (0.7 s): a person truly inside the PROTECTIVE ring while the
+state is not STOP for LONGER than that is a real, reportable miss.
 """
 from __future__ import annotations
 
@@ -250,6 +259,9 @@ def boundary_crossings(truth: Truth, boundary_m: float) -> List[dict]:
 
 
 def stop_boundary_m(reach_radius: float, stop_radius: float) -> float:
+    # The PROTECTIVE ring (2.0 m). Callers must pass the bare stop_radius, NOT
+    # stop_radius + stop_margin — the estimator margin moves the zone's TRIGGER
+    # ring outward but never the protective ring we judge misses against.
     return reach_radius + stop_radius
 
 

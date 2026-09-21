@@ -67,7 +67,15 @@ cameras:
 
 safety:
   reach_radius: 1.30      # UR10 reach; envelope = cylinder of this radius about base z
-  stop_radius: 0.70       # STOP within reach+this = 2.0 m of base (human-safety-s1 §3, PROVISIONAL)
+  stop_radius: 0.70       # PROTECTIVE ring: reach+this = 2.0 m of base (human-safety-s1 §3, PROVISIONAL)
+  # Estimator margin ADDED to the STOP TRIGGER only (never to the protective ring
+  # above). The zone commands STOP at reach+stop_radius+stop_margin = 2.25 m of
+  # base, ~0.25 m earlier than the 2.0 m protective ring, to cover the nearest-point
+  # estimator's measured over-statement on the Isaac after-run test (median +0.19 m
+  # / +0.25 m residual, reported FARTHER than truth). Without it STOP engages ~0.93 s
+  # late vs the 0.70 s reaction budget. PROVISIONAL: shrink toward 0 only if a
+  # real-rig-validated estimator improvement lands. See data/human-safety-stop-margin-v1.
+  stop_margin: 0.25
   slow_radius: 2.00       # SLOW ring (any person present also forces >= SLOW)  PROVISIONAL
   hysteresis: 0.30        # extra clearance to de-escalate (anti-chatter)
   min_clear_dwell: 2.0    # must be clear this long before leaving STOP

@@ -59,12 +59,26 @@ class NearestRangeFilter:
 @dataclass
 class SafetyParams:
     """All radii in metres, all times in seconds. PROVISIONAL defaults from
-    human-safety-s1 §3: STOP when a person is within 2.0 m of the robot base
-    (= reach_radius 1.30 + stop_radius 0.70), leave STOP only after clearing that
-    ring by +0.30 m (hysteresis) and >=2.0 s of continuous healthy CLEAR."""
+    human-safety-s1 §3: the PROTECTIVE ring is 2.0 m of the robot base
+    (= reach_radius 1.30 + stop_radius 0.70). The zone actually TRIGGERS STOP a
+    stop_margin (0.25 m) earlier — at 2.25 m of base — to cover the estimator's
+    measured over-statement (see stop_margin below). Leave STOP only after clearing
+    that trigger ring by +0.30 m (hysteresis) and >=2.0 s of continuous healthy
+    CLEAR."""
 
     reach_radius: float = 1.30          # UR10 reach; envelope = cylinder r about base z
-    stop_radius: float = 0.70           # envelope distance below which -> STOP (base 2.0 m)
+    stop_radius: float = 0.70           # PROTECTIVE envelope distance (reach+this = 2.0 m base)
+    # Estimator margin ADDED to the STOP trigger (never to the protective ring):
+    # the zone commands STOP at envelope stop_radius+stop_margin (= 0.95 m env /
+    # 2.25 m base) so it fires ~0.25 m earlier than the 2.0 m protective ring. This
+    # covers the nearest-point estimator's measured residual over-statement on the
+    # Isaac after-run test (median +0.19 m, ~+0.25 m residual; it reports the person
+    # FARTHER than truth, the unsafe direction, so STOP would otherwise engage ~0.93 s
+    # late against the 0.70 s reaction budget). PROVISIONAL: shrink toward 0 only if a
+    # real-rig-validated estimator improvement lands (data/human-safety-stop-margin-v1).
+    # The protective ring (reach_radius+stop_radius) is UNCHANGED at 2.0 m — that is
+    # what the sim harness judges missed-STOPs against, not this trigger ring.
+    stop_margin: float = 0.25
     slow_radius: float = 2.00           # envelope distance below which -> SLOW (outer ring)
     hysteresis: float = 0.30            # extra clearance required to de-escalate
     min_clear_dwell: float = 2.0        # must be clear this long before leaving STOP
@@ -92,6 +106,24 @@ class SafetyParams:
     # README "Zones react to the nearest credible body point".
     nearest_filter_window: int = 5
     nearest_filter_reject: int = 1
+
+    def __post_init__(self):
+        # The margin only ever pulls the STOP trigger OUTWARD (earlier); a negative
+        # margin would trigger STOP LATER than the protective ring, which is exactly
+        # the unsafe direction this field exists to close. Reject it at load time.
+        if self.stop_margin < 0.0:
+            raise ValueError(
+                f"stop_margin must be >= 0 (got {self.stop_margin}); a negative "
+                "margin would move the STOP trigger inside the protective ring")
+
+    @property
+    def stop_trigger(self) -> float:
+        """Envelope distance below which the zone commands STOP: the protective
+        ``stop_radius`` PLUS the estimator ``stop_margin``. This is the ring the
+        zone machine keys on; the PROTECTIVE ring (reach_radius+stop_radius, 2.0 m)
+        is deliberately separate and is what the sim harness judges missed-STOPs
+        against."""
+        return self.stop_radius + self.stop_margin
 
 
 class SafetyEvaluator:
@@ -151,8 +183,10 @@ class SafetyEvaluator:
                 nearest_env, nearest_base, nearest_id = d_env, d_base, t.id
                 nearest_env_centre = d_env_centre
                 nearest_base_centre = d_base_centre
-            # lost-close bookkeeping uses the SAME (combined) distance as the zone.
-            if d_env <= p.stop_radius + p.lost_close_margin:
+            # lost-close bookkeeping uses the SAME ring as the zone (the trigger
+            # ring, protective + estimator margin), so a track that vanishes just
+            # inside the ring the zone STOPs on is held.
+            if d_env <= p.stop_trigger + p.lost_close_margin:
                 close_ids[t.id] = (now, d_env)
         # Drop nearest-range filters for tracks that no longer exist.
         self._nearest_filters = {
@@ -223,22 +257,25 @@ class SafetyEvaluator:
         p = self.p
         prev = self._zone
         h = p.hysteresis
+        # STOP triggers at the protective radius PLUS the estimator margin (2.25 m
+        # base), never at the bare protective radius.
+        stop_trig = p.stop_trigger
         # De-escalation requires crossing the threshold PLUS hysteresis; this is
         # what stops the zone chattering right at a boundary.
         if prev == Zone.STOP:
-            if nearest_env <= p.stop_radius + h:
+            if nearest_env <= stop_trig + h:
                 return Zone.STOP
             if nearest_env <= p.slow_radius + h:
                 return Zone.SLOW
             return Zone.CLEAR
         if prev == Zone.SLOW:
-            if nearest_env <= p.stop_radius:
+            if nearest_env <= stop_trig:
                 return Zone.STOP
             if nearest_env <= p.slow_radius + h:
                 return Zone.SLOW
             return Zone.CLEAR
         # prev CLEAR
-        if nearest_env <= p.stop_radius:
+        if nearest_env <= stop_trig:
             return Zone.STOP
         if nearest_env <= p.slow_radius:
             return Zone.SLOW
