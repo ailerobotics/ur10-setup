@@ -13,6 +13,14 @@
 # Pattern mirrors /home/manishsaini/workspaces/shelfbot/tools/run_tray_scene.sh
 # (read-only reference), retargeted to this user's home and to the task domain.
 
+# Refuse the shared/live ROS domains and default to the SIM-only domain 88,
+# BEFORE any heavy setup (conda, Isaac libs), so an ambient ROS_DOMAIN_ID can
+# never point this harness at the real robot / shelfbot / live-camera graphs.
+# Standalone + unit-tested (tests/test_domain_guard.py). Returns non-zero (which,
+# under the wrappers' `set -e`, aborts) whether this file is sourced or executed.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/domain_guard.sh" || return 3 2>/dev/null || exit 3
+
 CONDA_ROOT="${CONDA_ROOT:-$HOME/miniforge3}"
 CONDA_ENV="${CONDA_ENV:-env_isaaclab}"
 
@@ -28,7 +36,6 @@ conda activate "${CONDA_ENV}"
 JAZZY="${CONDA_PREFIX}/lib/python3.11/site-packages/isaacsim/exts/isaacsim.ros2.bridge/jazzy"
 
 export ROS_DISTRO=jazzy
-export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-88}"          # task-only domain (brief)
 export ROS_LOCALHOST_ONLY="${ROS_LOCALHOST_ONLY:-1}" # never leave this host
 export RMW_IMPLEMENTATION="${RMW_IMPLEMENTATION:-rmw_fastrtps_cpp}"
 export FASTDDS_BUILTIN_TRANSPORTS="${FASTDDS_BUILTIN_TRANSPORTS:-UDPv4}"

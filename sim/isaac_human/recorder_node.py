@@ -88,10 +88,21 @@ class Recorder(Node):
             "distance_status": x.get("distance_status"),
             "nearest_distance": x.get("nearest_distance"),
             "nearest_distance_base": x.get("nearest_distance_base"),
+            # DIAGNOSTIC body-centre distances (what the zone used before the
+            # nearest-point fix), so an offline old-vs-new before/after needs no
+            # second sim run (see compare_fix.py).
+            "nearest_distance_centre": x.get("nearest_distance_centre"),
+            "nearest_distance_base_centre": x.get("nearest_distance_base_centre"),
             "nearest_track_id": x.get("nearest_track_id"),
             "any_person_visible": x.get("any_person_visible"),
-            "tracks": [{"id": t.get("id"), "position": t.get("position")}
+            # Per-track position AND nearest credible point, plus the per-camera
+            # health block, so the safety state machine can be re-run offline on
+            # the exact live inputs with old (centre) vs new (nearest) logic.
+            "tracks": [{"id": t.get("id"), "position": t.get("position"),
+                        "nearest_point": t.get("nearest_point"),
+                        "confirmed": t.get("confirmed", True)}
                        for t in x.get("tracks", [])],
+            "cameras": x.get("cameras", []),
             "reasons": x.get("reasons", []),
         }
         self.out.write(json.dumps(rec) + "\n")

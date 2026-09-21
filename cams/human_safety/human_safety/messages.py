@@ -138,3 +138,9 @@ class SafetyState:
     tracks: list = field(default_factory=list)    # list[Track]
     evidence_stamp: Optional[float] = None        # oldest positioned-detection stamp sizing the STOP ring
     heartbeat_seq: int = 0
+    # DIAGNOSTIC: the body-CENTRE distances (what the zone used before the
+    # nearest-point fix), kept alongside the nearest-point distances above for
+    # offline comparison. The zone is sized from ``nearest_distance`` /
+    # ``nearest_distance_base``; consumers should not read these.
+    nearest_distance_centre: float = float("inf")       # centre -> reach envelope, m
+    nearest_distance_base_centre: float = float("inf")  # centre -> base origin, m

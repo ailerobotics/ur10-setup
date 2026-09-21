@@ -75,3 +75,5 @@ safety:
   lost_hold_time: 3.0     # hold STOP this long after losing a close track
   presence_floor_slow: true
   slow_on_any_person: true   # small cell: any confirmed person present -> >= SLOW
+  nearest_filter_window: 5   # zone reacts to the nearest credible body point; speckle-reject window
+  nearest_filter_reject: 1   # drop this many closest samples as possible single-frame speckle

@@ -8,3 +8,5 @@ runs/
 *.jsonl
 *.png
 !tests/data/*.png
+# committed regression fixtures (an intentional recorded artifact, not run output)
+!tests/data/**/*.jsonl

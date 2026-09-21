@@ -13,13 +13,47 @@ separation distances.
 """
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import numpy as np
 
-from .geometry import distance_to_base, distance_to_envelope
+from .geometry import distance_to_base
 from .messages import (CameraHealth, DistanceStatus, SafetyState, Track, Zone)
+
+
+class NearestRangeFilter:
+    """Robust, safety-biased filter on a track's nearest-point RANGE (metres to
+    the base origin).
+
+    The tracker copies ``nearest_point`` from the latest detection **unfiltered**,
+    so a single-frame depth speckle would flap the zone if it drove STOP directly.
+    This filter keeps the last ``window`` raw ranges, drops the ``reject`` closest
+    (a possible speckle), and returns the MIN of what remains — a small-window
+    low-order statistic that leans toward the robot (the safe direction):
+
+    * one spuriously-close frame is the single closest sample, so it is dropped
+      and cannot pull the zone in (no STOP chatter);
+    * a genuinely close hand survives once it persists ``reject + 1`` frames, so
+      it is **not** smoothed away (fast toward the robot);
+    * a single far outlier while the person is close is likewise dropped, so the
+      zone does not release early (slow away). The evaluator's minimum-clear
+      dwell provides the remaining hysteretic exit.
+
+    Pure and deterministic; unit-tested in both directions.
+    """
+
+    def __init__(self, window: int = 5, reject: int = 1):
+        self.window = max(1, int(window))
+        self.reject = max(0, int(reject))
+        self._buf: deque = deque(maxlen=self.window)
+
+    def update(self, raw_range: float) -> float:
+        self._buf.append(float(raw_range))
+        vals = sorted(self._buf)
+        k = min(self.reject, len(vals) - 1)   # drop k closest, take the next
+        return vals[k]
 
 
 @dataclass
@@ -50,6 +84,14 @@ class SafetyParams:
     # human-safety-s1 §3: in this small cell SSM says any person present -> at
     # least SLOW. Any confirmed track (even beyond slow_radius) forces >= SLOW.
     slow_on_any_person: bool = True
+    # Zone sizing reacts to the CLOSEST credible body point, not the body centre:
+    # the per-track nearest-point range is passed through NearestRangeFilter with
+    # this window / reject before it is compared (smaller-of-the-two) against the
+    # centre distance. Window 5 / reject 1 rejects a single-frame speckle while a
+    # genuinely close reading survives after 2 frames (~0.13 s at 15 Hz). See the
+    # README "Zones react to the nearest credible body point".
+    nearest_filter_window: int = 5
+    nearest_filter_reject: int = 1
 
 
 class SafetyEvaluator:
@@ -61,6 +103,8 @@ class SafetyEvaluator:
         self._not_stop_since: Optional[float] = None   # dwell timer for leaving STOP
         self._recent_close = {}   # track id -> (last_seen_time, last_env_dist)
         self._lost_close_until: float = -np.inf
+        # Per-track nearest-point range filters (id -> NearestRangeFilter).
+        self._nearest_filters: Dict[int, NearestRangeFilter] = {}
 
     # ------------------------------------------------------------------ #
     def evaluate(self, tracks: List[Track], health: List[CameraHealth],
@@ -71,8 +115,16 @@ class SafetyEvaluator:
         reasons: List[str] = []
 
         # --- nearest person distance over confirmed, positioned tracks ----- #
+        # The zone reacts to the CLOSEST credible body point, never to a point
+        # farther than the body centre: a person's outstretched hand can be inside
+        # the STOP ring while their centre is outside it. For each confirmed track
+        # we take min(centre distance, filtered nearest-point distance); the
+        # nearest-point range is speckle-filtered first (NearestRangeFilter). The
+        # centre distance is kept alongside for diagnostics.
         nearest_env = float("inf")
         nearest_base = float("inf")
+        nearest_env_centre = float("inf")
+        nearest_base_centre = float("inf")
         nearest_id: Optional[int] = None
         close_ids = {}
         current_ids = set()
@@ -80,12 +132,32 @@ class SafetyEvaluator:
             if not t.confirmed:
                 continue
             current_ids.add(t.id)
-            d_env = distance_to_envelope(t.position, p.reach_radius)
-            d_base = distance_to_base(t.position)
+            d_base_centre = distance_to_base(t.position)
+            d_base = d_base_centre
+            if t.nearest_point is not None:
+                flt = self._nearest_filters.get(t.id)
+                if flt is None:
+                    flt = NearestRangeFilter(
+                        p.nearest_filter_window, p.nearest_filter_reject)
+                    self._nearest_filters[t.id] = flt
+                filt_near_base = flt.update(distance_to_base(t.nearest_point))
+                # Never LARGER than the centre distance (use the smaller of the
+                # two). A monocular/presence-only track whose nearest equals its
+                # centre therefore behaves exactly as before.
+                d_base = min(d_base_centre, filt_near_base)
+            d_env = max(0.0, d_base - p.reach_radius)
+            d_env_centre = max(0.0, d_base_centre - p.reach_radius)
             if d_env < nearest_env:
                 nearest_env, nearest_base, nearest_id = d_env, d_base, t.id
+                nearest_env_centre = d_env_centre
+                nearest_base_centre = d_base_centre
+            # lost-close bookkeeping uses the SAME (combined) distance as the zone.
             if d_env <= p.stop_radius + p.lost_close_margin:
                 close_ids[t.id] = (now, d_env)
+        # Drop nearest-range filters for tracks that no longer exist.
+        self._nearest_filters = {
+            tid: f for tid, f in self._nearest_filters.items()
+            if tid in current_ids}
 
         # --- distance-based zone with hysteresis (uses previous zone) ------ #
         dist_zone = self._distance_zone(nearest_env)
@@ -109,9 +181,12 @@ class SafetyEvaluator:
 
         candidate = _max_zone(dist_zone, floor)
         if nearest_id is not None:
-            reasons.append(
-                f"nearest person id={nearest_id} at {nearest_base:.2f} m "
-                f"from base ({nearest_env:.2f} m from reach envelope)")
+            msg = (f"nearest person id={nearest_id} at {nearest_base:.2f} m "
+                   f"from base ({nearest_env:.2f} m from reach envelope)")
+            if nearest_base_centre - nearest_base > 0.05:
+                msg += (f"; nearest credible body point, centre is "
+                        f"{nearest_base_centre:.2f} m")
+            reasons.append(msg)
 
         # --- distance honesty: UNKNOWN is not 'far' (report §7 #5) --------- #
         if nearest_id is not None:
@@ -132,6 +207,8 @@ class SafetyEvaluator:
             zone=zone,
             nearest_distance=nearest_env,
             nearest_distance_base=nearest_base,
+            nearest_distance_centre=nearest_env_centre,
+            nearest_distance_base_centre=nearest_base_centre,
             distance_status=dist_status,
             nearest_track_id=nearest_id,
             any_person_visible=bool(any_presence or nearest_id is not None),

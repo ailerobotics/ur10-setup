@@ -87,6 +87,32 @@ def test_lift_depth_nearest_robust_to_single_speckle():
     assert nearest[2] > 2.5
 
 
+def test_lift_depth_center_ignores_background_floor():
+    # A person-shaped NEAR cluster (a narrow vertical band at 1.5 m) over a far
+    # floor filling the rest of the box (3.5 m). The floor is the MAJORITY of the
+    # box, so a plain component-wise median of all valid points would land in the
+    # background (~3.5 m) — the exact bias that over-states clearance. The
+    # foreground-cluster centre must instead sit on the person (~1.5 m).
+    h, w = 480, 640
+    bbox = (200, 100, 440, 400)
+    depth = np.full((h, w), 3.5, dtype=np.float32)   # floor everywhere in the box
+    depth[100:400, 300:340] = 1.5                    # narrow person band, ~17% of box
+    center, nearest, n = g.lift_depth(depth, bbox, K, 0.2, 6.0)
+    assert n > 100
+    # floor is the majority -> a naive median would be ~3.5; the fix keeps ~1.5
+    assert center[2] == pytest.approx(1.5, abs=0.1)
+    assert nearest[2] == pytest.approx(1.5, abs=0.1)
+
+
+def test_lift_depth_center_matches_median_without_background():
+    # When there is no background inside the box (a solid person slab), the
+    # foreground-only centre must equal the plain median (no behaviour change).
+    bbox = (280, 180, 360, 400)
+    depth = _synthetic_depth((480, 640), bbox, 2.4, background=np.nan)
+    center, nearest, n = g.lift_depth(depth, bbox, K, 0.2, 6.0)
+    assert center[2] == pytest.approx(2.4, abs=0.05)
+
+
 def test_monocular_ground_plane_foot():
     # Camera 2.5 m up at base origin, looking down and forward.
     from scipy.spatial.transform import Rotation

@@ -20,22 +20,33 @@ The sim config only re-points topics/frames/poses and selects the compute device
 `tests/test_sim_config.py` asserts the `safety:` block is identical to the
 production `params/human_safety.yaml`.
 
-## Headline finding (see `data/human-detect-isaac-sim-v1/report.md`)
+## Headline finding (original run) and the fix (`data/human-safety-nearest-point-fix-v1/`)
 
-The detector **sees** the simulated person on 100% of in-view frames, but the
-published STOP-ring **distance overestimates clearance by +0.4–0.9 m in the
-UNSAFE direction** (the person is reported FARTHER from the robot than they
-truly are). With a healthy (distance-driven) pipeline, STOP therefore engages
-only once the person's nearest body point is already ~0.9 m **inside** the 2.0 m
-ring — a missed STOP. Root cause, documented as a follow-up and **not changed in
-this task**: `cams/human_safety/human_safety/safety.py:83` sizes the zone from
-the depth-median body **centre** (`t.position`), which the clean sim floor drags
-behind the person; the accurate `t.nearest_point` (the "nearest credible body
-point" the detector already computes) is carried on the track but never used for
-the zone. The character's teleported **T-pose** (a ~2 m-wide, background-heavy
-image box) amplifies the centre bias; a natural pose is a harness follow-up.
-Extrinsics are cleared (horizontal position matches truth; the TF round-trip is
-unit-tested).
+The **original** run (PR #22, `data/human-detect-isaac-sim-v1/report.md`) found:
+the detector **sees** the simulated person on 100% of in-view frames, but the
+published STOP-ring **distance overestimated clearance by +0.4–0.9 m in the
+UNSAFE direction** (the person reported FARTHER from the robot than truth), so
+with a healthy (distance-driven) pipeline STOP engaged only once the person's
+nearest body point was already ~0.9 m **inside** the 2.0 m ring — a missed STOP.
+Root cause: the zone was sized from the depth-median body **centre**
+(`t.position`), which the clean sim floor drags behind the person, while the
+accurate `t.nearest_point` was carried but unused; the teleported **T-pose**
+(~2 m-wide, background-heavy box) amplified it. Extrinsics were cleared.
+
+**This task fixed it in the production layer** (`cams/human_safety`): the zone now
+reacts to the **nearest credible body point** (speckle-filtered, never larger than
+the centre), and `geometry.lift_depth` computes the centre from the **foreground
+cluster only** so the background floor no longer drags it back. See
+`data/human-safety-nearest-point-fix-v1/report.md` for the before/after and
+`compare_fix.py` for the old-vs-new replay.
+
+**Natural vs T-pose (harness follow-up, still not built here):** giving the
+character a body-filled standing/walking pose needs `omni.anim.people` (a skeletal
+animation graph + character-command scripting) — it is **not** a low-cost swap in
+this single-12 GB-GPU harness (the RTX renderer already shares the card with the
+detector), so the run keeps the teleported T-pose. The fix is validated with the
+T-pose *because* it is the harder case: the T-pose maximises the centre bias the
+fix must overcome, so passing here is the conservative demonstration.
 
 ## What it does
 
@@ -97,6 +108,13 @@ python3 sim/isaac_human/diagnose.py --run "$RUN"
 python3 sim/isaac_human/make_report.py --run "$RUN" \
     --per-camera-run <a 2-camera RUNDIR, optional, for the shelf/wrist split> \
     --out /home/manishsaini/firstmate/data/human-detect-isaac-sim-v1
+
+# 4. old-vs-new before/after for the nearest-point safety fix, from the SAME run
+#    (no second sim run): replays the recorded live states through the safety
+#    machine with old (centre) vs new (nearest) logic. Prints zone changes, STOP
+#    time, missed STOPs and signed distance error for each; a fidelity line
+#    confirms the NEW reconstruction reproduces the live zone stream.
+python3 sim/isaac_human/compare_fix.py --run "$RUN" --json "$RUN/compare_fix.json"
 ```
 
 **A single camera** (e.g. `run_session.sh wrist cuda`) keeps the image→state
@@ -116,6 +134,11 @@ python3 sim/isaac_human/gen_sim_config.py     # writes params/camera_poses.sim.y
 - `isaac_env.sh` sets the conda env (`env_isaaclab`) and the bundled-ROS2-Jazzy
   DDS env for the Isaac process; the detector graph + recorder use system
   `/opt/ros/jazzy`; the two meet over DDS on domain 88.
+- **Domain guard** (`domain_guard.sh`, sourced first by `isaac_env.sh`): defaults
+  `ROS_DOMAIN_ID` to the SIM-only 88 and **refuses** to run on 0 (real robot),
+  42 (`shelfbot_ros` container) or 77 (the live human_safety camera graph), so an
+  ambient `ROS_DOMAIN_ID` in the shell can never cross this harness into a live
+  graph. Unit-tested standalone (`tests/test_domain_guard.py`).
 - `preflight.sh` refuses to boot unless ≥ 8 GB GPU free and ≥ 10 GB RAM are
   available, and stops if the **Blender application** is running (the
   `blender-mcp` bridge is not Blender and is ignored). A RAM watchdog aborts the
@@ -160,12 +183,30 @@ python3 -m pytest sim/isaac_human/tests/ -q
 - `test_sim_poses.py` — the TF handed to the detector round-trips through
   `human_safety.geometry` back to the true base point (so the pose the detector
   uses is exactly the pose Isaac renders from).
+- `test_domain_guard.py` — the domain guard defaults to 88 and refuses 0/42/77.
+- `test_compare_fix.py` — the old-vs-new replay reconstructs zones from recorded
+  states, using the nearest point (new) vs the centre (old).
+- `test_after_run_replay.py` — regression guard replaying a committed after-run
+  detection-log fixture (`tests/data/after_run_replay/{record,ground_truth}.jsonl`,
+  ~70 KB, regenerated by `tests/data/make_after_run_replay.py`) through the OLD
+  (centre) vs NEW (nearest) zone rule via the real `compare_fix.build_comparison`:
+  the fix must add no zone chatter (new zone changes ≤ old), be no less protective
+  (new STOP time ≥ old), and keep its residual missed-STOP interval within the
+  0.93 s the report documents (and below the old rule's). Reverting the
+  nearest-point logic in `cams/human_safety/human_safety/safety.py` collapses the
+  new leg onto the old and fails this test. **No real-rig human walk-through
+  recording exists yet** — the raw Isaac bags/frames were intentionally not
+  committed and no live-rig capture has been taken, so this fixture is a compact
+  scripted reconstruction of the after-run scenario in the recorder's schema, not
+  a raw dump. When a real walk-through is captured, drop it in beside this fixture
+  (same two-file schema) and extend this test to replay it the same way.
 
 ## Files
 
 ```
 sim/isaac_human/
   isaac_env.sh          conda + bundled-ROS2 DDS env for Isaac (domain 88)
+  domain_guard.sh       refuse ROS_DOMAIN_ID 0/42/77, default 88 (sourced first)
   preflight.sh          GPU/RAM/Blender guard + RAM watchdog
   run_boot_smoke.sh     order-of-work step 1: headless boot + 1 frame on ROS
   boot_smoke_test.py    Isaac side of the boot smoke test
@@ -180,6 +221,7 @@ sim/isaac_human/
   analyze.py            run the analysis + plots -> metrics.json + png
   diagnose.py           signed distance-error diagnosis -> diagnosis.json + png
   make_report.py        metrics + diagnosis -> report.md + self-contained report.html
+  compare_fix.py        old-vs-new (centre vs nearest) before/after from one run
   params/
     human_safety.sim.yaml   sim config (re-points cameras; safety block verbatim)
     camera_poses.sim.yaml   GENERATED inline base<-optical TFs for the sim cameras
