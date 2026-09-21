@@ -7,3 +7,8 @@ __pycache__/
 # ~/ur10/cumotion/maps/ instead; start_cumotion_map.sh searches there too.
 *.nvblx
 *.ply
+
+# Kit WebRTC livestream (sim/isaac_human/run_live_view.sh) writes NvStreamer
+# trace files to the process CWD; the runner now cd's Isaac into its run dir, but
+# ignore them here too so a stray trace never lands in git.
+NvStreamer-*.etli
