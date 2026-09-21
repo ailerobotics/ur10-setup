@@ -1,0 +1,10 @@
+# Harness outputs live under the task tmp dir / ~/.cache, never in git. These
+# rules only catch anything accidentally written into the source tree.
+__pycache__/
+*.pyc
+.pytest_cache/
+out/
+runs/
+*.jsonl
+*.png
+!tests/data/*.png
