@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import os
 import sys
@@ -213,18 +214,35 @@ def build_comparison(run_dir, params, reach, stop, budget):
         except Exception:  # noqa: BLE001
             return True
 
+    # The PROTECTIVE ring (2.0 m) — every judgement measures misses against this,
+    # never against the zone's STOP TRIGGER ring (which now includes stop_margin).
     ring = reach + stop
     crossings = true_nearest_ring_crossings(truth_records, ring)
 
-    old = reconstruct(state_records, params, use_nearest=False)
-    new = reconstruct(state_records, params, use_nearest=True)
+    # Two ring configurations, differing ONLY in stop_margin: the OLD ring (margin
+    # 0, STOP triggers at the 2.0 m protective ring) and the NEW ring (the config's
+    # margin, STOP triggers ~0.25 m earlier at 2.25 m). Both use the nearest-point
+    # rule; both are judged against the SAME 2.0 m protective ring below.
+    params_old_ring = dataclasses.replace(params, stop_margin=0.0)
+    params_new_ring = params   # carries the config's stop_margin (0.25 m)
+
+    # The nearest-point before/after (centre vs nearest rule) is isolated at the
+    # OLD ring (margin 0) — the ring that fix was validated against — so this
+    # comparison and the ring comparison are independent axes.
+    old = reconstruct(state_records, params_old_ring, use_nearest=False)
+    new = reconstruct(state_records, params_old_ring, use_nearest=True)
     # DISTANCE-ONLY: latency fault disabled, so STOP is driven by distance +
     # hysteresis + dwell only. This is what tells us a "no missed STOP" is really
     # about distance, not a fail-safe latency STOP that was already latched.
-    old_do = reconstruct(state_records, params, use_nearest=False,
+    old_do = reconstruct(state_records, params_old_ring, use_nearest=False,
                          ignore_latency_fault=True)
-    new_do = reconstruct(state_records, params, use_nearest=True,
+    new_do = reconstruct(state_records, params_old_ring, use_nearest=True,
                          ignore_latency_fault=True)
+    # RING before/after (this task): OLD ring vs NEW ring, both nearest rule,
+    # latency fault disabled (the honest distance-driven picture).
+    old_ring = new_do   # nearest rule, margin 0, distance-only == the old ring
+    new_ring = reconstruct(state_records, params_new_ring, use_nearest=True,
+                           ignore_latency_fault=True)
 
     # Fidelity: reconstructed NEW zones vs the live published zones.
     live_zones = [r.get("zone") for r in state_records]
@@ -268,6 +286,10 @@ def build_comparison(run_dir, params, reach, stop, budget):
         # latency fault OFF — distance-driven only (the honest safety picture)
         "old_distance_only": side(old_do),
         "new_distance_only": side(new_do),
+        # RING before/after: OLD ring (2.0 m trigger) vs NEW ring (2.25 m trigger),
+        # both nearest rule + distance-only, both judged vs the 2.0 m PROTECTIVE ring.
+        "old_ring": side(old_ring),
+        "new_ring": side(new_ring),
     }
 
 
@@ -308,6 +330,10 @@ def main(argv=None):
     print("=== DISTANCE-ONLY (latency fault disabled; distance+hysteresis+dwell only) ===")
     print("OLD (centre-based, pre-fix):");  print(fmt(comp["old_distance_only"]))
     print("NEW (nearest-point, this fix):"); print(fmt(comp["new_distance_only"]))
+    print(f"=== STOP-RING MARGIN (nearest rule, distance-only; judged vs "
+          f"{comp['stop_boundary_m']:.2f} m PROTECTIVE ring) ===")
+    print("OLD ring (stop_margin 0, trigger 2.00 m):"); print(fmt(comp["old_ring"]))
+    print("NEW ring (stop_margin on, trigger 2.25 m):"); print(fmt(comp["new_ring"]))
 
     if args.json:
         with open(args.json, "w") as f:

@@ -194,7 +194,13 @@ python3 -m pytest sim/isaac_human/tests/ -q
   (new STOP time ≥ old), and keep its residual missed-STOP interval within the
   0.93 s the report documents (and below the old rule's). Reverting the
   nearest-point logic in `cams/human_safety/human_safety/safety.py` collapses the
-  new leg onto the old and fails this test. **No real-rig human walk-through
+  new leg onto the old and fails this test. It also guards a second axis — the
+  STOP-ring **margin** (`data/human-safety-stop-margin-v1`): the old ring
+  (`stop_margin` 0, STOP triggered at the 2.0 m protective ring) vs the new ring
+  (`stop_margin` 0.25, triggered ~0.25 m earlier at 2.25 m), both judged against
+  the same 2.0 m protective ring — the new ring must clear that ring within the
+  0.70 s reaction budget (0.0 s on this fixture) while the old ring still shows a
+  genuine miss. **No real-rig human walk-through
   recording exists yet** — the raw Isaac bags/frames were intentionally not
   committed and no live-rig capture has been taken, so this fixture is a compact
   scripted reconstruction of the after-run scenario in the recorder's schema, not

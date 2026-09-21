@@ -124,6 +124,11 @@ nearest-point estimator (lower `nearest_percentile` / a closer order-statistic i
 `lift_depth`) **with a real-rig depth recording** to prove it does not add chatter.
 Both are follow-ups; (a) is a threshold change and thus the owner's call.
 
+> **Resolved (2026-09-21):** the owner chose option (a). A `stop_margin` of 0.25 m
+> was added to the STOP **trigger** only (STOP fires at 2.25 m of base; the
+> protective ring stays 2.0 m), dropping the distance-only residual to 0.0 s on the
+> committed fixture. Details: `data/human-safety-stop-margin-v1/report.md`.
+
 ## What this does NOT prove
 
 - A rendered character is not a real person; Isaac's simulated depth is far

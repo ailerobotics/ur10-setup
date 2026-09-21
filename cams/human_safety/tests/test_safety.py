@@ -31,9 +31,11 @@ def healthy(cameras):
 def params():
     # slow_on_any_person disabled here so the distance ladder / hysteresis / dwell
     # can be tested in isolation; the any-person rule has its own test below.
+    # stop_margin pinned to 0.0 so the STOP boundary is exactly stop_radius here —
+    # the estimator margin is exercised by its own tests (test_stop_margin_*).
     return SafetyParams(reach_radius=1.0, stop_radius=0.5, slow_radius=1.5,
                         hysteresis=0.25, min_clear_dwell=2.0,
-                        slow_on_any_person=False)
+                        slow_on_any_person=False, stop_margin=0.0)
 
 
 # --- basic zoning ---------------------------------------------------------- #
@@ -296,3 +298,48 @@ def test_health_floor_cannot_lower_a_distance_stop():
     s = ev.evaluate([track(1, (1.1, 0.0))], healthy(["s"]), now=0.0,
                     any_presence=True)
     assert s.zone == Zone.STOP
+
+
+# --- estimator STOP-ring margin -------------------------------------------- #
+def _margin_params(stop_margin):
+    # Production-like geometry (reach 1.30, stop_radius 0.70 -> protective 2.0 m),
+    # any-person floor off so the distance ladder alone drives the zone.
+    return SafetyParams(reach_radius=1.30, stop_radius=0.70, slow_radius=2.00,
+                        hysteresis=0.30, min_clear_dwell=2.0,
+                        slow_on_any_person=False, stop_margin=stop_margin)
+
+
+def test_stop_margin_stops_earlier_than_bare_radius():
+    # Person at 2.10 m base -> env 0.80 m. Between the protective ring (env 0.70,
+    # base 2.0) and the margin trigger (env 0.95, base 2.25). WITH the 0.25 m
+    # margin the zone STOPs; WITHOUT it the same person is only SLOW.
+    with_margin = SafetyEvaluator(_margin_params(0.25))
+    s = with_margin.evaluate([track(1, (2.10, 0.0))], healthy(["s"]), now=0.0)
+    assert s.zone == Zone.STOP
+
+    without_margin = SafetyEvaluator(_margin_params(0.0))
+    s2 = without_margin.evaluate([track(1, (2.10, 0.0))], healthy(["s"]), now=0.0)
+    assert s2.zone == Zone.SLOW
+
+
+def test_stop_margin_release_still_needs_hysteresis_and_dwell():
+    # With the margin engaged, leaving STOP must still cross the trigger ring PLUS
+    # hysteresis (env > 0.95 + 0.30 = 1.25, base > 2.55) AND wait out the dwell.
+    ev = SafetyEvaluator(_margin_params(0.25))
+    # Person at base 2.10 (env 0.80 < 0.95) -> STOP.
+    assert ev.evaluate([track(1, (2.10, 0.0))], healthy(["s"]), 0.0).zone == Zone.STOP
+    # Retreats just past the trigger ring but INSIDE the hysteresis band
+    # (base 2.40 -> env 1.10, between 0.95 and 0.95+0.30) -> still STOP (hysteresis).
+    assert ev.evaluate([track(1, (2.40, 0.0))], healthy(["s"]), 0.5).zone == Zone.STOP
+    # Retreats clear of trigger+hysteresis (base 3.0 -> env 1.70) but the dwell has
+    # not elapsed yet -> STOP held by dwell.
+    assert ev.evaluate([track(1, (3.0, 0.0))], healthy(["s"]), 1.0).zone == Zone.STOP
+    # After the 2.0 s dwell from first-clear -> releases (env 1.70 > slow ring? no,
+    # slow_radius 2.0, so still SLOW by distance, but out of STOP).
+    z = ev.evaluate([track(1, (3.0, 0.0))], healthy(["s"]), 3.2).zone
+    assert z != Zone.STOP
+
+
+def test_stop_margin_rejects_negative_value():
+    with pytest.raises(ValueError):
+        SafetyParams(stop_margin=-0.01)

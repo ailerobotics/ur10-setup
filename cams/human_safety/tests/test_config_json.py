@@ -3,8 +3,9 @@
 import pathlib
 
 import numpy as np
+import pytest
 
-from human_safety.config import load_config
+from human_safety.config import config_from_dict, load_config
 from human_safety.json_util import (detection_from_dict, detection_to_dict,
                                     detections_from_json, detections_to_json,
                                     state_to_json)
@@ -23,6 +24,25 @@ def test_shipped_config_loads():
     assert w.max_rate == 6.0                     # wrist only delivers ~6 fps
     assert cfg.safety.stop_radius < cfg.safety.slow_radius
     assert cfg.base_frame == "base_link"
+
+
+def test_shipped_config_carries_stop_margin():
+    # The estimator STOP-ring margin is a real, documented config key: the shipped
+    # config sets it so the trigger ring is protective (2.0 m) + margin (2.25 m).
+    cfg = load_config(str(PARAMS))
+    assert cfg.safety.stop_margin == pytest.approx(0.25)
+    assert cfg.safety.stop_trigger == pytest.approx(
+        cfg.safety.stop_radius + cfg.safety.stop_margin)
+
+
+def test_config_accepts_stop_margin_key():
+    cfg = config_from_dict({"safety": {"stop_margin": 0.3}})
+    assert cfg.safety.stop_margin == pytest.approx(0.3)
+
+
+def test_config_rejects_negative_stop_margin():
+    with pytest.raises(ValueError):
+        config_from_dict({"safety": {"stop_margin": -0.1}})
 
 
 def test_detection_json_roundtrip():

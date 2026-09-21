@@ -53,7 +53,13 @@ class GateConfig:
     # the published zone enum. These radii are used ONLY to classify whether a
     # person that vanished was "close" (for the lost-close resume refusal) and
     # for the decision log.
-    stop_radius_m: float = 2.0
+    # MIRRORS the camera side's STOP TRIGGER ring, which is now the protective
+    # 2.0 m (reach 1.30 + stop_radius 0.70) PLUS the estimator margin 0.25 = 2.25 m
+    # (cams/human_safety stop_margin, data/human-safety-stop-margin-v1). Kept
+    # consistent in the CONSERVATIVE direction only: a wider ring here classifies
+    # more vanished-close persons as "close" (more resume refusals) and never lets
+    # the gate treat 2.0-2.25 m as clear while perception is publishing STOP.
+    stop_radius_m: float = 2.25
     slow_clear_hysteresis_m: float = 0.3
 
     # --- primary lever fractions (report §2.1) ---

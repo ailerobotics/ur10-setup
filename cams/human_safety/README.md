@@ -271,13 +271,21 @@ therefore behaves exactly as before. `lost_close` bookkeeping uses this same
 combined distance. The body-centre distances are still published as
 `nearest_distance_centre` / `nearest_distance_base_centre` for diagnostics.
 
-- **STOP** when a person is within **2.0 m of the robot base**
-  (`reach_radius 1.30 + stop_radius 0.70`), **or** any presence-only camera sees
-  a person, **or** any health fault.
+- **Protective ring = 2.0 m of the robot base** (`reach_radius 1.30 + stop_radius
+  0.70`). The zone actually **TRIGGERS STOP a `stop_margin` (0.25 m) earlier — at
+  2.25 m of base** (`stop_trigger = stop_radius + stop_margin`, envelope 0.95 m).
+  The margin covers the nearest-point estimator's measured over-statement (Isaac
+  after-run: it reports a person a median +0.19 m / ~+0.25 m residual **farther**
+  than truth — the unsafe direction — so without the margin STOP engages ~0.9 s
+  late against the 0.7 s reaction budget). The protective 2.0 m ring is what the
+  Isaac harness judges missed-STOPs against; the 2.25 m trigger is what the zone
+  fires on. The margin is PROVISIONAL — shrink it toward 0 only if a
+  real-rig-validated estimator improvement lands (`data/human-safety-stop-margin-v1`).
+- **STOP** also when any presence-only camera sees a person, **or** any health fault.
 - **SLOW** when any person is present (this small cell: SSM says any person →
   at least SLOW), outside STOP.
 - **CLEAR** only when no person is anywhere in the monitored volume.
-- **Hysteresis 0.30 m**: leave STOP only after clearing the ring by +0.30 m.
+- **Hysteresis 0.30 m**: leave STOP only after clearing the trigger ring by +0.30 m.
 - **Dwell ≥ 2.0 s** of continuous healthy CLEAR before leaving STOP (anti-chatter).
 
 **Health is part of the judgement (fail toward STOP):**
@@ -306,8 +314,9 @@ configured-but-not-launched camera is not treated as a crashed detector.)
   itself endorses a thin gate-side adapter, which absorbs the difference (this is
   explicitly accepted for this stage).
 
-Everything else follows the report: zone defaults (STOP within 2.0 m of base,
-+0.30 m hysteresis, ≥2.0 s dwell), distance-unknown honesty, heartbeat, ≥10 Hz,
+Everything else follows the report: zone defaults (protective 2.0 m of base, STOP
+triggered at 2.25 m via the +0.25 m estimator `stop_margin`, +0.30 m hysteresis,
+≥2.0 s dwell), distance-unknown honesty, heartbeat, ≥10 Hz,
 tracks on a separate topic, both D415s + the wrist presence-only, a
 stalled/crashed detector → **STOP** (§5 fault 3) with SLOW kept for a
 slow-but-answering detector and STOP once latency blows the reaction budget

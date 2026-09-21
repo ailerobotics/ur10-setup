@@ -26,7 +26,9 @@ def test_committed_defaults_match_report():
     assert c.heartbeat_timeout_s == 0.300
     # report §3 dwell and zone geometry
     assert c.clear_dwell_s == 2.0
-    assert c.stop_radius_m == 2.0
+    # Mirrors the camera STOP TRIGGER ring: protective 2.0 m + estimator margin
+    # 0.25 m = 2.25 m (data/human-safety-stop-margin-v1).
+    assert c.stop_radius_m == 2.25
     assert c.slow_clear_hysteresis_m == 0.3
     # report §2.1 lever fractions
     assert c.stop_speed_fraction == 0.0
