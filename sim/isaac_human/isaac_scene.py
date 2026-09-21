@@ -19,7 +19,6 @@ there is no skeletal walk-cycle animation. A rendered, posed character is enough
 for the COCO-trained Keypoint R-CNN to attempt a detection, and teleporting keeps
 the scene light on the 12 GB card (the brief explicitly permits this).
 """
-import argparse
 import json
 import math
 import os
