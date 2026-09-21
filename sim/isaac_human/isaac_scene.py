@@ -116,6 +116,7 @@ def main() -> int:
     rc = 1
     gt_f = None
     beacon = None
+    observer = None
     try:
         from isaacsim.core.utils.extensions import enable_extension
         enable_extension("isaacsim.ros2.bridge")
@@ -183,11 +184,12 @@ def main() -> int:
         box("/World/Shelf", *layout.SHELF_BOX)
         box("/World/Table", *layout.TABLE_BOX)
 
-        # -- SLOW / STOP floor rings (livestream only) -------------------- #
+        # -- SLOW / STOP floor rings (livestream OR record) --------------- #
         # Flat coloured circles at the SAME radii the detector uses, read from
-        # the safety config (never hard-coded). Makes the streamed picture
-        # meaningful: the person visibly crosses amber (SLOW) then red (STOP).
-        if args.livestream and args.config:
+        # the safety config (never hard-coded). Makes the picture meaningful: the
+        # person visibly crosses amber (SLOW) then red (STOP). Drawn for the
+        # WebRTC live view and for the offline recording alike.
+        if (args.livestream or args.record) and args.config:
             try:
                 import live_view
                 reach, stop_r, slow_r = live_view.read_zone_radii(args.config)
@@ -229,10 +231,17 @@ def main() -> int:
             _build_camera(stage, cam, og, rep, Gf, Sdf, UsdGeom)
 
         # -- streamed viewport framing + live-zone beacon (livestream only) - #
+        # -- OR the fixed observer camera + beacon capture (record) --------- #
         beacon = None
+        observer = None
         if args.livestream:
             _frame_overview_viewport()
             if args.zone_beacon:
+                beacon = _ZoneBeacon(stage, Gf, Sdf, UsdGeom)
+        if args.record:
+            observer = _ObserverCapture(stage, rep, Gf, Sdf, UsdGeom, args)
+            # The recorded picture carries the same state beacon as the live view.
+            if beacon is None:
                 beacon = _ZoneBeacon(stage, Gf, Sdf, UsdGeom)
 
         omni.timeline.get_timeline_interface().play()
@@ -328,6 +337,8 @@ def main() -> int:
                 p_translate.Set(Gf.Vec3d(x, y, 0.0))
                 throttled_update()
                 record_gt(x, y)
+                if observer is not None:
+                    observer.maybe_grab()
             if not args.loop_walk:
                 break
             if not capped:
@@ -337,6 +348,11 @@ def main() -> int:
               flush=True)
         for _ in range(int(2.0 * args.sim_hz)):
             throttled_update()
+            if observer is not None:
+                observer.maybe_grab()
+        if observer is not None:
+            print(f"[isaac_scene] observer capture: {observer.n} frames saved.",
+                  flush=True)
         rc = 0
     except Exception as exc:  # noqa: BLE001
         import traceback
@@ -344,6 +360,8 @@ def main() -> int:
         traceback.print_exc()
         rc = 2
     finally:
+        if observer is not None:
+            observer.shutdown()
         if beacon is not None:
             beacon.shutdown()
         if gt_f is not None:
@@ -463,6 +481,106 @@ def _frame_overview_viewport(eye=(5.5, 1.0, 3.0), target=(0.2, -2.4, 0.5)):
     except Exception as exc:  # noqa: BLE001
         print(f"[isaac_scene] WARN: could not frame overview viewport ({exc!r}).",
               flush=True)
+
+
+def _parse_even_size(spec, default=(1280, 720)):
+    """Parse a ``WxH`` string into an even-dimension (w, h) tuple."""
+    try:
+        w_s, h_s = str(spec).lower().split("x")
+        w, h = int(w_s), int(h_s)
+    except Exception:  # noqa: BLE001
+        w, h = default
+    w = max(2, w - (w % 2))
+    h = max(2, h - (h % 2))
+    return w, h
+
+
+class _ObserverCapture:
+    """Capture the fixed OBSERVER camera (the whole cell + the floor rings + the
+    state beacon — the same framing the live view streams) to timestamped JPEG
+    frames for the offline video composer, WITHOUT any WebRTC stream.
+
+    A dedicated USD camera + Replicator render product with an ``rgb`` annotator;
+    the frame is read after each sim step and written straight to disk with a
+    wall-clock stamp, plus a JSONL index line. Best-effort throughout: any failure
+    leaves the capture inert (``ok=False``) and never sinks the run — the detector
+    graph, not the picture, is the point.
+    """
+
+    # Fixed observer eye/target: matches _frame_overview_viewport so the recorded
+    # picture frames the whole corridor exactly like the live stream.
+    EYE = (5.5, 1.0, 3.0)
+    TARGET = (0.2, -2.4, 0.5)
+
+    def __init__(self, stage, rep, Gf, Sdf, UsdGeom, args):
+        self.ok = False
+        self.n = 0
+        self._step = 0
+        self.every = max(1, int(getattr(args, "observer_every", 1)))
+        self.dir = args.observer_frames_dir
+        self.index_path = args.observer_index
+        self._idx_f = None
+        self._annot = None
+        try:
+            import sim_poses
+            w, h = _parse_even_size(getattr(args, "observer_size", "1280x720"))
+            self.w, self.h = w, h
+            path = "/World/cam_observer"
+            ucam = UsdGeom.Camera.Define(stage, Sdf.Path(path))
+            m = sim_poses.usd_camera_matrix(self.EYE, self.TARGET)
+            UsdGeom.Xformable(ucam).AddTransformOp().Set(
+                Gf.Matrix4d(*[float(v) for v in m.flatten()]))
+            # Wide FOV so the whole corridor fits (mirrors _frame_overview_viewport).
+            ucam.GetFocalLengthAttr().Set(12.0)
+            ucam.GetHorizontalApertureAttr().Set(24.0)
+            ucam.GetVerticalApertureAttr().Set(24.0 * h / float(w))
+            ucam.GetClippingRangeAttr().Set(Gf.Vec2f(0.05, 200.0))
+            self._rp = rep.create.render_product(path, (w, h))
+            self._annot = rep.AnnotatorRegistry.get_annotator("rgb")
+            self._annot.attach([self._rp])
+            os.makedirs(self.dir, exist_ok=True)
+            self._idx_f = open(self.index_path, "w")
+            self.ok = True
+            print(f"[isaac_scene] observer capture -> {self.dir} ({w}x{h}), "
+                  f"index {self.index_path}, every {self.every} step(s)",
+                  flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[isaac_scene] WARN: observer capture setup failed ({exc!r}); "
+                  "no observer frames.", flush=True)
+
+    def maybe_grab(self):
+        if not self.ok:
+            return
+        self._step += 1
+        if self._step % self.every != 0:
+            return
+        try:
+            import numpy as np
+            from PIL import Image as PImage
+            data = self._annot.get_data()
+            arr = np.asarray(data)
+            if arr.size == 0 or arr.ndim < 2:
+                return
+            if arr.ndim == 3 and arr.shape[2] == 4:
+                arr = arr[:, :, :3]
+            im = PImage.fromarray(np.ascontiguousarray(arr.astype(np.uint8)))
+            now = time.time()
+            fname = os.path.join(self.dir, f"obs_{int(now * 1000)}.jpg")
+            im.save(fname, quality=80)
+            self._idx_f.write(json.dumps({"path": fname, "t": now}) + "\n")
+            self._idx_f.flush()
+            self.n += 1
+        except Exception as exc:  # noqa: BLE001
+            if self.n == 0:
+                print(f"[isaac_scene] WARN: observer grab failed ({exc!r}); "
+                      "continuing.", flush=True)
+
+    def shutdown(self):
+        try:
+            if self._idx_f is not None:
+                self._idx_f.close()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class _ZoneBeacon:

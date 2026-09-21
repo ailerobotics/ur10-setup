@@ -193,6 +193,55 @@ the GPU are released. Session length defaults to 30 min and is **hard-capped at
   is the intended use. The streamed `SimulationApp` is **viewport-only** (no
   interactive editor or script console).
 
+## Record a video (offline, phone-playable)
+
+The live view streams but records nothing. `run_session.sh --record` runs the
+**same** scene + detector graph (single camera, no WebRTC — streaming only adds
+GPU load) and saves, into the run directory under `~/.cache/isaac_human_sim/`:
+
+- the fixed **observer** camera (whole cell + SLOW/STOP floor rings + state
+  beacon) as timestamped JPEGs (`observer_frames/`, index `observer_index.jsonl`);
+- **every processed detector frame** WITH the detection overlay (box, keypoints,
+  zone banner) as timestamped JPEGs (`detector_frames/`, index
+  `detector_index.jsonl`) — not the sparse `frames/` stills.
+
+The walk is **looped** (`RECORD_WALK_SECS`, default 100 s) so there is a full
+in-and-out several times over for the composer to pick a 60–90 s window from.
+
+```bash
+# 1. record a session (GPU lock, ~2-3 min). RUNDIR is the last printed line.
+sim/isaac_human/run_session.sh wrist cuda --record
+RUN=<the RUNDIR printed>
+
+# 2. compose ONE phone-playable video (offline, no GPU/ROS/simulator). ffmpeg is
+#    NOT on the system and there is no sudo, so the composer uses the ffmpeg
+#    binary bundled with imageio-ffmpeg, installed into a venv OUTSIDE the repo:
+python3 -m venv ~/venvs/isaac-video
+~/venvs/isaac-video/bin/pip install imageio-ffmpeg numpy Pillow
+~/venvs/isaac-video/bin/python sim/isaac_human/make_video.py \
+    --run "$RUN" \
+    --out  /home/manishsaini/firstmate/data/isaac-human-video-v1/isaac-human-detection.mp4 \
+    --poster /home/manishsaini/firstmate/data/isaac-human-video-v1/poster.png \
+    --html /home/manishsaini/firstmate/data/isaac-human-video-v1/video.html
+```
+
+`make_video.py` builds a ~60–90 s **H.264 / yuv420p** MP4 (even dims, `+faststart`,
+1280×720, target ≤ 6 MB / hard cap 10 MB): a 2 s title card, then **left pane =
+observer**, **right pane = detector with overlay** (time-aligned by wall-clock
+timestamp; the slower pane holds its last frame) and a **bottom strip** with the
+published zone (CLEAR/SLOW/STOP as a coloured chip), the **true** and
+**published** nearest-body distance and a thin **distance-vs-time trace** marked
+with the 2.0 m protective ring and 2.25 m trigger ring. It verifies the output
+with the bundled ffmpeg (codec `h264`, `yuv420p`, `moov` atom at the front) and
+prints the verdict. `--html` also emits a dark, phone-first, **self-contained**
+`video.html` (video + poster embedded as base64 `data:` URIs; nothing from the
+network) for tap-and-play in a mobile browser.
+
+Raw frames are large: keep the JPEG dump small (`RECORD_WALK_SECS`), and once the
+MP4 is verified **delete your own raw frames** (`observer_frames/`,
+`detector_frames/`) with literal paths, keeping the MP4. Large artefacts (frames,
+MP4, the base64 page) stay OUT of git.
+
 ### Environment / GPU / memory guards
 
 - `isaac_env.sh` sets the conda env (`env_isaaclab`) and the bundled-ROS2-Jazzy
@@ -248,6 +297,10 @@ python3 -m pytest sim/isaac_human/tests/ -q
   `human_safety.geometry` back to the true base point (so the pose the detector
   uses is exactly the pose Isaac renders from).
 - `test_domain_guard.py` — the domain guard defaults to 88 and refuses 0/42/77.
+- `test_video_compose.py` — the video composer's pure parts (`video_compose.py`):
+  timestamp alignment / frame-hold, even-dimension sizing, size-cap bitrate
+  choice, label formatting, the distance-vs-time trace mapping and the
+  self-contained (network-free, phone-first) HTML page. No encoder binary needed.
 - `test_live_view.py` — the live-view helpers: SLOW/STOP ring radii read from the
   sim config match the detector (`reach+slow` / `reach+stop`, amber/red), the
   client-port picker honours the forbidden set and scans past busy ports, the
@@ -287,10 +340,16 @@ sim/isaac_human/
   boot_smoke_test.py    Isaac side of the boot smoke test
   ros_frame_probe.py    system-ROS frame counter (proves cross-process DDS)
   run_session.sh        full session: Isaac + real graph + recorder, one GPU lock
+                        (--record: observer + every-detector-frame dump, no stream)
   run_live_view.sh      "Watch it live": run_session + WebRTC livestream + client
   live_view.py          PURE live-view helpers: ring radii, port picker, arg parser
+  make_video.py         OFFLINE composer: run --record dump -> phone-playable MP4
+                        (+ poster + self-contained video.html); bundled ffmpeg
+  video_compose.py      PURE composer helpers: frame-hold, bitrate, trace, HTML
   isaac_scene.py        the scene: cell, cameras, person, ground-truth recording
+                        (--record: fixed observer camera -> JPEG frames + index)
   recorder_node.py      logs state/tracks/detections + annotated frames (venv)
+                        (--record-all-frames: every processed detector frame)
   sim_poses.py          PURE pose maths (look-at -> USD xform + base<-optical TF)
   cell_layout.py        PURE scene geometry: cameras + person path (source of truth)
   gen_sim_config.py     regenerate params/camera_poses.sim.yaml from cell_layout
