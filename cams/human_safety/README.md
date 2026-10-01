@@ -114,6 +114,124 @@ the shrunk box for the robust depth region).
 
 ---
 
+## Efficient frame processing (shared detector + frame selection)
+
+The shipped **baseline** runs one detector process per camera, each detecting
+**every** frame up to its rate cap, in parallel (≈394 MB GPU each; ~1.87 GB for
+three). The **efficient** path — selectable by config, **off by default** until
+the evidence below shows it is at least as safe — makes that frame processing
+cheaper in two independent, composable ways:
+
+1. **Shared, batched detector** (`frame_processing.mode: shared`,
+   `nodes/shared_detector_node.py`). ONE detector instance serves every camera
+   and batches the frames that need detection into a **single forward pass per
+   scheduling tick** instead of N contending processes. It keeps the per-camera
+   ROS shape the graph relies on — it still publishes
+   `/human_safety/detections/<role>` and `/human_safety/status/<role>` per
+   camera — so `fusion_node.py` is unchanged. This is the big **GPU-memory** win
+   (one model instead of N) and runs one pass instead of N.
+2. **Frame selection** (`frame_processing.scheduler.enabled: true`,
+   pure `human_safety/scheduler.py`). A cheap per-camera change score
+   (`human_safety/frameselect.py`: block-mean downscale + frame difference,
+   microseconds, no torch) decides which cameras actually need a fresh detection
+   this tick; between detections the existing constant-velocity Kalman tracker
+   coasts the tracks. A quiet camera drops to a floor rate; a camera with motion
+   or a track near the robot runs at the full rate.
+
+**Safety invariants — the efficient path only ever moves toward *more* detection,
+never less** (all unit-tested in `tests/test_scheduler.py`, proven end-to-end in
+`tests/test_frameproc_eval.py`):
+
+- **Hard T_max.** Every camera gets a full detection at least every `t_max`
+  (default 0.4 s). Freshness is driven by the last *full* detection, and config
+  load **rejects** `t_max > safety.frame_age_budget` — so a quiet camera can
+  never be reported fresh on skipped frames, and if detection ever fails to keep
+  up, the camera ages out to stale and the **unchanged** health rules degrade the
+  state toward SLOW then STOP (fail toward STOP).
+- **Motion trigger.** A change score above `motion_threshold` (a person entering
+  view moves a large block of pixels) forces an immediate detection at the busy
+  rate — so a new entrant is caught the same tick the baseline would see them. An
+  *unknown* score (could not be computed) counts as motion: fail toward looking.
+- **Near-robot priority.** When any confirmed track is inside or approaching the
+  SLOW/STOP rings (read advisorily from the fusion node's published state), every
+  camera runs at the busy rate.
+- **No CLEAR from skipped frames.** Skipping only carries forward the last full
+  detection (the tracker coasts); it never fabricates an empty/clear observation.
+
+**FP16** (`frame_processing.fp16: true`) runs half-precision inference via CUDA
+autocast; opt-in, default off. Verify it does not change detections materially
+with the benchmark's `--mode gpu` fp32-vs-fp16 delta before enabling it.
+
+**Detector stays pluggable, licences unchanged.** The efficient path reuses the
+same `keypoint_rcnn` detector (torchvision/torch **BSD-3-Clause**, COCO_LEGACY
+weights BSD-3-Clause) through `detect_batch`; no new model and **no AGPL /
+ultralytics**. A faster drop-in must be permissively licensed (Apache-2.0, BSD,
+MIT) and recorded in this table.
+
+### Enabling it
+
+```yaml
+# params/human_safety.yaml
+frame_processing:
+  mode: shared
+  scheduler: { enabled: true }   # keep the conservative defaults
+```
+
+or at launch without editing the config:
+
+```bash
+ROS_DOMAIN_ID=77 FASTDDS_BUILTIN_TRANSPORTS=UDPv4 \
+  ros2 launch cams/human_safety/human_safety.launch.py cams:=wrist,shelf,table mode:=shared
+```
+
+### Evidence — baseline vs efficient on the same material
+
+No raw multi-camera image recording exists in this repo (every frame on disk has
+the detector overlay baked into the pixels), so the comparison runs on a
+deterministic synthetic multi-camera sequence of a person approaching the robot
+(`tests/data/multicam_approach.jsonl`, regenerate with
+`tests/data/make_multicam_approach.py`). The benchmark is
+`tools/bench_frame_processing.py`.
+
+**Decision level** (deterministic, no GPU; the safety evidence, asserted in CI):
+
+```bash
+python3 cams/human_safety/tools/bench_frame_processing.py --mode decision
+```
+
+On the committed sequence (160 ticks, 3 cameras): **0 ticks** where the efficient
+path is less safe than the baseline (0 disagreements in either direction),
+detector invocations **480 → 330 (−31 %** — the idle cell drops to the floor
+rate while every person-present frame still gets the full rate), detection recall
+**1.00 → 1.00**, track continuity **1.00**, per-camera worst-case staleness
+**0.40 s** (under the 0.5 s budget). The idle-time saving grows with how quiet the
+cell is; a store aisle empty for minutes approaches the 1/`t_max` floor.
+
+**GPU level** (real detector on identical synthetic frames; run short + flock'd):
+
+```bash
+flock /tmp/aile-gpu.lock ~/venvs/human-safety/bin/python \
+  cams/human_safety/tools/bench_frame_processing.py --mode gpu --frames 24 --cameras 3 --device cuda
+```
+
+Measured (this machine, RTX 3060 12 GB, 848×480, 3 cameras, 24 frames/cam) — raw
+run and design notes in `data/hs-efficient-frames-v1/report.md`:
+
+- **Peak VRAM (the headline win):** one shared instance serving a batch of 3 =
+  **636 MB** vs three separate per-camera processes ≈ 3×371 = **1114 MB** — a
+  **43 % VRAM saving**, which is what lets the layer fit more cameras under the
+  ≤3 GB-per-process budget on the shared card.
+- **Latency / throughput:** one batched forward pass of 3 vs 3 sequential passes:
+  **98 ms/tick vs 112 ms/tick (1.14×)**, i.e. **1475 vs 1687 GPU-ms per second of
+  video**. The batched speedup is modest (Keypoint R-CNN stays compute-bound on
+  this card); the memory saving is the main resource win, and frame selection is
+  what cuts GPU-time further when the cell is quiet (−31 % invocations above).
+- **fp16 vs fp32:** person-count agreement **72/72**, max box-corner shift
+  **0.00 px**, max score delta **0.000** on these frames (synthetic noise — re-run
+  on real/person frames before enabling fp16 in production).
+
+---
+
 ## 3-D methods & expected error
 
 - **Depth** (`geometry.lift_depth`): robust body centre = component-wise median

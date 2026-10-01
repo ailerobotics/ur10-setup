@@ -19,6 +19,7 @@ Args:
   viz          true/false — open the owner window (default true)
   venv_python  interpreter with torch for the detector nodes
   device       cuda|cpu override for the detectors
+  mode         per_camera | shared (empty = frame_processing.mode from the config)
 """
 import pathlib
 import sys
@@ -67,16 +68,33 @@ def _setup(context, *args, **kwargs):
     venv_python = LaunchConfiguration("venv_python").perform(context)
     device = LaunchConfiguration("device").perform(context)
     record = LaunchConfiguration("record").perform(context)
+    mode = LaunchConfiguration("mode").perform(context).strip()
+
+    # Detector mode: "per_camera" (one detector_node.py per camera, the shipped
+    # baseline) or "shared" (one shared_detector_node.py batching all cameras).
+    # An empty mode:= falls back to frame_processing.mode in the config.
+    if not mode:
+        sys.path.insert(0, str(HERE))
+        from human_safety.config import load_config  # noqa: E402
+        mode = load_config(config).frame_processing.mode
 
     procs = list(_static_tf_procs(poses))
 
-    for role in cams:
-        cmd = [venv_python, str(NODES / "detector_node.py"),
-               "--config", config, "--role", role]
+    if mode == "shared":
+        cmd = [venv_python, str(NODES / "shared_detector_node.py"),
+               "--config", config, "--cams", ",".join(cams)]
         if device:
             cmd += ["--device", device]
         procs.append(ExecuteProcess(cmd=cmd, output="screen",
-                                    name=f"detector_{role}"))
+                                    name="shared_detector"))
+    else:
+        for role in cams:
+            cmd = [venv_python, str(NODES / "detector_node.py"),
+                   "--config", config, "--role", role]
+            if device:
+                cmd += ["--device", device]
+            procs.append(ExecuteProcess(cmd=cmd, output="screen",
+                                        name=f"detector_{role}"))
 
     fusion_cmd = [sys.executable, str(NODES / "fusion_node.py"),
                   "--config", config, "--cams", ",".join(cams)]
@@ -101,6 +119,9 @@ def generate_launch_description():
         DeclareLaunchArgument("viz", default_value="true"),
         DeclareLaunchArgument("venv_python", default_value=DEFAULT_VENV),
         DeclareLaunchArgument("device", default_value=""),
+        DeclareLaunchArgument("mode", default_value="",
+                              description="per_camera | shared (empty = use "
+                                          "frame_processing.mode from the config)"),
         DeclareLaunchArgument("record", default_value="",
                               description="JSONL replay-log path for the fusion "
                                           "node (empty = no recording)"),

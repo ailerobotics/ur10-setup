@@ -28,3 +28,44 @@ def test_keypoint_rcnn_on_blank_image_if_torch():
     assert "BSD-3-Clause" in det.license          # licence recorded
     dets = det.detect(np.zeros((240, 320, 3), np.uint8))
     assert dets == []                              # no person in a blank frame
+
+
+class _FakeDetector(PersonDetector):
+    """A trivial detector to exercise the batching default without torch."""
+
+    name = "fake"
+
+    def __init__(self):
+        self.calls = []
+
+    def detect(self, rgb):
+        self.calls.append(rgb.shape)
+        # One "person" box sized from the image, so each image gets a distinct result.
+        h, w = rgb.shape[:2]
+        return [Detection2D(bbox=(0, 0, float(w), float(h)), score=0.9)]
+
+
+def test_detect_batch_default_matches_per_image():
+    det = _FakeDetector()
+    imgs = [np.zeros((40, 60, 3), np.uint8), np.zeros((20, 30, 3), np.uint8)]
+    out = det.detect_batch(imgs)
+    assert len(out) == 2
+    assert out[0][0].bbox == (0, 0, 60.0, 40.0)
+    assert out[1][0].bbox == (0, 0, 30.0, 20.0)
+
+
+def test_detect_batch_empty_is_empty():
+    assert _FakeDetector().detect_batch([]) == []
+
+
+def test_keypoint_rcnn_batch_equals_sequential_if_torch():
+    pytest.importorskip("torch")
+    det = build_detector("keypoint_rcnn", device="cpu")
+    rng = np.random.default_rng(0)
+    imgs = [rng.integers(0, 255, (160, 213, 3), dtype=np.uint8) for _ in range(2)]
+    seq = [det.detect(im) for im in imgs]
+    batch = det.detect_batch(imgs)
+    assert len(batch) == len(seq)
+    # Batched and per-image inference must agree on the number of people found
+    # per frame (the batch axis must not leak between images).
+    assert [len(b) for b in batch] == [len(s) for s in seq]

@@ -35,6 +35,17 @@ class PersonDetector(abc.ABC):
     def detect(self, rgb: np.ndarray) -> List[Detection2D]:
         ...
 
+    def detect_batch(self, rgbs: List[np.ndarray]) -> List[List[Detection2D]]:
+        """Detect on several images at once, returning one result list per image.
+
+        The shared-detector path (``nodes/shared_detector_node.py``) batches the
+        frames that need detection this tick into a single call so one model
+        instance serves every camera in one forward pass. The default is a plain
+        loop (correct for any detector); a GPU detector overrides it with a true
+        batched forward pass. The order of the returned lists matches ``rgbs``.
+        """
+        return [self.detect(rgb) for rgb in rgbs]
+
     def warmup(self):
         """Optional: run a dummy inference so the first real frame isn't slow."""
 
@@ -45,7 +56,7 @@ class KeypointRCNNDetector(PersonDetector):
                "KeypointRCNN_ResNet50_FPN COCO, BSD-3-Clause")
 
     def __init__(self, device: str = "cuda", score_thresh: float = 0.6,
-                 kp_conf: float = 0.3, max_size: int = 640):
+                 kp_conf: float = 0.3, max_size: int = 640, fp16: bool = False):
         import torch
         import torchvision
         from torchvision.models.detection import (
@@ -57,6 +68,11 @@ class KeypointRCNNDetector(PersonDetector):
         self.device = device
         self.score_thresh = score_thresh
         self.kp_conf = kp_conf
+        # FP16 (half-precision) inference via autocast on CUDA only; a no-op on
+        # CPU. Opt-in: the default fp32 path is the shipped baseline. Verify it
+        # does not change detections materially (tools/bench_frame_processing.py
+        # --mode gpu reports the fp32-vs-fp16 box/score delta).
+        self.fp16 = bool(fp16) and device == "cuda"
         # min_size/max_size cap the internal resize -> bounds GPU memory + latency.
         weights = KeypointRCNN_ResNet50_FPN_Weights.COCO_LEGACY
         self.model = keypointrcnn_resnet50_fpn(
@@ -68,30 +84,52 @@ class KeypointRCNNDetector(PersonDetector):
         dummy = np.zeros((480, 640, 3), dtype=np.uint8)
         self.detect(dummy)
 
-    def detect(self, rgb: np.ndarray) -> List[Detection2D]:
+    def _to_tensor(self, rgb: np.ndarray):
         torch = self._torch
         t = torch.from_numpy(np.ascontiguousarray(rgb)).permute(2, 0, 1)
-        t = t.float().div_(255.0).to(self.device)
+        return t.float().div_(255.0).to(self.device)
+
+    def _infer(self, tensors):
+        """Run the model on a list of CHW float tensors -> list of raw outputs."""
+        torch = self._torch
         with torch.no_grad():
-            out = self.model([t])[0]
-        boxes = out["boxes"].cpu().numpy()
-        scores = out["scores"].cpu().numpy()
-        kpts = out["keypoints"].cpu().numpy()          # (N, 17, 3) x,y,vis
-        kpts_scores = out["keypoints_scores"].cpu().numpy()  # (N, 17)
+            if self.fp16:
+                with torch.autocast("cuda", dtype=torch.float16):
+                    return self.model(tensors)
+            return self.model(tensors)
+
+    def _parse(self, out) -> List[Detection2D]:
+        boxes = out["boxes"].detach().cpu().numpy()
+        scores = out["scores"].detach().cpu().numpy()
+        kpts = out["keypoints"].detach().cpu().numpy()          # (N, 17, 3) x,y,vis
+        kpts_scores = out["keypoints_scores"].detach().cpu().numpy()  # (N, 17)
         dets: List[Detection2D] = []
         for i in range(len(boxes)):
             if scores[i] < self.score_thresh:
                 continue
-            k = kpts[i].copy()
+            k = kpts[i].copy().astype(np.float64)
             # Replace the model's visibility flag with a normalised confidence
             # from the per-keypoint score (sigmoid), so lifting can gate on it.
-            conf = 1.0 / (1.0 + np.exp(-kpts_scores[i]))
+            conf = 1.0 / (1.0 + np.exp(-kpts_scores[i].astype(np.float64)))
             k[:, 2] = conf
             dets.append(Detection2D(
                 bbox=tuple(float(v) for v in boxes[i]),
                 score=float(scores[i]),
                 keypoints=k))
         return dets
+
+    def detect(self, rgb: np.ndarray) -> List[Detection2D]:
+        out = self._infer([self._to_tensor(rgb)])[0]
+        return self._parse(out)
+
+    def detect_batch(self, rgbs: List[np.ndarray]) -> List[List[Detection2D]]:
+        """One forward pass over all images. Keypoint R-CNN accepts a list of
+        images and returns one output dict per image, so a true batch is a single
+        model call — this is what lets one instance serve every camera at once."""
+        if not rgbs:
+            return []
+        outs = self._infer([self._to_tensor(r) for r in rgbs])
+        return [self._parse(o) for o in outs]
 
     def gpu_mem_mb(self) -> float:
         torch = self._torch
