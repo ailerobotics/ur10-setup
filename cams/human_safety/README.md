@@ -56,22 +56,28 @@ clearance.
 cams/human_safety/
   human_safety/           # PURE decision logic — no ROS, no torch, no GPU (unit-tested)
     geometry.py             depth lifting, monocular lifting, frame transforms
-    detector.py             pluggable detector (base + Keypoint R-CNN, torch lazy)
+    lifting.py              the one 2-D -> base-frame Detection3D policy (both detector nodes)
+    detector.py             pluggable detector (base + Keypoint R-CNN, torch lazy; detect_batch)
     tracker.py              gated association + constant-velocity Kalman tracker
     safety.py               zone / hysteresis / dwell / health state machine
     fusion.py               merge per-camera detections -> tracks
+    scheduler.py            efficient frame-selection decision core (pure; see below)
+    frameselect.py          cheap downscale + frame-difference change score (no torch)
+    frameproc_eval.py       offline baseline-vs-efficient safety comparison
     messages.py             ROS-free dataclasses (Detection3D, Track, SafetyState…)
     json_util.py            the published JSON schema (state / detections / tracks)
     imgcodec.py             dependency-free Image <-> ndarray (no cv_bridge)
     config.py               YAML config load + validation
     replay.py               deterministic replay of a recorded log
   nodes/                  # thin ROS shells
-    detector_node.py        per-camera: detect + lift + publish
+    detector_node.py        per-camera: detect + lift + publish (baseline mode)
+    shared_detector_node.py one batched detector serving every camera (shared mode)
     fusion_node.py          fuse + evaluate safety + publish state/tracks/markers
     viz_node.py             owner window (system python, cv2)
   tools/
     live_check.py           live plumbing check (rates, freshness, latency, GPU)
     detector_selfcheck.py   run the detector on sample images
+    bench_frame_processing.py  baseline-vs-efficient benchmark (decision / gpu)
   params/
     human_safety.yaml       cameras + zones/budgets (PROVISIONAL defaults)
     camera_poses.yaml       static extrinsics for calibrated fixed cameras (empty today)

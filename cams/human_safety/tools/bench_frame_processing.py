@@ -141,7 +141,7 @@ def run_gpu(args):
     seqs = _synth_frames(n, T, h, w)
     cuda = args.device == "cuda" and torch.cuda.is_available()
     dev = "cuda" if cuda else "cpu"
-    print(f"\n=== GPU resource benchmark ===")
+    print("\n=== GPU resource benchmark ===")
     print(f"device: {dev}   cameras: {n}   frames/cam: {T}   "
           f"resolution: {w}x{h}   schedule_rate: {args.schedule_rate} Hz")
 
