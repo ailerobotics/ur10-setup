@@ -15,6 +15,8 @@
 #   cams/human_safety/run_live.sh [cams] [record.jsonl]
 #     cams        comma list of roles (default: all attached: wrist,shelf,table)
 #     record      output log path (default: ./human_safety_<UTC>.jsonl)
+#   HS_MODE=shared cams/human_safety/run_live.sh ...   # efficient batched path
+#     HS_MODE     per_camera (default) | shared; empty = frame_processing.mode
 #
 # Walk-through recording (needs a person in view — the owner):
 #   cams/human_safety/run_live.sh wrist,shelf,table walkthrough.jsonl
@@ -79,7 +81,7 @@ sleep 12
 
 # 2. perception graph: detectors (venv torch) + fusion(+record) + viz.
 setsid ros2 launch "$HERE/human_safety.launch.py" \
-  cams:="$CAMS" config:="$CFG" viz:=true record:="$RECORD" &
+  cams:="$CAMS" config:="$CFG" viz:=true record:="$RECORD" mode:="${HS_MODE:-}" &
 PIDS+=($!)
 echo "[run_live] perception graph launching (pid ${PIDS[-1]})."
 echo "[run_live] Ctrl-C to stop."

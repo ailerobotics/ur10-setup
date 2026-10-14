@@ -16,6 +16,29 @@ score_thresh: 0.6
 fusion_rate: 15.0        # Hz, fusion + safety publish cycle (>=10 Hz per human-safety-s1 §7)
 viz_rate: 6.0            # Hz, owner window redraw (modest for SSH X-forwarding)
 
+# Frame processing. DEFAULT is the shipped every-frame baseline: one detector
+# process per camera (mode: per_camera), each detecting every frame up to its
+# rate cap, in parallel. The efficient path (mode: shared) runs ONE detector
+# instance that batches the frames needing detection in a single forward pass
+# per tick; with scheduler.enabled it additionally skips frames that do not need
+# a fresh look (quiet cameras drop to the 1/t_max floor; a camera with motion or
+# a track near the robot runs at the full rate). See cams/human_safety/README.md
+# "Efficient frame processing" and tools/bench_frame_processing.py for the
+# baseline-vs-efficient evidence. Switch to the efficient path by setting
+# mode: shared and scheduler.enabled: true (or override at launch with mode:=shared).
+frame_processing:
+  mode: per_camera       # per_camera (baseline, DEFAULT) | shared (batched)
+  schedule_rate: 15.0    # Hz, shared-detector scheduling tick rate
+  fp16: false            # half-precision inference (opt-in; verify no material change)
+  scheduler:
+    enabled: false       # frame selection off = batch every camera every tick (baseline-equivalent)
+    t_max: 0.4           # hard max interval (s) between FULL detections per camera; MUST be <= frame_age_budget
+    busy_min_period: 0.0667   # min interval (s) between detections for a busy camera (~15 Hz)
+    motion_threshold: 0.02    # normalised change score (0..1) above which a camera is "busy"
+    near_margin: 0.5     # a confirmed track within (slow envelope + this) m makes ALL cameras busy
+    downscale: 8         # block-mean factor for the cheap change-score thumbnail
+    max_batch: 8         # cap frames per batched forward pass
+
 cameras:
   # WRIST D435i — mounted UPSIDE DOWN; consume the UPRIGHT twin (the stream the
   # hand-eye calibration and the cell map were solved against). Pose needs the

@@ -46,7 +46,7 @@ from human_safety.detector import build_detector  # noqa: E402
 from human_safety.imgcodec import (depth_to_metres, image_to_ndarray,  # noqa: E402
                                    intrinsics_from_caminfo)
 from human_safety.json_util import frame_to_json  # noqa: E402
-from human_safety.messages import Detection3D, Method  # noqa: E402
+from human_safety.lifting import lift_detection  # noqa: E402
 
 
 class DetectorNode(Node):
@@ -155,42 +155,15 @@ class DetectorNode(Node):
 
     def _lift(self, d2d, T):
         stamp = self._last_image_stamp or 0.0
-        if T is None:
-            return Detection3D(camera=self.role, stamp=stamp, score=d2d.score,
-                               method=Method.PRESENCE, present=True)
-
         Kc = intrinsics_from_caminfo(self._color_info)
-        # DEPTH first.
-        if self.cam.has_depth and self._depth is not None:
-            dstamp, dmetres = self._depth
-            Kd = (intrinsics_from_caminfo(self._depth_info)
-                  if self._depth_info is not None else Kc)
-            center, nearest, n = geo.lift_depth(
-                dmetres, d2d.bbox, Kd, self.cam.min_range, self.cam.max_range,
-                keypoints=d2d.keypoints)
-            if center is not None:
-                c_base = geo.transform_points(T, center)
-                n_base = geo.transform_points(T, nearest)
-                # depth 1-sigma ~ 1% of range + a voxel; use range at centre.
-                rng = float(np.linalg.norm(center))
-                sigma = 0.01 * rng + 0.02
-                return Detection3D(
-                    camera=self.role, stamp=stamp, score=d2d.score,
-                    method=Method.DEPTH, present=True, position=c_base,
-                    nearest_point=n_base, sigma=sigma, n_depth_valid=n)
-
-        # MONOCULAR fallback (pose known, depth missing/insufficient).
-        center, nearest, sigma = geo.lift_monocular(
-            d2d.bbox, Kc, T, ground_z=self.cfg.ground_z,
-            height_prior=self.cfg.height_prior, keypoints=d2d.keypoints)
-        if center is not None:
-            return Detection3D(
-                camera=self.role, stamp=stamp, score=d2d.score,
-                method=Method.MONOCULAR, present=True, position=center,
-                nearest_point=nearest, sigma=sigma)
-
-        return Detection3D(camera=self.role, stamp=stamp, score=d2d.score,
-                           method=Method.PRESENCE, present=True)
+        dmetres = self._depth[1] if self._depth is not None else None
+        Kd = (intrinsics_from_caminfo(self._depth_info)
+              if self._depth_info is not None else None)
+        return lift_detection(
+            d2d, T, Kc, camera=self.role, stamp=stamp,
+            has_depth=self.cam.has_depth, depth_metres=dmetres, Kd=Kd,
+            min_range=self.cam.min_range, max_range=self.cam.max_range,
+            ground_z=self.cfg.ground_z, height_prior=self.cfg.height_prior)
 
     # -- status ------------------------------------------------------------- #
     def _publish_status(self):
