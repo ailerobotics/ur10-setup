@@ -353,7 +353,7 @@ behind every tuning choice.
 
 - **Licence: the repository owner's call.** No licence has been chosen for this repository yet,
   so no `LICENSE` file is added here. Until one is added, default copyright applies (all rights
-  reserved). *Captain's decision required.*
+  reserved). *Repository owner's decision required.*
 - **Third-party components** carry their own licences and are not vendored here: ROS 2 and the
   Universal Robots ROS 2 driver (Apache-2.0/BSD), NVIDIA Isaac ROS / cuMotion / nvblox and Isaac
   Sim (NVIDIA licences), **cuRobo V2 v0.8.0 (Apache-2.0** — note v1/`0.7.x` is NVIDIA
