@@ -1,62 +1,64 @@
 #!/usr/bin/env bash
-# Record all three cameras + /joint_states for a fork-demo run (step 4).
+# REPLAY-demo recorder (task ur10-fork-pick-real-v1) -- DISK-LIGHT.
 #
-# Brings up the shelf + table D415s (the wrist D435i is already up as the
-# ur10-wrist-cam service), records a rosbag of the colour streams + wrist depth +
-# the joint/TCP/speed telemetry into data/ur10-fork-pick-real-v1/<run>/, and on
-# exit tears the D415 launch down AND kills its orphaned child nodes by PID (the
-# known orphan-reparenting trap, cams/README.md). The TABLE view is the intended
-# side-by-side recording angle (vs the Isaac mp4).
+# For the two captain-gated REPLAY runs (front dry run, real pick-and-place).
+# Records all three cameras as COMPRESSED H.264 mp4 at 15 fps (via
+# record_cameras_mp4.py -> bundled ffmpeg) -- NEVER raw image frames into a
+# rosbag -- plus a SMALL telemetry bag (/joint_states /tf + fork TCP pose +
+# wrench + speed). Everything into the firstmate data dir, NOT the worktree.
+# The TABLE D415 is the side-by-side angle vs the Isaac mp4.
 #
-# READ-ONLY w.r.t. the arm: records telemetry, commands no motion. Run this in
-# one terminal, then run the gated real_fork_pick.py hand-off in another with a
-# person at the e-stop.
+# Refuses to start below 20 GB free; the mp4 recorder stops below 5 GB.
+# Records telemetry only; commands NO motion. Run alongside the gated replay.
 #
-# Usage:  fork_demo/record_fork_demo.sh <run-name>      e.g. front-dry-run-001
-set -euo pipefail
+# Usage:  fork_demo/record_fork_demo.sh <run-name>      e.g. real-pick-001
+set -eo pipefail
 
 RUN="${1:?usage: record_fork_demo.sh <run-name>}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT="$REPO/data/ur10-fork-pick-real-v1/$RUN"
+OUT="/home/manishsaini/firstmate/data/ur10-fork-pick-real-v1/$RUN"
 mkdir -p "$OUT"
+
+MIN_FREE_START_GB=20
+FREE_GB=$(df -BG --output=avail "$OUT" | tail -1 | tr -dc '0-9')
+if [ "${FREE_GB:-0}" -lt "$MIN_FREE_START_GB" ]; then
+  echo "[replay-rec] REFUSING to start: only ${FREE_GB} GB free (< ${MIN_FREE_START_GB} GB)."
+  exit 1
+fi
 
 source /opt/ros/jazzy/setup.bash
 export ROS_DOMAIN_ID=0 FASTDDS_BUILTIN_TRANSPORTS=UDPv4
 
-TOPICS=(
-  /wrist/color/image_raw
-  /wrist/color_upright/image
-  /wrist/aligned_depth/image
-  /shelf/color/image_raw
-  /table/color/image_raw
-  /joint_states
-  /tcp_pose_broadcaster/pose
-  /speed_scaling_state_broadcaster/speed_scaling
-  /io_and_status_controller/robot_program_running
-)
+BAG_TOPICS=(/joint_states /tf /tf_static /tcp_pose_broadcaster/pose
+            /force_torque_sensor_broadcaster/wrench
+            /speed_scaling_state_broadcaster/speed_scaling
+            /io_and_status_controller/robot_program_running)
 
-CAM_PID=""
-BAG_PID=""
+CAM_PID=""; BAG_PID=""; MP4_PID=""
 cleanup() {
-  echo "[record] tearing down ..."
-  [ -n "$BAG_PID" ] && kill "$BAG_PID" 2>/dev/null || true
+  echo "[replay-rec] tearing down ..."
+  [ -n "$MP4_PID" ] && kill -INT "$MP4_PID" 2>/dev/null || true
+  sleep 3
+  [ -n "$BAG_PID" ] && kill -INT "$BAG_PID" 2>/dev/null || true
   [ -n "$CAM_PID" ] && kill "$CAM_PID" 2>/dev/null || true
-  # orphan trap: kill any shelf/table realsense child nodes, leave /wrist alone
   pkill -f 'realsense2_camera.*(shelf|table)' 2>/dev/null || true
-  sleep 1
-  echo "[record] done. bag + stills under $OUT"
+  echo "[replay-rec] done. artifacts under $OUT"
 }
 trap cleanup EXIT INT TERM
 
-echo "[record] bringing up shelf + table D415s ..."
+echo "[replay-rec] bringing up shelf + table D415s (wrist already up) ..."
 ros2 launch "$REPO/cams/rig_multicam.launch.py" cams:=shelf,table >"$OUT/cams_launch.log" 2>&1 &
 CAM_PID=$!
-sleep 8   # let the D415 streams come up
+sleep 8
 
-echo "[record] recording rosbag -> $OUT/bag"
-ros2 bag record -o "$OUT/bag" "${TOPICS[@]}" >"$OUT/bag_record.log" 2>&1 &
+echo "[replay-rec] small telemetry bag -> $OUT/bag"
+ros2 bag record -o "$OUT/bag" "${BAG_TOPICS[@]}" >"$OUT/bag_record.log" 2>&1 &
 BAG_PID=$!
 
-echo "[record] RECORDING. Run the gated real_fork_pick.py hand-off now."
-echo "[record] press Ctrl-C when the run is complete to stop + tear down."
-wait "$BAG_PID"
+echo "[replay-rec] compressed camera mp4s -> $OUT/{wrist,shelf,table}.mp4 @15fps"
+python3 "$REPO/fork_demo/record_cameras_mp4.py" --out-dir "$OUT" \
+  --cameras wrist,shelf,table --fps 15 >"$OUT/mp4_record.log" 2>&1 &
+MP4_PID=$!
+
+echo "[replay-rec] RECORDING. Run the gated replay now; Ctrl-C when complete."
+wait "$MP4_PID"
