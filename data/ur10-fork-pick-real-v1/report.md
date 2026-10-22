@@ -135,9 +135,55 @@ Both executions are blocked on §1. The side-by-side video itself is a later tas
 
 ---
 
+## 4 · Teach-and-replay workflow (current approach, 2026-10-22 ~15:3x)
+
+The captain chose to **teach the motion by hand in freedrive** and have us replay
+it, rather than measure the tray/table poses separately. Steps:
+
+1. **Freedrive-safe recording — driver-native path.** This CB3 driver has
+   `ur_controllers/FreedriveModeController` loaded. `teach_record.py
+   --i-will-teach-now` deactivates **every** joint-commanding controller (so no
+   trajectory goal can reach the arm), activates `freedrive_mode_controller`, and
+   publishes `enable@10 Hz` as a watchdog (if the recorder dies, freedrive
+   disables and the arm HOLDS). External Control stays up (so the headless
+   auto-arm is not fought). On exit it disables freedrive and re-activates
+   `scaled_joint_trajectory_controller`. Fallback: pendant Freedrive button with
+   External Control stopped (record-only).
+2. **Robot reads (this session).** TCP offset went `z=0.1495 m` → **`z=0.470 m`**
+   (captain edit; still not the exact fork TCP `[0,−0.038,0.427]`, but the logged
+   fork-tip is computed from tool0 + the kit offset, independent of the pendant
+   TCP). **Payload: robot RTDE readback = 0.300 kg** = the captain's pendant value
+   (no `set_payload` needed). Reference: gripper estimate ~0.82 kg; captain chose
+   **0.3 kg**; sim carried load was 4.42 kg.
+3. **Dwell labelling.** `teach_record.py` auto-detects dwells (arm still ≥2 s) as
+   candidate waypoints; the captain's names (pre_grip/holding/lifted/carry/place/
+   withdrawn) are relayed and applied to label them for the replay.
+
+### Disk-light recording (after a 51 GB disk-full incident)
+
+A first teach attempt recorded three raw camera streams into a rosbag and wrote
+**51 GB in ~7 min**, filling root. Fixed:
+
+- **Teach records NO cameras** (captain's instruction): `teach_session.sh` records
+  only a small telemetry bag (`/joint_states` `/tf` `/tf_static` + fork TCP +
+  wrench + speed) plus `teach_record.py`'s JSONL. Measured **~10 MB/min**
+  (≈7.9 bag + ≈2.4 JSONL) → **~0.1 GB for a 10-min teach**.
+- **Replay cameras are compressed**, never raw: `record_cameras_mp4.py` encodes
+  each camera to **H.264 mp4 @ 15 fps** via the bundled ffmpeg
+  (`~/venvs/isaac-video`), driven by `record_fork_demo.sh`. ~a few hundred MB for
+  a multi-minute 3-camera run.
+- **Free-space guards everywhere**: recorders refuse to start below **20 GB** free
+  and stop cleanly below **5 GB**.
+- **Run artifacts live in `/home/manishsaini/firstmate/data/ur10-fork-pick-real-v1/`**
+  (NOT the worktree): teach telemetry under `teach-00N/`, replay recordings under
+  the run name, the deleted first attempt's small logs under `teach-001-partial/`.
+
 ## Files
 
 - `fork_demo/real_fork_pick.py` — the demo (dry-run default; gated front-dry-run + real pick).
+- `fork_demo/teach_record.py` — freedrive teach recorder + dwell detection (disk-guarded).
+- `fork_demo/teach_session.sh` — disk-light, no-camera teach launcher (firstmate data dir).
+- `fork_demo/record_cameras_mp4.py` — compressed H.264 camera recorder (replay demo).
 - `fork_demo/force_abort.py` — independent force-deviation abort watchdog (+ offline tests).
 - `fork_demo/read_tcp_payload.py` — read-only TCP offset + payload reader (§1 reads).
 - `fork_demo/record_fork_demo.sh` — three-camera + telemetry recorder for a run.

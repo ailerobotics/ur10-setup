@@ -39,9 +39,17 @@ import argparse
 import json
 import math
 import os
+import shutil
 import signal
 import sys
 import time
+
+
+def _free_gb(path: str) -> float:
+    try:
+        return shutil.disk_usage(path).free / 1e9
+    except OSError:
+        return float("inf")
 
 FORK_OFFSET_DEFAULT = (0.0, -0.038, 0.427)
 JOINT_ORDER = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
@@ -116,6 +124,12 @@ def run(args) -> int:
 
     fork_off = tuple(float(x) for x in args.fork_offset.split(","))
     os.makedirs(args.out_dir, exist_ok=True)
+    # free-space START guard (brief: refuse below 20 GB free)
+    free0 = _free_gb(args.out_dir)
+    if free0 < args.min_free_start_gb:
+        print(f"REFUSING to start: only {free0:.1f} GB free at {args.out_dir} "
+              f"(< {args.min_free_start_gb:.0f} GB).", file=sys.stderr)
+        return 1
     log_path = os.path.join(args.out_dir, "teach_log.jsonl")
     log_f = open(log_path, "w")
 
@@ -125,7 +139,8 @@ def run(args) -> int:
     tf_listener = tf2_ros.TransformListener(tf_buf, node)
 
     state = {"joints": None, "wrench": None, "speed": None, "prog": None,
-             "last_pos": None, "last_change_t": time.time(), "frozen_warned": False}
+             "last_pos": None, "last_change_t": time.time(), "frozen_warned": False,
+             "disk_err": None}
     samples = []
 
     def on_js(m):
@@ -158,7 +173,10 @@ def run(args) -> int:
             "wrench": state["wrench"], "speed_scaling": state["speed"],
             "program_running": state["prog"],
         }
-        log_f.write(json.dumps(rec) + "\n")
+        try:
+            log_f.write(json.dumps(rec) + "\n")
+        except OSError as e:  # disk full etc. -- flag for clean stop, never crash
+            state["disk_err"] = str(e)
         if fork is not None:
             samples.append({"t": now, "fork": fork, "joints": q})
 
@@ -220,6 +238,7 @@ def run(args) -> int:
     print("[teach] Ctrl-C to stop; dwells printed live.")
     last_enable = 0.0
     last_dwell_report = 0
+    last_disk_check = 0.0
     t0 = time.time()
     while rclpy.ok() and not stop["v"]:
         rclpy.spin_once(node, timeout_sec=0.05)
@@ -227,6 +246,16 @@ def run(args) -> int:
         if teaching and now - last_enable > 0.1:  # 10 Hz freedrive watchdog
             enable_pub.publish(Bool(data=True))
             last_enable = now
+        # free-space STOP guard (brief: clean stop below 5 GB) + disk-error flag
+        if state["disk_err"]:
+            node.get_logger().error(f"DISK ERROR ({state['disk_err']}) -- stopping cleanly")
+            stop["v"] = True
+        elif now - last_disk_check > 5.0:
+            last_disk_check = now
+            if _free_gb(args.out_dir) < args.min_free_stop_gb:
+                node.get_logger().error(
+                    f"free space < {args.min_free_stop_gb:.0f} GB -- stopping cleanly")
+                stop["v"] = True
         # staleness warning (only meaningful once the captain is moving)
         if now - state["last_change_t"] > 3.0 and now - t0 > 10 and not state["frozen_warned"]:
             node.get_logger().warn("joint feed has not changed in 3 s -- verify it is LIVE")
@@ -280,6 +309,10 @@ def build_parser():
     p.add_argument("--fork-offset", default="0,-0.038,0.427", help="tcp_in_tool0 x,y,z (m)")
     p.add_argument("--dwell-sec", type=float, default=2.0)
     p.add_argument("--move-tol-m", type=float, default=0.005)
+    p.add_argument("--min-free-start-gb", type=float, default=20.0,
+                   help="refuse to start below this many GB free")
+    p.add_argument("--min-free-stop-gb", type=float, default=5.0,
+                   help="stop the recording cleanly below this many GB free")
     return p
 
 
