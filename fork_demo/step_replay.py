@@ -171,8 +171,10 @@ def run_segment(args):
     env = dict(os.environ, ROS_DOMAIN_ID="0", FASTDDS_BUILTIN_TRANSPORTS="UDPv4")
     watch = None
     if not args.no_force_watch:
-        watch = subprocess.Popen([sys.executable, FORCE_ABORT, "--controller", TRAJ],
-                                 env=env)
+        fcmd = [sys.executable, FORCE_ABORT, "--controller", TRAJ]
+        if args.force_backstop_n:
+            fcmd += ["--backstop-n", str(args.force_backstop_n)]
+        watch = subprocess.Popen(fcmd, env=env)
         time.sleep(1.0)
     cmd = [sys.executable, EXECUTE_PLAN, tmp, "--exact",
            "--limits", os.path.join(args.run_dir, "replay_joint_limits.yaml"),
@@ -197,6 +199,62 @@ def run_segment(args):
     if nxt:
         print(f"  NEXT pause: step {nxt['index']} {nxt['name']} "
               f"[{'CONTACT' if nxt['contact'] else 'free'}]")
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+    return 0 if rc == 0 else 1
+
+
+def run_direct(args):
+    """Free-space move from the CURRENT pose directly to a named taught waypoint,
+    interpolated, <=5%, with the force watchdog. Non-contact use only (the new
+    hand-loaded plan: the robot only moves free-space between taught poses)."""
+    lab = json.load(open(os.path.join(args.run_dir, "labelled_waypoints.json")))
+    waypoints = {w["label"]: w for w in lab["waypoints"] if not w.get("segment")}
+    if args.direct_to not in waypoints:
+        print(f"no waypoint '{args.direct_to}'", file=sys.stderr); return 2
+    target = waypoints[args.direct_to]["joints_mean"]
+    joints, fork = read_state()
+    if any(v is None for v in joints.values()):
+        print("ABORT: could not read current joints", file=sys.stderr); return 2
+    cur = [joints[j] for j in JOINT_ORDER]
+    dmax = max(abs(target[i] - cur[i]) for i in range(6))
+    npts = min(max(int(math.degrees(dmax) / 5) + 2, 12), 40)
+    path = interp(cur, target, npts)
+    dur = seg_duration(path)
+    import yaml
+    label = f"direct_to_{args.direct_to}"
+    tmp = os.path.join(args.run_dir, f"_live_{label}.yaml")
+    yaml.safe_dump({"label": label, "joint_path": path, "goal_joints": target,
+                    "duration_s": float(dur)}, open(tmp, "w"))
+    print(f"DIRECT move -> {args.direct_to}: {npts} pts, {dur:.1f}s @<=5%, "
+          f"Δmax {math.degrees(dmax):.1f} deg")
+    print(f"  from fork {[round(v,3) for v in fork] if fork else '?'}")
+    env = dict(os.environ, ROS_DOMAIN_ID="0", FASTDDS_BUILTIN_TRANSPORTS="UDPv4")
+    watch = None
+    if not args.no_force_watch:
+        fcmd = [sys.executable, FORCE_ABORT, "--controller", TRAJ]
+        if args.force_backstop_n:
+            fcmd += ["--backstop-n", str(args.force_backstop_n)]
+        watch = subprocess.Popen(fcmd, env=env)
+        time.sleep(1.0)
+    rc = subprocess.call([sys.executable, EXECUTE_PLAN, tmp, "--exact",
+                          "--limits", os.path.join(args.run_dir, "replay_joint_limits.yaml"),
+                          "--start-tol-rad", str(args.start_tol_rad),
+                          "--max-track-rad", str(args.max_track_rad)], env=env)
+    if watch:
+        watch.terminate()
+        try:
+            watch.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            watch.kill()
+    joints2, fork2 = read_state()
+    cur2 = [joints2[j] for j in JOINT_ORDER if joints2[j] is not None]
+    jerr = max(abs(cur2[i] - target[i]) for i in range(6)) if len(cur2) == 6 else float("nan")
+    print(f"\nDIRECT result rc={rc}  measured fork "
+          f"{[round(v,3) for v in fork2] if fork2 else '?'}  joint err vs taught "
+          f"{math.degrees(jerr):.2f} deg")
     try:
         os.remove(tmp)
     except OSError:
@@ -253,13 +311,19 @@ def main(argv=None):
     p.add_argument("--start-tol-rad", type=float, default=0.12, help="max start mismatch (~7deg)")
     p.add_argument("--max-track-rad", type=float, default=0.15)
     p.add_argument("--no-force-watch", action="store_true")
+    p.add_argument("--force-backstop-n", type=float, default=None,
+                   help="force-abort threshold N (default: config 200); raise it where the "
+                        "CB3 estimate swings in this config and tracking-error is the real guard")
     p.add_argument("--adjust-start", action="store_true")
     p.add_argument("--adjust-set", default=None, help="record current pose as this waypoint label")
+    p.add_argument("--direct-to", default=None, help="free-space move to this taught waypoint label")
     a = p.parse_args(argv)
     if a.adjust_start or a.adjust_set:
         return run_adjust(a)
+    if a.direct_to:
+        return run_direct(a)
     if a.segment is None:
-        print("give --segment N or --adjust-*", file=sys.stderr); return 2
+        print("give --segment N, --direct-to LABEL, or --adjust-*", file=sys.stderr); return 2
     return run_segment(a)
 
 
