@@ -97,10 +97,10 @@ def test_scene_parser_defaults_no_livestream():
 def test_scene_parser_live_view_flags():
     a = live_view.build_scene_arg_parser().parse_args([
         "--gt-log", "gt.jsonl", "--cams", "wrist", "--livestream",
-        "--public-ip", "100.100.47.65", "--loop-walk",
+        "--public-ip", "100.64.0.1", "--loop-walk",
         "--config", "params/human_safety.sim.yaml", "--zone-beacon"])
     assert a.livestream and a.loop_walk and a.zone_beacon
-    assert a.public_ip == "100.100.47.65"
+    assert a.public_ip == "100.64.0.1"
     assert a.config.endswith("human_safety.sim.yaml")
 
 

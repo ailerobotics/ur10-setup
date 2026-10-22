@@ -10,7 +10,7 @@
 # touches containers it did not create. No GPU needed (scripted MPC source).
 set -o pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DATA=/home/manishsaini/firstmate/data/plan-mpc-curobo-v1
+DATA=$HOME/firstmate/data/plan-mpc-curobo-v1
 IMAGE=fm-plan-mpc-curobo-v1:latest
 URSIM_IMAGE=universalrobots/ursim_cb3:3.15.8
 URSIM=fm-plan-mpc-curobo-v1-ursim

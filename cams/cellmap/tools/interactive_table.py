@@ -335,7 +335,7 @@ def main():
     ap.add_argument('--min-live-cells', type=int, default=200,
                     help='cells with live depth required before calling it clear')
     ap.add_argument('--static-ply',
-                    default='/home/manishsaini/ur10/cumotion/maps/cell-2026-08-28.ply')
+                    default=os.path.expanduser('~/ur10/cumotion/maps/cell-2026-08-28.ply'))
     ap.add_argument('--stop-file', default='/tmp/fm-cell-map-v1/STOP')
     ap.add_argument('--go-file', default='/tmp/fm-cell-map-v1/GO',
                     help='the arm does not move until this file exists. Auto-resume is a '
