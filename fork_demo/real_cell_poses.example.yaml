@@ -1,0 +1,32 @@
+# Measured REAL-cell anchor poses for real_fork_pick.py  (TEMPLATE / EXAMPLE).
+#
+# Brief step 2: the Isaac yaml gives only the SHAPE of the motion. The two
+# anchors below must be MEASURED on the real cell -- never copied from the twin.
+# Measure with the wrist camera (hand-eye on /wrist/color_upright, against the
+# mapped tags / tray front) OR a manual freedrive teach at reduced speed, and
+# record HOW each pose was obtained and its uncertainty here. The execute path
+# REFUSES to run unless how_measured is set and uncertainty_m is a real number
+# (it rejects the PROVISIONAL placeholders used for --dry-run).
+#
+# Frame: base_link, metres. position = fork-tip centreline TCP point.
+# quat_xyzw = base_link <- tool orientation (forks horizontal into the shelf,
+# camera/top up, forks hanging). Derive from the teach pose or the wrist-camera
+# solve; the insertion axis used by the planner is tool Z projected to horizontal.
+
+pick_front:
+  # fork tips at the BRAVO Erdnussflips tray front face, at the height to slide
+  # under the tray on its dock.
+  position_base: [0.000, 0.000, 0.000]      # <- MEASURE
+  quat_xyzw_base: [0.5, 0.5, 0.5, 0.5]      # <- MEASURE (example maps toolZ->+X)
+  how_measured: ""                          # e.g. "wrist-cam PnP against tray-front tag, 2026-10-22"
+  uncertainty_m: null                       # <- fill (e.g. 0.010)
+  uncertainty_deg: null                     # <- fill (e.g. 1.5)
+
+table_drop:
+  # the table on the OTHER SIDE of the shelf (captain's intent): where the tray
+  # floor sets down onto the staging dock.
+  position_base: [0.000, 0.000, 0.000]      # <- MEASURE
+  quat_xyzw_base: [0.5, 0.5, 0.5, 0.5]      # <- MEASURE
+  how_measured: ""
+  uncertainty_m: null
+  uncertainty_deg: null

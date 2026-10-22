@@ -11,6 +11,28 @@ verdict and why the demo is **NOT recordable yet** (as of 2026-10-22: External
 Control STOPPED, motion controllers inactive, `/joint_states` frozen, wrist camera
 not streaming, and no physical fork gripper / pallet / TCP).
 
+## Real pick-and-place (task ur10-fork-pick-real-v1)
+
+`real_fork_pick.py` is the **real-cell** forklift demo: pick the BRAVO
+Erdnussflips tray off the shelf and place it on the table on the other side,
+re-anchored on the **real, measured** tray-front + table-drop poses (never the
+twin's numbers), with the Isaac `erdnussflips_pick.yaml` used only as the SHAPE.
+Safe by default (`--dry-run`); the gated execute path needs measured `--poses`,
+`--i-am-at-the-estop`, a fork TCP file, the workspace box, and RUNNING/NORMAL +
+live feed, then hands off to `execute_plan.py --exact` with `force_abort.py`
+watching. All safety thresholds live in `SafetyLimits` (speed ≤10 %/leg, ≤5 %
+contact; accel ≤5 %; 200 N force backstop; workspace box; tracking-error halt).
+
+```bash
+python3 fork_demo/real_fork_pick.py                       # dry-run (provisional anchors)
+python3 fork_demo/read_tcp_payload.py [--rtde]            # read the robot's configured TCP + payload
+python3 -I fork_demo/tests/test_real_fork_pick.py         # offline tests
+fork_demo/record_fork_demo.sh front-dry-run-001           # record 3 cams + telemetry for a run
+```
+
+Measured-pose schema + provenance: `real_cell_poses.example.yaml`. Full status,
+robot reads and recording slots: `../data/ur10-fork-pick-real-v1/report.md`.
+
 ## Files
 
 - `fork_pick_demo.py` — the demo. **`--dry-run` is the default** and touches no
