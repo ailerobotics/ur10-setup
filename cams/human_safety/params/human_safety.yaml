@@ -3,7 +3,7 @@
 # PROVISIONAL DEFAULTS. The zone radii and time budgets below are conservative
 # placeholders, NOT derived separation distances. The real separation distances
 # are being computed by task human-safety-s1
-# (/home/manishsaini/firstmate/data/human-safety-s1/report.md); replace these
+# ($HOME/firstmate/data/human-safety-s1/report.md); replace these
 # when that lands. This package is a SUPPLEMENTARY camera layer, never a
 # certified safety function — see cams/human_safety/README.md.
 

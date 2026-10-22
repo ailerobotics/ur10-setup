@@ -29,7 +29,7 @@ DEVICE="${2:-cuda}"
 
 # The owner's static browser client — served in place, never copied (it carries a
 # vendored vendor library). Literal path, read-only.
-CLIENT_DIR="/home/manishsaini/workspaces/shelfbot/tools/webrtc_client"
+CLIENT_DIR="$HOME/workspaces/shelfbot/tools/webrtc_client"
 LIVESTREAM_PORT=49100
 
 LOCK="${FLEET_GPU_LOCK:-$HOME/.cache/fleet-gpu.lock}"

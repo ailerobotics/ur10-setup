@@ -10,7 +10,7 @@
 # the Isaac ros2 bridge needs to interoperate with the system-ROS detector graph.
 # It does NOT run python — the caller execs the conda python explicitly.
 #
-# Pattern mirrors /home/manishsaini/workspaces/shelfbot/tools/run_tray_scene.sh
+# Pattern mirrors $HOME/workspaces/shelfbot/tools/run_tray_scene.sh
 # (read-only reference), retargeted to this user's home and to the task domain.
 
 # Refuse the shared/live ROS domains and default to the SIM-only domain 88,

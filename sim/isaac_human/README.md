@@ -107,7 +107,7 @@ python3 sim/isaac_human/analyze.py --run "$RUN" \
 python3 sim/isaac_human/diagnose.py --run "$RUN"
 python3 sim/isaac_human/make_report.py --run "$RUN" \
     --per-camera-run <a 2-camera RUNDIR, optional, for the shelf/wrist split> \
-    --out /home/manishsaini/firstmate/data/human-detect-isaac-sim-v1
+    --out ~/firstmate/data/human-detect-isaac-sim-v1
 
 # 4. old-vs-new before/after for the nearest-point safety fix, from the SAME run
 #    (no second sim run): replays the recorded live states through the safety
@@ -168,7 +168,7 @@ the GPU are released. Session length defaults to 30 min and is **hard-capped at
   green/amber/red from `/human_safety/state` (best-effort; if the ROS subscribe
   fails it stays neutral and the scene still streams).
 - **The client.** Served in place from the owner's
-  `/home/manishsaini/workspaces/shelfbot/tools/webrtc_client` (read-only, **not
+  `~/workspaces/shelfbot/tools/webrtc_client` (read-only, **not
   copied** — it carries a vendored NVIDIA streaming library), by
   `python3 -m http.server` bound to the **tailnet IP only** on port 8080 (or the
   next free port, skipping reserved ranges). If it does not connect, override with
@@ -238,9 +238,9 @@ python3 -m venv ~/venvs/isaac-video
 ~/venvs/isaac-video/bin/pip install imageio-ffmpeg numpy Pillow
 ~/venvs/isaac-video/bin/python sim/isaac_human/make_video.py \
     --run "$RUN" \
-    --out  /home/manishsaini/firstmate/data/isaac-human-video-v1/isaac-human-detection.mp4 \
-    --poster /home/manishsaini/firstmate/data/isaac-human-video-v1/poster.png \
-    --html /home/manishsaini/firstmate/data/isaac-human-video-v1/video.html
+    --out  ~/firstmate/data/isaac-human-video-v1/isaac-human-detection.mp4 \
+    --poster ~/firstmate/data/isaac-human-video-v1/poster.png \
+    --html ~/firstmate/data/isaac-human-video-v1/video.html
 ```
 
 `make_video.py` builds a ~60–90 s **H.264 / yuv420p** MP4 (even dims, `+faststart`,
