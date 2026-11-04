@@ -438,13 +438,26 @@ def execute(plan: ForkPickPlan, args) -> int:
         print(f"   {w.name:<13} {w.leg_type:<8} {w.speed_frac*100:3.0f}%")
     print(f"Force-deviation backstop: {s.force_backstop_n:.0f} N "
           f"(run fork_demo/force_abort.py alongside the dispatch).")
+    guard_on = not args.no_contact_guard
     print("\nNEXT (deliberate, separate hand-off -- this script stops here):")
+    print("  0. run the pre-contact GATE before any contact leg "
+          "(fork_demo/contact_guard: fork TCP + payload read-back, speed cap, "
+          "RUNNING/NORMAL, External Control, live /joint_states, >=20 GB disk, the "
+          "operator-typed pendant Force limit, and the alignment veto);")
     print("  1. save each leg's resolved joint_path as a plan yaml;")
     print("  2. dispatch via execute_plan.py --exact "
           f"--limits {os.path.relpath(args.limits, REPO)} "
           f"--max-track-rad {s.max_track_rad};")
     print("  3. with fork_demo/force_abort.py watching /force_torque_sensor_broadcaster")
-    print("     and a person at the e-stop. Contact legs run at 5 % slider.")
+    if guard_on:
+        print("     AND the early-failure contact guard on each CONTACT leg "
+              "(fork_demo/contact_guard/node.py --plan <leg>.yaml --leg <name> "
+              "--contact), which cancels on an early band/stall/stop-probe trip;")
+        print("     run contact legs as stop-and-probe segments (<=15 mm, dense).")
+    else:
+        print("     (contact guard DISABLED by --no-contact-guard;")
+        print("      only the coarse force backstop + tracking-error halt remain.)")
+    print("     A person at the e-stop throughout. Contact legs run at 5 % slider.")
     return 0
 
 
@@ -467,11 +480,21 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--robot-ip", default="192.168.0.1")
     p.add_argument("--plot", default=os.path.join(
         REPO, "data", "ur10-fork-pick-real-v1", "fork_pick_path.png"))
+    p.add_argument("--no-contact-guard", action="store_true",
+                   help="disable the early-failure contact guard in the hand-off "
+                        "(ON by default for contact legs; see fork_demo/contact_guard)")
+    p.add_argument("--guard-dry-run", metavar="BAG", default=None,
+                   help="run the contact guard over a recorded bag and print "
+                        "per-leg verdicts (offline, no motion), then exit")
     return p
 
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    if args.guard_dry_run:
+        sys.path.insert(0, REPO)
+        from fork_demo.contact_guard import cli as guard_cli
+        return guard_cli.main(["dry-run", "--bag", args.guard_dry_run])
     geom = ForkGeometry.load(args.fork_config)
     safety = SafetyLimits.load(args.force_cfg)
     # Offsets default to the Isaac erdnussflips_pick.yaml SHAPE (standoff 0.12,
