@@ -1,0 +1,60 @@
+{
+  "assumptions": [
+    "tine geometry from forklift_S kit (spacing 120 mm, width 40 mm) -- captain to confirm vs physical forks",
+    "hand-eye: tool0_to_camera_2026-09-03.yaml (2026-09-03T21:16:19)",
+    "nominal D435i colour K (params.yaml); live mode overrides from CameraInfo"
+  ],
+  "correction": {
+    "dx_mm": 0.286,
+    "dy_mm": 0.0,
+    "dyaw_deg": -0.001,
+    "note": "PROPOSAL ONLY -- never applied automatically; captain applies by hand."
+  },
+  "detail": {
+    "channel_axis_tool0_m": [
+      0.1201,
+      0.0001,
+      -0.0
+    ],
+    "depth_source": {
+      "left": [
+        "measured",
+        0.4361
+      ],
+      "right": [
+        "measured",
+        0.4365
+      ]
+    },
+    "lateral_per_tine_mm": {
+      "left": -0.351,
+      "right": -0.222
+    },
+    "strip_px": {
+      "left": [
+        437.0,
+        151.7
+      ],
+      "right": [
+        689.0,
+        147.9
+      ]
+    }
+  },
+  "dx_mm": -0.286,
+  "dy_mm": 0.0,
+  "dyaw_deg": 0.001,
+  "generated_at": "2026-11-04T13:59:31Z",
+  "image_stamp": "synthetic-shelf-go",
+  "margin": {
+    "deg": 2.999,
+    "mm": 0.982
+  },
+  "ok": true,
+  "schema_version": "align_check/v1",
+  "side": "shelf",
+  "tolerance": {
+    "deg": 3.0,
+    "mm": 1.333
+  }
+}
