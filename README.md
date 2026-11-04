@@ -1,5 +1,12 @@
 # UR10 Cell — real-robot ROS 2 stack, human-safety perception, and motion planning
 
+> **View-only. All rights reserved. No permission to use. See [LICENSE](LICENSE).**
+> This repository is published only so the development of this project can be followed. It is
+> **not** a product, a tutorial, or a set of instructions for anyone else to run. The scripts and
+> runbooks here drive a **real UR10 industrial arm** on a specific physical cell; running them
+> against hardware you do not own and have not commissioned is unsafe. See
+> [Operational safety](#operational-safety) below.
+
 This repository is the working software for a **Universal Robots UR10 (CB3)** arm set up as a
 retail-shelf restocking cell: it brings the arm up on **ROS 2 Jazzy**, runs three Intel
 RealSense cameras for mapping and human awareness, plans collision-free motion with NVIDIA
@@ -349,14 +356,39 @@ behind every tuning choice.
 
 ---
 
+## Operational safety
+
+**The runbooks and scripts in this repository drive a real Universal Robots UR10 (CB3) industrial
+arm on one specific physical cell. They are published so the work can be followed — they are not
+instructions for anyone else to run, on any hardware.** In particular:
+
+- The real stops are the teach pendant's **safety-rated Force limit** and any safeguard-input
+  device — never this software. Everything in this repo that touches the arm is gated plan-only
+  or behind explicit, typed-confirm arming; the perception/safety layers are an **awareness aid,
+  not a certified safety function**.
+- `RUNBOOK.md`, `report.html`, and the camera/driver scripts contain operational details for the
+  actual rig — the cell's private LAN addresses (`192.168.0.1` robot / `192.168.0.2` host, the
+  standard UR defaults), the NIC name, RealSense camera serial numbers, PolyScope version, and
+  measured joint limits. These are **not credentials** — the repo contains no passwords, tokens,
+  keys, or secrets — but they describe a real machine and must be read as a record of this cell,
+  not as a template.
+- No live-rig credential, dashboard password, token, or private key is committed anywhere in this
+  repository (verified at publication). Nothing here is reachable from the public internet.
+
 ## Licence and attribution
 
-- **Licence: the repository owner's call.** No licence has been chosen for this repository yet,
-  so no `LICENSE` file is added here. Until one is added, default copyright applies (all rights
-  reserved). *Repository owner's decision required.*
-- **Third-party components** carry their own licences and are not vendored here: ROS 2 and the
-  Universal Robots ROS 2 driver (Apache-2.0/BSD), NVIDIA Isaac ROS / cuMotion / nvblox and Isaac
-  Sim (NVIDIA licences), **cuRobo V2 v0.8.0 (Apache-2.0** — note v1/`0.7.x` is NVIDIA
-  non-commercial; this repo pins v0.8.0 and keeps it out of any shipped dependency pending an
-  owner decision, `data/plan-mpc-curobo-v1/`), torchvision models (BSD), and MoveIt (BSD).
+- **Licence: view-only, all rights reserved** — see [`LICENSE`](LICENSE)
+  (*Proprietary Source-Available Licence (View-Only) v1.0*). The repository is made visible
+  solely so its development can be followed. **No permission to use, run, copy, modify,
+  redistribute, or train models on the code is granted.** Permission requests:
+  `engineering@ailerobotics.com`.
+- **Third-party components** carry their own licences and are **not vendored** in this repository
+  (there is no bundled third-party source); they are installed or run from their own
+  distributions at build/run time. The full list, licences, and conflict analysis are in
+  [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md). In short: ROS 2, the Universal Robots ROS 2
+  driver, RealSense wrapper, MoveIt, Pilz PTP, Fast DDS, and nvblox core are permissive
+  (Apache-2.0 / BSD); **cuRobo V2 v0.8.0 is Apache-2.0** (v1/`0.7.x` is NVIDIA non-commercial —
+  this repo pins v0.8.0 and keeps it out of any shipped dependency, `data/plan-mpc-curobo-v1/`);
+  NVIDIA Isaac ROS / cuMotion / Isaac Sim are under NVIDIA's own (non-permissive) licences and are
+  referenced, run in their own containers, and never redistributed here.
 - Robot: Universal Robots UR10. RealSense: Intel. These are referenced, not redistributed.
