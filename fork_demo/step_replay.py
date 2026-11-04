@@ -38,6 +38,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 EXECUTE_PLAN = os.path.join(REPO, "cams", "cellmap", "tools", "execute_plan.py")
 FORCE_ABORT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "force_abort.py")
+CONTACT_GUARD_NODE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                  "contact_guard", "node.py")
 JOINT_ORDER = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
                "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
 VEL_LIMIT = {"shoulder_pan_joint": 2.09, "shoulder_lift_joint": 2.09, "elbow_joint": 3.14,
@@ -176,18 +178,34 @@ def run_segment(args):
             fcmd += ["--backstop-n", str(args.force_backstop_n)]
         watch = subprocess.Popen(fcmd, env=env)
         time.sleep(1.0)
+    # Early-failure contact guard (fork_demo/contact_guard): ON by default for
+    # CONTACT legs, watches ALONGSIDE force_abort and cancels on an early contact
+    # (band / stall / stop-and-probe) before the coarse force backstop. Transit
+    # legs keep the existing path. --no-contact-guard opts out.
+    guard = None
+    if seg["contact"] and not args.no_contact_guard:
+        gcmd = [sys.executable, CONTACT_GUARD_NODE, "--plan", tmp,
+                "--leg", seg["name"], "--contact", "--controller", TRAJ,
+                "--out", os.path.join(args.run_dir, f"guard_trip_{seg['index']}.json")]
+        guard = subprocess.Popen(gcmd, env=env)
+        time.sleep(1.0)
     cmd = [sys.executable, EXECUTE_PLAN, tmp, "--exact",
            "--limits", os.path.join(args.run_dir, "replay_joint_limits.yaml"),
            "--start-tol-rad", str(args.start_tol_rad),
            "--max-track-rad", str(args.max_track_rad)]
     print("  dispatch:", " ".join(cmd))
     rc = subprocess.call(cmd, env=env)
-    if watch:
-        watch.terminate()
-        try:
-            watch.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            watch.kill()
+    for proc in (watch, guard):
+        if proc:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+    if guard is not None:
+        trip = os.path.join(args.run_dir, f"guard_trip_{seg['index']}.json")
+        if os.path.exists(trip):
+            print(f"  CONTACT-GUARD TRIPPED this leg -- see {trip}; inspect before re-arm")
 
     joints2, fork2 = read_state()
     cur2 = [joints2[j] for j in JOINT_ORDER if joints2[j] is not None]
@@ -317,7 +335,18 @@ def main(argv=None):
     p.add_argument("--adjust-start", action="store_true")
     p.add_argument("--adjust-set", default=None, help="record current pose as this waypoint label")
     p.add_argument("--direct-to", default=None, help="free-space move to this taught waypoint label")
+    p.add_argument("--no-contact-guard", action="store_true",
+                   help="disable the early-failure contact guard (ON by default "
+                        "for contact legs; see fork_demo/contact_guard)")
+    p.add_argument("--guard-dry-run", metavar="BAG", default=None,
+                   help="run the contact guard over a recorded bag and print "
+                        "per-leg verdicts (offline, no motion), then exit")
     a = p.parse_args(argv)
+    if a.guard_dry_run:
+        sys.path.insert(0, REPO)
+        from fork_demo.contact_guard import cli as guard_cli
+        return guard_cli.main(["dry-run", "--run-dir", a.run_dir,
+                               "--bag", a.guard_dry_run])
     if a.adjust_start or a.adjust_set:
         return run_adjust(a)
     if a.direct_to:

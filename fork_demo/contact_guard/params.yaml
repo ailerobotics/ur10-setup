@@ -1,0 +1,66 @@
+# Contact-guard parameters (fork_demo/contact_guard).
+#
+# Convention: TUNE-UP-NEVER-DOWN. Every value here may only make detection
+# TIGHTER than the baked-in conservative floor in params.py (narrower bands,
+# more persistence/agreement, faster fail-toward-stop). params.ContactGuardParams
+# .validate() rejects any value that would loosen detection below the floor.
+#
+# These bands/latencies are PROVISIONAL (built from one teach-002 record) and
+# are the real safety floor only in combination with the pendant Force limit and
+# the existing execute_plan.py tracking-error halt. Raise them, never lower them,
+# without a decision record.
+
+# --- envelope band construction (offline builder) ---
+n_progress_bins: 20
+band_k_sigma: 6.0
+floor_force_n: 20.0
+floor_torque_nm: 8.0
+floor_eff_nm: 12.0
+floor_tcp_vel: 0.05
+floor_track_rad: 0.03
+
+# --- runtime detection ---
+persist_samples: 4
+persist_s: 0.12
+agree_signals: 2
+big_margin_mult: 2.5
+progress_stall_s: 0.6
+stall_min_cmd_progress: 0.003
+stall_ratio: 0.25
+progress_stall_frac: 0.02
+stale_s: 0.35
+track_hard_rad: 0.15
+track_rise_rad: 0.035
+track_rate_rad_s: 0.05
+load_step_persist_s: 1.2
+
+# --- stop-and-probe (contact segments) ---
+fork_lever_m: 0.38
+probe_dwell_s: 0.40
+probe_min_samples: 20
+probe_force_n: 5.0
+probe_torque_nm: 1.5
+
+# --- reaction policy ---
+backoff_m: 0.015
+backoff_speed_frac: 0.02
+
+# --- incremental contact legs ---
+segment_m: 0.015
+segment_min_points: 12
+
+# --- pre-contact gate ---
+speed_cap_frac: 0.10
+min_free_gb: 20.0
+fork_tcp_z_min: 0.30
+fork_tcp_absy_min: 0.01
+payload_unloaded_lo: 0.10
+payload_unloaded_hi: 1.20
+payload_loaded_lo: 0.10
+payload_loaded_hi: 5.50
+pendant_force_recommended_n: 100.0
+
+# --- post-action verification ---
+lift_min_load_n: 15.0
+lift_min_dz_m: 0.015
+release_max_resid_n: 20.0
