@@ -1,0 +1,71 @@
+# Pre-contact alignment-check parameters.
+#
+# CONVENTION: tune-up-never-down. Raising a safety_factor, lowering a
+# channel/slot width, or tightening a yaw tolerance only makes the gate STRICTER
+# and is always safe. Widening any of them needs a captain decision recorded in
+# the README, because it lets a more-misaligned insert pass.
+#
+# Geometry sources are cited inline. Values marked ASSUMPTION are the ones the
+# captain must confirm against the physical cell (firstmate brief, point 1).
+
+tines:                          # from ~/datasets/shelf-twin/grippers/forklift_S kit
+  spacing_m: 0.12               # fork_spacing: between the two tine centre-lines
+  width_m: 0.04                 # fork_w: lateral width of each tine (tool X)
+  thickness_m: 0.02             # fork_t: vertical thickness (tool Y)
+  center_y_m: -0.038            # fork_center_y: tine centre-line on tool Y
+  root_z_m: 0.047               # tine_z0
+  tip_z_m: 0.427                # tine_z1 (== brief's fork TCP Z)
+  # ASSUMPTION: the Isaac forklift_S tine geometry is the proxy for the physical
+  # fork gripper. Captain to confirm the real tine spacing / width.
+
+shelf:
+  channel_width_m: 0.044        # kit tray pocket (pocket_w) = binding tine clearance.
+                                # The 3D-printed dock U-channel measures ~0.050 m in the
+                                # guide photo (wider); the tighter pocket is used on purpose.
+  tine_width_m: 0.04            # tines.width_m, repeated so the gate is self-contained
+  safety_factor: 1.5            # lateral_tol = (channel-tine)/2 / safety_factor
+  yaw_tolerance_deg: 3.0        # insert must be square to the rail
+  # Nominal fronto-parallel plane depth (optical -> dock front) used ONLY when no
+  # wrist depth is supplied, to turn pixel offsets into mm. Prefer --depth.
+  default_plane_depth_m: 0.45   # ASSUMPTION: optical->dock-front standoff at the pre-grip pause
+                                # (tine tips sit ~0.363 m from optical per hand-eye; the channel
+                                #  mouth is ~0.08 m beyond). Prefer measured wrist depth.
+
+table:
+  tag_family: "36h11"
+  tag_id: 1
+  tag_size_m: 0.12              # 120 mm black square (captain guide)
+  dock_slot_width_m: 0.21       # ASSUMPTION: S-dock slot for the 200 mm tray (~5 mm/side slack)
+  tray_width_m: 0.2             # kit tray w
+  safety_factor: 1.5            # place_tol = (slot-tray)/2 / safety_factor
+  dyaw_tolerance_deg: 3.0
+  # Taught place pose (fork TCP in base_link) from teach-002 labelled_waypoints.json,
+  # waypoint "place". The tag-derived dock target is compared against this.
+  taught_place_xy_m: [-0.5165, -1.2173]
+  taught_place_yaw_deg: null    # taught yaw unknown from fork_mean alone; live mode reads tcp_pose
+  # Fixed offset tag-centre -> place-TCP target in the dock plane (base XY). The
+  # tray seats centred on the tag, so nominal offset is zero; set if the tag is
+  # mounted off the slot centre.
+  tag_to_place_offset_xy_m: [0.0, 0.0]  # ASSUMPTION: tag centred on the dock slot
+
+camera:
+  wrist:                        # NOMINAL Intel RealSense D435i colour, 1280x720 profile.
+    # PLACEHOLDER intrinsics: live mode overrides these from /wrist/color_upright
+    # CameraInfo. Offline synthetic proofs use the same K to render and to solve,
+    # so the absolute value does not affect the recovered error.
+    width: 1280
+    height: 720
+    fx: 915.0
+    fy: 915.0
+    cx: 640.0
+    cy: 360.0
+
+live:                           # thin ROS live mode (documented + dry-tested only)
+  ros_domain_id: 76             # task-only domain; never 0 or 42
+  fastdds_builtin_transports: "UDPv4"
+  shelf_image_topic: "/wrist/color_upright/image_raw"
+  shelf_info_topic: "/wrist/color_upright/camera_info"
+  shelf_depth_topic: "/wrist/aligned_depth_to_color/image_raw"
+  table_image_topic: "/wrist/color_upright/image_raw"   # wrist looking down at pre-place pause
+  table_info_topic: "/wrist/color_upright/camera_info"
+  joint_states_topic: "/joint_states"

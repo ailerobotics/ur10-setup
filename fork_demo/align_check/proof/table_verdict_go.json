@@ -1,0 +1,44 @@
+{
+  "assumptions": [
+    "tag 120 mm 36h11 id 1; TOP arrow == tag +Y (print convention)",
+    "tag_to_place offset [0.0, 0.0] m (ASSUMPTION: tag centred on dock slot)",
+    "reproj RMS 0.24 px, tag distance 0.551 m"
+  ],
+  "correction": {
+    "dx_mm": -0.0,
+    "dy_mm": -0.0,
+    "dyaw_deg": -0.0,
+    "note": "PROPOSAL ONLY -- never applied automatically; captain applies by hand."
+  },
+  "detail": {
+    "tag_xy_base_m": [
+      -0.5166,
+      -1.2173
+    ],
+    "tag_yaw_base_deg": 15.049,
+    "target_xy_base_m": [
+      -0.5166,
+      -1.2173
+    ],
+    "taught_place_xy_m": [
+      -0.5166,
+      -1.2173
+    ]
+  },
+  "dx_mm": 0.0,
+  "dy_mm": 0.0,
+  "dyaw_deg": 0.0,
+  "generated_at": "2026-11-04T13:59:31Z",
+  "image_stamp": "synthetic-table-go",
+  "margin": {
+    "deg": 3.0,
+    "mm": 3.333
+  },
+  "ok": true,
+  "schema_version": "align_check/v1",
+  "side": "table",
+  "tolerance": {
+    "deg": 3.0,
+    "mm": 3.333
+  }
+}
